@@ -21,7 +21,7 @@ void laserCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
   int closest_index = 0;
   float closest_value = 10.0;
-  float threshold = 0.1;
+  float threshold = 0.2;
 
   int center_index = 400;
   float index_range = (M_PI / 2.) / msg->angle_increment;
@@ -58,18 +58,18 @@ int main(int argc, char **argv)
   ros::Subscriber sub = n.subscribe("scan_filtered", 1, laserCallback);
   ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
-  while (true) {
+  while (ros:ok()) {
       if (obstacle_detected) {
         drive(diffDrive, 10, -10);
         ROS_INFO("Spinning");
       }
       else {
-        drive(diffDrive, 10, 10);
+        drive(diffDrive, 5, 5);
         ROS_INFO("Waiting");
       }
       ros::spinOnce();
   }
-  
+   drive(diffDrive, 0, 0);
   
   return 0;
 }
