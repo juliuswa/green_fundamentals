@@ -70,3 +70,7 @@ add_dependencies(example_laser create_fundamentals_generate_messages_cpp)
 add_executable(example_moving src/example_moving.cpp)
 target_link_libraries(example_moving ${catkin_LIBRARIES})
 add_dependencies(example_moving create_fundamentals_generate_messages_cpp)
+
+add_executable(wanderer src/wanderer.cpp)
+target_link_libraries(wanderer ${catkin_LIBRARIES})
+add_dependencies(wanderer create_fundamentals_generate_messages_cpp)
