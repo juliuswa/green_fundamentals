@@ -10,6 +10,11 @@ int obstacle_index = 0;
 float obstacle_degree = 0.0;
 float obstacle_distance = 10.0;
 
+void stopDriving() {
+    drive(diffDrive, 0, 0);
+    ros::shutdown();
+}
+
 void drive (ros::ServiceClient& diffDrive, int left, int right) {
     create_fundamentals::DiffDrive srv;
     srv.request.left = left;
@@ -58,18 +63,19 @@ int main(int argc, char **argv)
   ros::Subscriber sub = n.subscribe("scan_filtered", 1, laserCallback);
   ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
-  while (ros::ok()) {
+  while (true) {
       if (obstacle_detected) {
-        drive(diffDrive, 10, -10);
+        int sign = (rand() % 2) * 2 - 1;
+        drive(diffDrive, sign * 10, -1 * sign * 10);
         ROS_INFO("Spinning");
       }
       else {
         drive(diffDrive, 5, 5);
         ROS_INFO("Waiting");
       }
+      signal(SIGINT, stopDriving);
       ros::spinOnce();
   }
-   drive(diffDrive, 0, 0);
   
   return 0;
 }
