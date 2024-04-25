@@ -28,9 +28,9 @@ int main(int argc, char **argv)
 
     for(int i = 0; i < 4; i++) {
         drive(diffDrive, 5, 5);
-        sleep(2);
+        ros::Duration(2.0).sleep();
         drive(diffDrive, 10, -10);
-        sleep(0.8);
+        ros::Duration(0.8).sleep();
     }
     stopDriving();
     return 0;
