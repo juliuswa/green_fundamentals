@@ -18,7 +18,7 @@ void drive (ros::ServiceClient& diffDrive, int left, int right) {
     diffDrive.call(srv);
 }
 
-void stopDriving() {
+void stopDriving(int sig) {
     ros::NodeHandle n;
     ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
     drive(diffDrive, 0, 0);
