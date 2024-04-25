@@ -57,24 +57,24 @@ int main(int argc, char **argv)
   ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
   while (true) {
-  if (obstacle_detected) {
-    create_fundamentals::DiffDrive srv;
-    srv.request.left = 10;
-    srv.request.right = -10;
-    diffDrive.call(srv);
-    ROS_INFO("Spinning");
-    ros::Duration(1.0).sleep();
-  }
-  else {
-    create_fundamentals::DiffDrive srv;
-    srv.request.left = 0;
-    srv.request.right = 0;
-    diffDrive.call(srv);
-    ROS_INFO("Waiting");
-  }
-  ros::spin();
+    if (obstacle_detected) {
+      create_fundamentals::DiffDrive srv;
+      srv.request.left = 10;
+      srv.request.right = -10;
+      diffDrive.call(srv);
+      ROS_INFO("Spinning");
+      ros::Duration(1.0).sleep();
+    }
+    else {
+      create_fundamentals::DiffDrive srv;
+      srv.request.left = 0;
+      srv.request.right = 0;
+      diffDrive.call(srv);
+      ROS_INFO("Waiting");
+    }
   }
   
+  ros::spin();
   
   return 0;
 }
