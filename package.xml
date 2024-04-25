@@ -1,0 +1,43 @@
+<package>
+  <name>green_fundamentals</name>
+  <version>1.0.0</version>
+  <description>green_fundamentals is a package that the students should develop during the course.</description>
+  <maintainer email="rico.jonschkowski@tu-berlin.de">Rico Jonschkowski</maintainer>
+
+  <license>BSD</license>
+
+  <url type="website"></url>
+  <!-- <url type="bugtracker"></url> -->
+
+  <author>Rico Jonschkowski</author>
+
+  <!-- Dependencies which this package needs to build itself. -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Dependencies needed to compile this package. -->
+  <build_depend>roscpp</build_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>create_fundamentals</build_depend>
+  <!--build_depend>message_generation</build_depend-->
+
+  <!-- Dependencies needed after this package is compiled. -->
+  <run_depend>roscpp</run_depend>
+  <run_depend>rospy</run_depend>
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>create_fundamentals</run_depend>
+  <!--run_depend>message_runtime</run_depend-->
+
+  <!-- Dependencies needed only for running tests. -->
+  <!-- <test_depend>roscpp</test_depend> -->
+  <!-- <test_depend>rospy</test_depend> -->
+  <!-- <test_depend>geometry_msgs</test_depend> -->
+  <!-- <test_depend>tf</test_depend> -->
+  <!-- <test_depend>nav_msgs</test_depend> -->
+
+<export>
+    <cpp cflags="-I${prefix}/msg/cpp"/>
+    <cpp cflags="-I${prefix}/srv/cpp"/>
+</export>
+
+</package>
