@@ -4,6 +4,7 @@
 #include <math.h>
 #include "create_fundamentals/DiffDrive.h"
 #include "create_fundamentals/SensorPacket.h"
+#include <signal.h>
 
 bool obstacle_detected = false;
 int obstacle_index = 0;
