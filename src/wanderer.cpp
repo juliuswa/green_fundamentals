@@ -12,6 +12,7 @@ float obstacle_degree = 0.0;
 float obstacle_distance = 10.0;
 
 void stopDriving() {
+    ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
     drive(diffDrive, 0, 0);
     ros::shutdown();
 }
