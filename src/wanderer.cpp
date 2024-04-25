@@ -11,18 +11,18 @@ int obstacle_index = 0;
 float obstacle_degree = 0.0;
 float obstacle_distance = 10.0;
 
-void stopDriving() {
-    ros::NodeHandle n;
-    ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
-    drive(diffDrive, 0, 0);
-    ros::shutdown();
-}
-
 void drive (ros::ServiceClient& diffDrive, int left, int right) {
     create_fundamentals::DiffDrive srv;
     srv.request.left = left;
     srv.request.right = right;
     diffDrive.call(srv);
+}
+
+void stopDriving() {
+    ros::NodeHandle n;
+    ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
+    drive(diffDrive, 0, 0);
+    ros::shutdown();
 }
 
 void laserCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
