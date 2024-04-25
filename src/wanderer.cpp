@@ -58,7 +58,7 @@ int main(int argc, char **argv)
   ros::Subscriber sub = n.subscribe("scan_filtered", 1, laserCallback);
   ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
-  while (ros:ok()) {
+  while (ros::ok()) {
       if (obstacle_detected) {
         drive(diffDrive, 10, -10);
         ROS_INFO("Spinning");
