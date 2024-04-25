@@ -68,8 +68,7 @@ int main(int argc, char **argv)
 
   while (true) {
       if (obstacle_detected) {
-        int sign = (rand() % 2) * 2 - 1;
-        drive(diffDrive, sign * 10, -1 * sign * 10);
+        drive(diffDrive, 10, -1 * 10);
         ROS_INFO("Spinning");
       }
       else {
