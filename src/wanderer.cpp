@@ -10,9 +10,11 @@ int obstacle_index = 0;
 float obstacle_degree = 0.0;
 float obstacle_distance = 10.0;
 
-void turn(const float amount)
-{
-  
+void drive (int left, int right) {
+    create_fundamentals::DiffDrive srv;
+    srv.request.left = left;
+    srv.request.right = right;
+    diffDrive.call(srv);
 }
 
 void laserCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
@@ -58,18 +60,11 @@ int main(int argc, char **argv)
 
   while (true) {
       if (obstacle_detected) {
-        create_fundamentals::DiffDrive srv;
-        srv.request.left = 10;
-        srv.request.right = -10;
-        diffDrive.call(srv);
+        drive(10, -10);
         ROS_INFO("Spinning");
-        ros::Duration(1.0).sleep();
       }
       else {
-        create_fundamentals::DiffDrive srv;
-        srv.request.left = 0;
-        srv.request.right = 0;
-        diffDrive.call(srv);
+        drive(10, 10);
         ROS_INFO("Waiting");
       }
       ros::spinOnce();
