@@ -10,7 +10,7 @@ int obstacle_index = 0;
 float obstacle_degree = 0.0;
 float obstacle_distance = 10.0;
 
-void drive (int left, int right) {
+void drive (ros::ServiceClient& diffDrive, int left, int right) {
     create_fundamentals::DiffDrive srv;
     srv.request.left = left;
     srv.request.right = right;
@@ -60,11 +60,11 @@ int main(int argc, char **argv)
 
   while (true) {
       if (obstacle_detected) {
-        drive(10, -10);
+        drive(diffDrive, 10, -10);
         ROS_INFO("Spinning");
       }
       else {
-        drive(10, 10);
+        drive(diffDrive, 10, 10);
         ROS_INFO("Waiting");
       }
       ros::spinOnce();
