@@ -27,10 +27,10 @@ int main(int argc, char **argv)
     ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
     for(int i = 0; i < 4; i++) {
-        drive(diffDrive, 5, 5);
-        ros::Duration(2.0).sleep();
+        drive(diffDrive, 8, 8);
+        ros::Duration(4.0).sleep();
         drive(diffDrive, 10, -10);
-        ros::Duration(0.8).sleep();
+        ros::Duration(0.62).sleep();
     }
     stopDriving();
     return 0;
