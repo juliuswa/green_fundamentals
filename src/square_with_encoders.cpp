@@ -25,17 +25,18 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "square_with_encoders");
     ros::NodeHandle n;
     ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
-    ros::ServiceClient senPack = n.serviceClient<create_fundamentals::SensorPacket>("sensor_packet");
 
-    ROS_INFO("distance: %d, angle: %d", senPack.distance, senPack.angle);
+    ros::ServiceClient SensorPacket = n.serviceClient<create_fundamentals::SensorPacket>("sensor_packet");
+    create_fundamentals::SensorPacket srv_sen;
+    ROS_INFO("distance: %d, angle: %d", srv_sen.response.distance, srv_sen.response.angle);
 
     //for(int i = 0; i < 5; i++) {
         for(int i = 0; i < 4; i++) {
             drive(diffDrive, 8, 8);
-            ROS_INFO("distance: %d, angle: %d", senPack.distance, senPack.angle);
+            ROS_INFO("distance: %d, angle: %d", srv_sen.response.distance, srv_sen.response.angle);
             ros::Duration(4.0).sleep();
             drive(diffDrive, 10, -10);
-            ROS_INFO("distance: %d, angle: %d", senPack.distance, senPack.angle);
+            ROS_INFO("distance: %d, angle: %d", srv_sen.response.distance, srv_sen.response.angle);
             ros::Duration(0.62).sleep();
         }
     //}
