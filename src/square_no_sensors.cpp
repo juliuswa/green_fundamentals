@@ -26,11 +26,13 @@ int main(int argc, char **argv)
     ros::NodeHandle n;
     ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
-    for(int i = 0; i < 4; i++) {
-        drive(diffDrive, 8, 8);
-        ros::Duration(4.0).sleep();
-        drive(diffDrive, 10, -10);
-        ros::Duration(0.62).sleep();
+    for(int i = 0; i < 5; i++) {
+	for(int i = 0; i < 4; i++) {
+        	drive(diffDrive, 8, 8);
+        	ros::Duration(4.0).sleep();
+        	drive(diffDrive, 10, -10);
+		ros::Duration(0.62).sleep();
+    	}
     }
     stopDriving();
     return 0;
