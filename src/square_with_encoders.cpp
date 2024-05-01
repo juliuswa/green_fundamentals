@@ -16,7 +16,12 @@ void stop_driving(int sig) {
     ROS_DEBUG("stop_driving");
     ros::NodeHandle n;
     ros::ServiceClient diffDrive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
-    drive(diffDrive, 0, 0);
+
+    create_fundamentals::DiffDrive srv;
+    srv.request.left = 0;
+    srv.request.right = 0;
+
+    diffDrive.call(srv);
     ros::shutdown();
 }
 
@@ -25,7 +30,8 @@ int main(int argc, char **argv) {
     ros::NodeHandle n;
 
     ros::ServiceClient encoder_client = n.serviceClient<create_fundamentals::ResetEncoders>("reset_encoders");
-    Driver driver = new Driver();
+    Driver driver;
+    driver.setup();
 
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
         ros::console::notifyLoggerLevelsChanged();
@@ -71,7 +77,6 @@ int main(int argc, char **argv) {
         signal(SIGINT, stop_driving);
     }
 
-    delete driver;
     return 0;
 }
 

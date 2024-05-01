@@ -6,14 +6,15 @@
 #include "sensor_msgs/LaserScan.h"
 #include <math.h>
 #include "create_fundamentals/DiffDrive.h"
+#include "create_fundamentals/SensorPacket.h"
 
 class Driver {
-
-
 private:
     const float spring_constant = 4;
     const float damping_constant = 0.5;
     const float tolerance = 0.2;
+
+    bool is_setup = false;
 
     std::vector<float> current_command;
     std::vector<float> current_did;
@@ -30,14 +31,15 @@ private:
     ros::ServiceClient diff_drive;
 
 public:
-    void Driver();
-    void execute_command();
+    Driver();
+    void setup();
+    void execute_command(std::vector<float>&);
 
 private:
     void drive(ros::ServiceClient& diffDrive, int left, int right);
     bool command_done();
     float calculate_speed(float delta, float velocity);
     void calculate_wheel_speeds(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet);
-}
+};
 
 #endif //GREEN_FUNDAMENTALS_DRIVER_H
