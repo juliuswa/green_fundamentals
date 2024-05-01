@@ -33,11 +33,6 @@ void Driver::calculate_wheel_speeds(const create_fundamentals::SensorPacket::Con
 }
 
 void Driver::execute_command(std::vector<float>& command) {
-    if (!is_setup) {
-        ROS_ERROR("Driver is not set up.");
-        return;
-    }
-
     ROS_INFO("DRIVER: new command [%f, %f]", command[0], command[1]);
     current_command = command;
 
@@ -64,21 +59,14 @@ void Driver::execute_command(std::vector<float>& command) {
     return;
 }
 
-void Driver::setup() {
-    ros::NodeHandle n;
-
-    ros::Subscriber sensorSub = n.subscribe("sensorPacket", 1, &Driver::calculate_wheel_speeds, this);
-    diff_drive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
-
-    current_command.push_back(0.0);
-    current_command.push_back(0.0);
-
-    current_did.push_back(0.0);
-    current_did.push_back(0.0);
-
-    is_setup = true;
-}
-
-Driver::Driver()
+Driver::Driver(ros::NodeHandle& nh)
 {
+    ros::Subscriber sensorSub = nh.subscribe("sensorPacket", 1, &Driver::calculate_wheel_speeds, this);
+    diff_drive = nh.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
+
+    current_command.push_back(0.0);
+    current_command.push_back(0.0);
+
+    current_did.push_back(0.0);
+    current_did.push_back(0.0);
 }

@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     ros::NodeHandle n;
 
     ros::ServiceClient encoder_client = n.serviceClient<create_fundamentals::ResetEncoders>("reset_encoders");
-    Driver driver;
+    Driver driver(n);
     driver.setup();
 
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
@@ -66,8 +66,10 @@ int main(int argc, char **argv) {
         }
     }
 
+
     while(ros::ok()) {
         while(!drive_commands.empty()) {
+            ros::spinOnce();
             std::vector<float> current_command = drive_commands.front();
             drive_commands.pop_front();
 

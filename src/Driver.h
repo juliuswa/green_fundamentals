@@ -14,8 +14,6 @@ private:
     const float damping_constant = 0.5;
     const float tolerance = 0.2;
 
-    bool is_setup = false;
-
     std::vector<float> current_command;
     std::vector<float> current_did;
 
@@ -31,7 +29,7 @@ private:
     ros::ServiceClient diff_drive;
 
 public:
-    Driver();
+    Driver(ros::NodeHandle& nh);
     void setup();
     void execute_command(std::vector<float>&);
 
