@@ -1,40 +1,21 @@
-Given:
-data – A set of observations.
-model – A model to explain the observed data points.
-n – The minimum number of data points required to estimate the model parameters.
-k – The maximum number of iterations allowed in the algorithm.
-t – A threshold value to determine data points that are fit well by the model (inlier).
-d – The number of close data points (inliers) required to assert that the model fits well to the data.
+#include "ros/ros.h"
+#include <cstdlib>
+#include "sensor_msgs/LaserScan.h"
+#include <signal.h>
+#include "classes/grid_detector.h"
 
-Return:
-bestFit – The model parameters which may best fit the data (or null if no good model is found).
+int main(int argc, char **argv)
+{
+    ros::init(argc, argv, "wanderer");
+    ros::NodeHandle n;
 
+    GridDetector grid_detector();
+    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &GridDetector::detect_walls, &grid_detector);
 
-iterations = 0
-bestFit = null
-bestErr = something really large // This parameter is used to sharpen the model parameters to the best data fitting as iterations go on.
+    while (true) {
 
-while iterations < k do
-maybeInliers := n randomly selected values from data
-maybeModel := model parameters fitted to maybeInliers
-        confirmedInliers := empty set
-for every point in data do
-if point fits maybeModel with an error smaller than t then
-add point to confirmedInliers
-end if
-end for
-if the number of elements in confirmedInliers is > d then
-// This implies that we may have found a good model.
-// Now test how good it is.
-betterModel := model parameters fitted to all the points in confirmedInliers
-        thisErr := a measure of how well betterModel fits these points
-if thisErr < bestErr then
-        bestFit := betterModel
-        bestErr := thisErr
-        end if
-end if
-increment iterations
-end while
+        ros::spinOnce();
+    }
 
-return bestFit
-
+    return 0;
+}

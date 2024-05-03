@@ -87,6 +87,6 @@ catkin_install_python(PROGRAMS src/move_to_position.py src/odometry.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-# add_executable(align src/align.cpp src/Driver.cpp)
-# target_link_libraries(align ${catkin_LIBRARIES})
-# add_dependencies(align create_fundamentals_generate_messages_cpp)
+add_executable(align src/align.cpp src/class/driver.cpp src/classes/grid_detector.cpp)
+target_link_libraries(align ${catkin_LIBRARIES})
+add_dependencies(align create_fundamentals_generate_messages_cpp)

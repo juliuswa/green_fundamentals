@@ -93,7 +93,9 @@ std::vector<Point> get_cartesian_points(const sensor_msgs::LaserScan::ConstPtr& 
     }
     return all_points;
 }
-void GridDetector::detect_walls(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
+void GridDetector::detect_grid(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::vector<Point> points = get_cartesian_points(laser_scan);
     ROS_DEBUG(generateSpace(&points));
 }
+
+GridDetector::GridDetector() {}
