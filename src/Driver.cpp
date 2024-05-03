@@ -1,10 +1,10 @@
 #include "Driver.h"
 
-void Driver::drive(ros::ServiceClient& diffDrive, int left, int right) {
+void Driver::drive() {
     create_fundamentals::DiffDrive srv;
-    srv.request.left = left;
-    srv.request.right = right;
-    diffDrive.call(srv);
+    srv.request.left = speed_left;
+    srv.request.right = speed_right;
+    diff_drive.call(srv);
 }
 
 bool Driver::command_done() {
@@ -17,7 +17,7 @@ bool Driver::command_done() {
 float Driver::calculate_speed(float delta, float velocity) {
     float p_control = spring_constant * delta;
     float pd_control = p_control - damping_constant * velocity;
-    return std::round(pd_control);
+    return pd_control < 0.0 ? std::floor(pd_control) : std::ceil(pd_control);
 }
 
 void Driver::calculate_wheel_speeds(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet) {
@@ -43,7 +43,7 @@ void Driver::execute_command(std::vector<float>& command) {
     current_did[1] = 0.0;
 
     while(!command_done()) {
-        drive(diff_drive, speed_left, speed_right);
+        drive();
 
         ROS_DEBUG("command: (l=%f, r=%f) | did: (l=%f, r=%f) | speed: (l=%f, r=%f)",
                  current_command[0], current_command[1],
@@ -56,12 +56,13 @@ void Driver::execute_command(std::vector<float>& command) {
     speed_left = 0.0;
     speed_right = 0.0;
 
+    drive();
+
     return;
 }
 
 Driver::Driver(ros::NodeHandle& nh)
 {
-    ros::Subscriber sensorSub = nh.subscribe("sensorPacket", 1, &Driver::calculate_wheel_speeds, this);
     diff_drive = nh.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
     current_command.push_back(0.0);

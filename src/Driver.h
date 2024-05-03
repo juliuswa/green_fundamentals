@@ -30,14 +30,13 @@ private:
 
 public:
     Driver(ros::NodeHandle& nh);
-    void setup();
     void execute_command(std::vector<float>&);
+    void calculate_wheel_speeds(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet);
 
 private:
-    void drive(ros::ServiceClient& diffDrive, int left, int right);
+    void drive();
     bool command_done();
     float calculate_speed(float delta, float velocity);
-    void calculate_wheel_speeds(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet);
 };
 
 #endif //GREEN_FUNDAMENTALS_DRIVER_H
