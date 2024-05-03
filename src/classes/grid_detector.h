@@ -14,6 +14,7 @@ public:
     void detect_walls(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
 
 private:
+
 };
 
 #endif //GREEN_FUNDAMENTALS_WALL_DETECTOR_H
