@@ -14,4 +14,4 @@ Point::Point(float a, float b, bool is_polar) {
         r = std::sqrt(std::pow(x, 2) + std::pow(y, 2));
         theta = atan(y / x);
     }
-};
+}

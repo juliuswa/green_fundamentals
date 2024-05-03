@@ -6,6 +6,7 @@
 #include "sensor_msgs/LaserScan.h"
 #include <math.h>
 #include "line.h"
+#include "point.h"
 
 class GridDetector {
 private:

@@ -43,7 +43,7 @@
 int offset_of_laser = 13;
 
 std::vector<Point> GridDetector::get_cartesian_points(const sensor_msgs::LaserScan::ConstPtr& laser_scan){
-    std::vector<Point> all_points(laser_scan->ranges.size());
+    std::vector<Point> all_points;
 
     for(int i = 0; i < laser_scan->ranges.size(); i++) {
         float r = laser_scan->ranges[i];
@@ -63,42 +63,40 @@ std::vector<Point> GridDetector::get_cartesian_points(const sensor_msgs::LaserSc
 
 std::vector<Line> GridDetector::find_lines(std::vector<Point> points){
     std::vector<Line> discovered_lines;
-    std::list<int> uncovered(points.size());
+    std::vector<int> uncovered;
     for(int i = 0; i < uncovered.size(); i++) uncovered.push_back(i);
 
     int count_iteration = 0;
-    while(uncovered.size() > leftover_count && count_iteration < max_iteration) {
+    while(uncovered.size() > leftover_amount && count_iteration < max_iteration) {
         int u = std::rand() % uncovered.size();
         int v = std::rand() % uncovered.size();
         while(u == v) v = std::rand() % uncovered.size();
 
         Point p1 = points[uncovered[u]];
         Point p2 = points[uncovered[v]];
-        Line line1(p2.x - p1.x, p2.y - p1.y, p1);
+        Line line1(p2.x - p1.x, p2.y - p1.y, &p1);
 
-//        float m = (p2.y - p1.y) / (p2.x - p1.x);
-//        float t = p1.y - m * p1.x;
+        std::vector<int> matching_uncovered_indexes;
 
-        std::vector<int> matches;
-
-        for(int index : unovered) {
-            Point p3 = points[index];
-            Line line2(p3.x - p1.x, p3.y - p1.y, p1);
+        for(int uncovered_index = 0; uncovered_index < uncovered.size(); uncovered_index++) {
+            Point p3 = points[uncovered[uncovered_index]];
+            Line line2(p3.x - p1.x, p3.y - p1.y, &p1);
 
             float scalar_product = line1.x * line2.x + line1.y * line2.y;
-            if(std::abs(scalar_product) > scalar_epsilon) matches.push_back(index);
+            if(std::abs(scalar_product) > scalar_epsilon) matching_uncovered_indexes.push_back(uncovered_index);
         }
 
-        if(matches.size() > min_matches) {
+        if(matching_uncovered_indexes.size() > min_matches) {
             continue;
         }
 
         discovered_lines.push_back(line1);
 
-        for(int index : matches) {
-            uncovered.remove(uncovered(index));
+        for(int i = 0; i < matching_uncovered_indexes.size(); i++) {
+            uncovered.erase(uncovered.begin() + matching_uncovered_indexes[i]);
         }
     }
+
     return discovered_lines;
 }
 
@@ -110,7 +108,11 @@ float GridDetector::get_distance_to_line(Line line) {
         float x_coordinate = line.offset.x + (i * line.x / step_amount);
         float y_coordinate = line.offset.y + (i * line.y / step_amount);
 
-        distance = std::sqrt(pow(x_coordinate, 2) + pow(y_coordinate, 2));
+        float distance = std::sqrt(pow(x_coordinate, 2) + pow(y_coordinate, 2));
+
+        if (distance < min_distance) {
+            min_distance = distance;
+        }
     }
 
     return min_distance;
@@ -118,16 +120,18 @@ float GridDetector::get_distance_to_line(Line line) {
 
 void GridDetector::detect_grid(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     ROS_INFO("detect_grid is called.");
+
     std::vector<Point> points = get_cartesian_points(laser_scan);
     std::vector<Line> lines = find_lines(points);
 
-    Line closest_line;
+    Line* closest_line = nullptr;
     float closest_distance = 1.0;
 
     for (Line line : lines) {
-        float distance = get_distance_to_line(line)
+        float distance = get_distance_to_line(line);
+
         if (distance < closest_distance) {
-            closest_line = line;
+            closest_line = &line;
             closest_distance = distance;
         }
     }
@@ -138,7 +142,6 @@ void GridDetector::detect_grid(const sensor_msgs::LaserScan::ConstPtr& laser_sca
 }
 
 GridDetector::GridDetector() {}
-
 
 // TODO: Delete
 // std::string generateSpace(const std::vector<Point>& points) {
