@@ -4,12 +4,30 @@
 
 #include "line.h"
 
+bool Line::get_distance_to_point(Vector point, float accuracy) {
+    int step_amount = std::round(1.0 / accuracy) * max_lenght;
 
-Line::Line(float unnormed_x, float unnormed_y, int offset_point) {
-    float norm = std::sqrt(pow(unnormed_x, 2) + pow(unnormed_y, 2));
+    float min_distance = 1.0;
 
-    x = unnormed_x / norm;
-    y = unnormed_y / norm;
+    for (int i = -step_amount; i < step_amount; i++) {
+        float x_coordinate = m_offset.x + (i * m_direction.x / step_amount);
+        float y_coordinate = m_offset.y + (i * m_direction.y / step_amount);
 
-    offset = offset_point;
+        float distance = std::sqrt(pow(x_coordinate, 2) + pow(y_coordinate, 2));
+
+        if (distance < min_distance) {
+            min_distance = distance;
+        }
+    }
+
+    return min_distance;
+}
+
+Line::Line(Vector direction, Vector offset) {
+    float norm = std::sqrt(pow(direction.x, 2) + pow(direction.y, 2));
+    
+    Vector normed_direction(direction.x / norm, direction.y / norm);
+    m_direction = normed_direction;
+
+    offset = offset;
 }

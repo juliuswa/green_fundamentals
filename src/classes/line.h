@@ -1,21 +1,17 @@
-//
-// Created by laura on 03.05.24.
-//
+#ifndef GREEN_FUNDAMENTALS_LINE_H
+#define GREEN_FUNDAMENTALS_LINE_H
 
-#ifndef GREEN_FUNDAMENTALS_VECTOR_H
-#define GREEN_FUNDAMENTALS_VECTOR_H
-
-#include "point.h"
+#include "vector.h"
 
 class Line {
 public:
-    float x;
-    float y;
-    Point offset;
+    float max_lenght = 1.0;
+    Vector m_direction;
+    Vector m_offset;
 
-private:
-    Line(float unnormed_x, float unnormed_y, Point offset_point);
+    Line(Vector direction, Vector offset);
+    bool get_distance_to_point(Vector point, float accuracy);
 };
 
 
-#endif //GREEN_FUNDAMENTALS_VECTOR_H
+#endif //GREEN_FUNDAMENTALS_LINE_H
