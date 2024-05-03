@@ -9,11 +9,16 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "wanderer");
     ros::NodeHandle n;
 
-    GridDetector grid_detector();
-    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &GridDetector::detect_walls, &grid_detector);
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+        ros::console::notifyLoggerLevelsChanged();
+    }
 
-    while (true) {
+    GridDetector grid_detector;
+    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &GridDetector::detect_grid, &grid_detector);
 
+    ROS_INFO("subscribed to scan_filtered.");
+
+    while (ros::ok()) {
         ros::spinOnce();
     }
 

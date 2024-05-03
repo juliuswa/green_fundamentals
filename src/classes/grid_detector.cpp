@@ -1,4 +1,3 @@
-#include "grid_detector.h"
 // Given:
 // data – A set of observations.
 // model – A model to explain the observed data points.
@@ -38,6 +37,10 @@
 // end while
 
 // return bestFit
+
+#include "grid_detector.h"
+
+
 struct Point {
     float x;
     float y;
@@ -45,57 +48,73 @@ struct Point {
 
 int offset_of_laser = 13;
 
-std::string generateSpace(const std::vector<Point>& points) {
-    // Find min and max x, y coordinates
-    double minX = std::numeric_limits<double>::max();
-    double maxX = std::numeric_limits<double>::min();
-    double minY = std::numeric_limits<double>::max();
-    double maxY = std::numeric_limits<double>::min();
-
-    for (const auto& p : points) {
-        minX = std::min(minX, p.x);
-        maxX = std::max(maxX, p.x);
-        minY = std::min(minY, p.y);
-        maxY = std::max(maxY, p.y);
-    }
-
-    // Calculate step sizes for x and y
-    double stepX = (maxX - minX) / 100.0;
-    double stepY = (maxY - minY) / 100.0;
-
-    // Initialize the grid with spaces
-    std::string grid(100 * 100, ' ');
-
-    // Mark points with 'X'
-    for (const auto& p : points) {
-        int xIndex = static_cast<int>((p.x - minX) / stepX);
-        int yIndex = static_cast<int>((p.y - minY) / stepY);
-        grid[yIndex * 100 + xIndex] = 'X';
-    }
-
-    // Convert grid to a string with line breaks
-    std::string result;
-    for (int y = 0; y < 100; ++y) {
-        result += grid.substr(y * 100, 100) + '\n';
-    }
-
-    return result;
-}
-
 std::vector<Point> get_cartesian_points(const sensor_msgs::LaserScan::ConstPtr& laser_scan){
     std::vector<Point> all_points(laser_scan->ranges.size());
     for(int i = 0; i < laser_scan->ranges.size(); i++) {
         float r = laser_scan->ranges[i];
         float theta = i * laser_scan->angle_increment;
 
+        if (r != r) {
+            continue;
+        }
+
         Point point = {r * std::cos(theta), r * std::sin(theta)};
         all_points.push_back(point);
     }
     return all_points;
 }
+
+
+
 void GridDetector::detect_grid(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
+
+    ROS_INFO("detect_grid is called.");
     std::vector<Point> points = get_cartesian_points(laser_scan);
-    ROS_DEBUG(generateSpace(&points));
+
+    ROS_DEBUG("%d points detected", points.size());
+
+    // ROS_DEBUG("%s", generateSpace(points).c_str());
 }
 
 GridDetector::GridDetector() {}
+
+
+// TODO: Delete
+// std::string generateSpace(const std::vector<Point>& points) {
+//     // Find min and max x, y coordinates
+//     float minX = std::numeric_limits<float>::max();
+//     float maxX = std::numeric_limits<float>::min();
+//     float minY = std::numeric_limits<float>::max();
+//     float maxY = std::numeric_limits<float>::min();
+
+//     for (const auto& p : points) {
+//         minX = std::min(minX, p.x);
+//         maxX = std::max(maxX, p.x);
+//         minY = std::min(minY, p.y);
+//         maxY = std::max(maxY, p.y);
+//     }
+
+//     // Calculate step sizes for x and y
+//     float stepX = (maxX - minX) / 100.0;
+//     float stepY = (maxY - minY) / 100.0;
+
+//     // Initialize the grid with spaces
+//     std::string grid(100 * 100, ' ');
+
+//     // Mark points with 'X'
+//     for (const auto& p : points) {
+//         int xIndex = static_cast<int>((p.x - minX) / stepX);
+//         int yIndex = static_cast<int>((p.y - minY) / stepY);
+
+//         grid[yIndex * 100 + xIndex] = 'X';
+//     }
+
+//     // Convert grid to a string with line breaks
+//     std::string result;
+//     for (int y = 0; y < 100; ++y) {
+//         result += grid.substr(y * 100, 100) + '\n';
+//     }
+
+//     return result;
+// }
+
