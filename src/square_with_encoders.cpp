@@ -8,7 +8,7 @@
 #include <signal.h>
 #include <deque>
 #include <ros/console.h>
-#include "Driver.h"
+#include "classes/driver.h"
 
 std::deque<std::vector<float>> drive_commands;
 
@@ -31,8 +31,9 @@ int main(int argc, char **argv) {
 
     ros::ServiceClient encoder_client = n.serviceClient<create_fundamentals::ResetEncoders>("reset_encoders");
     Driver driver(n);
-    driver.setup();
+    ros::Subscriber sensorSub = n.subscribe("sensorPacket", 1, &Driver::calculate_wheel_speeds, &driver);
 
+    
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
         ros::console::notifyLoggerLevelsChanged();
     }
