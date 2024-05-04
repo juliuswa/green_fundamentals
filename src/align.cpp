@@ -3,7 +3,7 @@
 #include "sensor_msgs/LaserScan.h"
 #include "create_fundamentals/DiffDrive.h"
 #include <signal.h>
-#include "classes/grid_detector.h"
+#include "classes/line_detector.h"
 #include "classes/vector.h"
 #include "classes/driver.h"
 #include <deque>
@@ -23,7 +23,7 @@ void stop_driving(int sig) {
     ros::shutdown();
 }
 
-void drive_align_at_point(Vector dest_point, Vecotr align_direction) {
+void drive_align_at_point(Vector dest_point, Vector align_direction) {
     // drive to destination point
     const float wheel_radius = 0.0308;
     const float wheel_base = 0.265;
@@ -41,9 +41,9 @@ void drive_align_at_point(Vector dest_point, Vecotr align_direction) {
     drive_commands.push_back(turn_command);
 
     wheelCommand direction_command;
-    x_command.left_wheel = dest_point.get_length() / revolution_dist * 2 * M_PI;
-    x_command.right_wheel = dest_point.get_length() / revolution_dist * 2 * M_PI;
-    drive_commands.push_back(x_command);
+    direction_command.left_wheel = dest_point.get_length() / revolution_dist * 2 * M_PI;
+    direction_command.right_wheel = dest_point.get_length() / revolution_dist * 2 * M_PI;
+    drive_commands.push_back(direction_command);
 
     // align towards wall
     float align_angle = std::acos(dest_point.scalar_product(align_direction) / (dest_point.get_length() * align_direction.get_length()));
@@ -65,8 +65,8 @@ int main(int argc, char **argv)
         ros::console::notifyLoggerLevelsChanged();
     }
 
-    GridDetector grid_detector;
-    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &GridDetector::detect_grid, &grid_detector);
+    LineDetector line_detector;
+    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &LineDetector::detect, &line_detector);
 
     Driver driver(n);
     ros::Subscriber sensorSub = n.subscribe("sensorPacket", 1, &Driver::calculate_wheel_speeds, &driver);
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     while (ros::ok()) {
         while(!drive_commands.empty()) {
             ros::spinOnce();
-            wheelCommand = drive_commands.front();
+            wheelCommand current_command = drive_commands.front();
             drive_commands.pop_front();
 
             driver.execute_command(current_command);

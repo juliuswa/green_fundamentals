@@ -11,7 +11,7 @@
 struct wheelCommand {
     float left_wheel;
     float right_wheel;
-}
+};
 
 class Driver {
 private:
