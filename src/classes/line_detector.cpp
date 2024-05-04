@@ -12,7 +12,7 @@ std::list<Vector> LineDetector::get_measurements(const sensor_msgs::LaserScan::C
         if (r != r || r == m_last_measurement[i]) {
             continue;
         }        
-theta_offset
+        
         float theta = i * laser_scan->angle_increment + theta_offset;
 
         Vector vector(r * std::cos(theta), r * std::sin(theta));
