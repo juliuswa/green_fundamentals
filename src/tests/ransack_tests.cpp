@@ -14,7 +14,7 @@ bool test_ransack() {
     Vector p8(0.4, -0.3);
     
     Vector points[] = {p1, p2, p3, p4, p5, p6, p7, p8};
-    std::list<Line> lines = perform_ransack(points, 0.1, 3);
+    std::list<Line> lines = perform_ransack(points, 8, 0.1, 3);
 
     int i = 0;
     return true;

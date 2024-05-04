@@ -66,6 +66,5 @@ Driver::Driver(ros::NodeHandle& nh)
     diff_drive = nh.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
     current_command = {0.0, 0.0};
-
     current_did = {0.0, 0.0};
 }
