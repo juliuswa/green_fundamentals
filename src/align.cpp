@@ -46,6 +46,14 @@ void drive_align_at_point(Vector dest_point, Vecotr align_direction) {
     drive_commands.push_back(x_command);
 
     // align towards wall
+    float align_angle = std::acos(dest_point.scalar_product(align_direction) / (dest_point.get_length() * align_direction.get_length()));
+    float align_angle_in_rad = align_angle * M_PI / 180;
+    float align_turn_distance = wheel_base / 2 * align_angle_in_rad;
+
+    wheelCommand align_turn_command;
+    align_turn_command.left_wheel = align_turn_distance / revolution_dist * 2 * M_PI;
+    align_turn_command.right_wheel = -1 * align_turn_distance / revolution_dist * 2 * M_PI;
+    drive_commands.push_back(align_turn_command);
 }
 
 int main(int argc, char **argv)
