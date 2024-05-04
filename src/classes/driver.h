@@ -8,14 +8,19 @@
 #include "create_fundamentals/DiffDrive.h"
 #include "create_fundamentals/SensorPacket.h"
 
+struct wheelCommand {
+    float left_wheel;
+    float right_wheel;
+}
+
 class Driver {
 private:
     const float spring_constant = 4;
     const float damping_constant = 0.5;
     const float tolerance = 0.2;
 
-    std::vector<float> current_command;
-    std::vector<float> current_did;
+    wheelCommand current_command;
+    wheelCommand current_did;
 
     float speed_left = 0.0;
     float speed_right = 0.0;
@@ -30,7 +35,7 @@ private:
 
 public:
     Driver(ros::NodeHandle& nh);
-    void execute_command(std::vector<float>&);
+    void execute_command(wheelCommand& command);
     void calculate_wheel_speeds(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet);
 
 private:
