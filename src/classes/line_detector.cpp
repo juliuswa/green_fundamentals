@@ -5,13 +5,11 @@ int offset_of_laser = 13;
 std::list<Vector> LineDetector::get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan) 
 {
     std::list<Vector> all_vectors;
-    int count = 0;
 
     for(int i = 0; i < laser_scan->ranges.size(); i++) {
         float r = laser_scan->ranges[i];
         
-        if (r != r || r - m_last_measurement[i] < 0.0000001) {
-            count++;
+        if (r != r || r - m_last_measurement[i] < 0.000001) {
             continue;
         }        
 
@@ -22,8 +20,6 @@ std::list<Vector> LineDetector::get_measurements(const sensor_msgs::LaserScan::C
 
         all_vectors.push_back(vector);
     }
-
-    ROS_DEBUG("%d points invalid,", count);
     return all_vectors;
 }
 
@@ -111,6 +107,17 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
     ROS_DEBUG("%d lines found. in %ld ms", lines.size(), std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());    
+
+    Line line_array[lines.size()];
+    std::copy(lines.begin(), lines.end(), line_array);
+
+    std::string str;
+
+    for (int i = 0; i < lines.size(); ++i) {
+        ROS_DEBUG("g%d = (%f, %f) + t * (%f, %f)", i
+            , line_array[i].m_offset.x, line_array[i].m_offset.y
+            , line_array[i].m_direction.x, line_array[i].m_direction.y);
+    }
 
     ROS_DEBUG("%s", generateSpace(measurements).c_str());
 }

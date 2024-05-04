@@ -4,7 +4,8 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/opt/ros/noetic/include/"
+                "/opt/ros/noetic/include/",
+                "/home/green/green_ws/"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

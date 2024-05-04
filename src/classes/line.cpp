@@ -17,3 +17,8 @@ Line::Line(Vector direction, Vector offset) {
     Vector new_offset(offset.x, offset.y);
     m_offset = new_offset;
 }
+
+Line::Line() {
+    m_offset = Vector(0, 0);
+    m_direction = Vector(0, 0);
+}

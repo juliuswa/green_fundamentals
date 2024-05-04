@@ -10,6 +10,7 @@ public:
     Vector m_direction;
     Vector m_offset;
 
+    Line();
     Line(Vector direction, Vector offset);
     float get_distance_to_point(Vector point);
 };
