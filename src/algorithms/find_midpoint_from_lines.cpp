@@ -1,4 +1,6 @@
 #include <Eigen/Dense>
+#include "../classes/line.h"
+#include "../classes/vector.h"
 
 static float angle_between_vectors(const Vector& a, const Vector& b) {
     float dot = a.scalar_product(b);
