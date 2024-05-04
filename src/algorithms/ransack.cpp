@@ -3,20 +3,19 @@
 #include <set>
 #include "../classes/line.h"
 
-static std::list<Line> perform_ransack(std::list<Vector> points, float epsilon, int min_matches)
+static std::list<Line> perform_ransack(Vector point_array[], float epsilon, int min_matches)
 {    
-    Vector point_array[points.size()];
-    std::copy(points.begin(), points.end(), point_array);
-
     std::list<Line> discovered_lines;
     std::set<int> covered;
     
-    for (int u = 0; u < points.size() - 1; u++) {
+    int point_count = (sizeof(point_array)/sizeof(*point_array));
+
+    for (int u = 0; u < point_count - 1; u++) {
         if (covered.count(u)) {
             continue;
         }
 
-        for (int v = u + 1; v < points.size(); v++) {
+        for (int v = u + 1; v < point_count; v++) {
             if (covered.count(v)) {
                 continue;
             }     
@@ -24,7 +23,7 @@ static std::list<Line> perform_ransack(std::list<Vector> points, float epsilon, 
             Line line(point_array[u], point_array[v]);
             std::list<int> matched;
 
-            for (int w = 0; w < points.size(); w++) {
+            for (int w = 0; w < point_count; w++) {
                 if (covered.count(w)) {
                     continue;
                 }
