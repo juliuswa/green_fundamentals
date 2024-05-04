@@ -8,8 +8,6 @@
 #include <list>
 #include <set>
 #include <chrono>
-#include "line.h"
-#include "vector.h"
 #include "../algorithms/ransack.cpp"
 
 class LineDetector {

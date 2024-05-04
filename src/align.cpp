@@ -1,13 +1,12 @@
 #include "ros/ros.h"
 #include <cstdlib>
+#include <signal.h>
+#include <deque>
 #include "sensor_msgs/LaserScan.h"
 #include "create_fundamentals/DiffDrive.h"
-#include <signal.h>
 #include "classes/line_detector.h"
 #include "classes/vector.h"
 #include "classes/driver.h"
-#include <deque>
-#include "classes/line.h"
 
 std::deque<wheelCommand> drive_commands;
 
