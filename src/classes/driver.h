@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include "sensor_msgs/LaserScan.h"
 #include <math.h>
-#include "create_fundamentals/DiffDrive.h"
+#include "../create_fundamentals/DiffDrive.h"
 #include "create_fundamentals/SensorPacket.h"
 
 class Driver {

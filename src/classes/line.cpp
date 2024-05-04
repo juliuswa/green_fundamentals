@@ -5,25 +5,9 @@
 #include "line.h"
 
 bool Line::get_distance_to_point(Vector point, float accuracy) {
-    int step_amount = std::round(1.0 / accuracy) * max_lenght;
+    Vector point_offset(point.x - m_offset.x, point.y - m_offset.y);
 
-    float min_distance = 1.0;
-
-    for (int i = -step_amount; i < step_amount; i++) {
-        float x_coordinate = m_offset.x + (i * m_direction.x / step_amount);
-        float y_coordinate = m_offset.y + (i * m_direction.y / step_amount);
-
-        float x_distance = x_coordinate - point.x;
-        float y_distance = y_coordinate - point.y;
-
-        float distance = std::sqrt(pow(x_distance, 2) + pow(y_distance, 2));
-
-        if (distance < min_distance) {
-            min_distance = distance;
-        }
-    }
-
-    return min_distance;
+    return point_offset.x * m_direction.y - point_offset.y * m_direction.x;
 }
 
 Line::Line(Vector direction, Vector offset) {
