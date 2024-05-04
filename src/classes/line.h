@@ -2,6 +2,7 @@
 #define GREEN_FUNDAMENTALS_LINE_H
 
 #include "vector.h"
+#include <string>
 
 class Line {
 public:
@@ -10,7 +11,7 @@ public:
     Vector m_offset;
 
     Line(Vector direction, Vector offset);
-    bool get_distance_to_point(Vector point, float accuracy);
+    float get_distance_to_point(Vector point);
 };
 
 

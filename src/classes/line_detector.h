@@ -7,20 +7,22 @@
 #include <math.h>
 #include <list>
 #include <set>
+#include <chrono>
 #include "line.h"
 #include "vector.h"
 
-class GridDetector {
+class LineDetector {
 private:
     const float theta_offset = 2.3; 
-    const float epsilon = 0.02;
-    const int min_matches = 5;
+    const float epsilon = 0.5;
+    const int min_matches = 8;
     const int max_iteration = 1000;
-    const int leftover_amount = 5;
+
+    float m_last_measurement[1000];
 
 public:
-    GridDetector();
-    void detect_grid(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
+    LineDetector();
+    void detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
 
 private:
     std::list<Vector> get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);

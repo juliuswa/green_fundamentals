@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include "sensor_msgs/LaserScan.h"
 #include <signal.h>
-#include "classes/grid_detector.h"
+#include "classes/line_detector.h"
 
 int main(int argc, char **argv)
 {
@@ -13,8 +13,8 @@ int main(int argc, char **argv)
         ros::console::notifyLoggerLevelsChanged();
     }
 
-    GridDetector grid_detector;
-    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &GridDetector::detect_grid, &grid_detector);
+    LineDetector grid_detector;
+    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &LineDetector::detect, &grid_detector);
 
     ROS_INFO("subscribed to scan_filtered.");
 
