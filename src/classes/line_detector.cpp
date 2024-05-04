@@ -112,11 +112,15 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::copy(lines.begin(), lines.end(), line_array);
 
     std::string str;
+    Vector robot_direction(1, 0);
+    Vector robot_offset(0, 0);
 
     for (int i = 0; i < lines.size(); ++i) {
-        ROS_DEBUG("g%d = (%f, %f) + t * (%f, %f)", i
-            , line_array[i].m_offset.x, line_array[i].m_offset.y
-            , line_array[i].m_direction.x, line_array[i].m_direction.y);
+        float distance = line_array[i].get_distance_to_point(robot_offset);
+        float angle = robot_direction.scalar_product(line_array[i].m_direction);
+
+        ROS_DEBUG("g%d = distance: %f, angle %f°.", i,
+            distance, angle);
     }
 
     ROS_DEBUG("%s", generateSpace(measurements).c_str());

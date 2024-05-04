@@ -6,7 +6,6 @@
 
 class Line {
 public:
-    float max_lenght = 1.0;
     Vector m_direction;
     Vector m_offset;
 
