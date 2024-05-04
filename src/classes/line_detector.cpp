@@ -22,52 +22,6 @@ theta_offset
     return all_vectors;
 }
 
-std::list<Line> LineDetector::find_lines(std::list<Vector> measurements)
-{    
-    Vector points[measurements.size()];
-    std::copy(measurements.begin(), measurements.end(), points);
-
-    std::list<Line> discovered_lines;
-    std::set<int> covered;
-    
-    for (int u = 0; u < measurements.size() - 1; u++) {
-        if (covered.count(u)) {
-            continue;
-        }
-
-        for (int v = u + 1; v < measurements.size(); v++) {
-            if (covered.count(v)) {
-                continue;
-            }     
-
-            Line line(points[u], points[v]);
-            std::list<int> matched;
-
-            for (int w = 0; w < measurements.size(); w++) {
-                if (covered.count(w)) {
-                    continue;
-                }
-
-                float distance = line.get_distance_to_point(points[w]);
-
-                if (distance < epsilon) {
-                    matched.push_back(w);
-                }
-                
-            }
-
-            if (matched.size() < min_matches) {
-                continue;
-            }
-
-            discovered_lines.push_back(line);
-            covered.insert(matched.begin(), matched.end());
-        }
-    }
-
-    return discovered_lines;
-}
-
 
 std::string generateSpace(const std::list<Vector>& points) {
     int width = 125;
@@ -100,12 +54,11 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::list<Vector> measurements = get_measurements(laser_scan);
     ROS_DEBUG("%d measurements taken.", measurements.size()); 
 
-    std::copy(laser_scan->ranges.begin(), laser_scan->ranges.end(), m_last_measurement);
-
-    ROS_DEBUG("%s", generateSpace(measurements).c_str());
+    Vector point_array[measurements.size()];
+    std::copy(measurements.begin(), measurements.end(), point_array);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    std::list<Line> lines = find_lines(measurements);
+    std::list<Line> lines = perform_ransack(point_array, epsilon, min_matches);
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
     ROS_DEBUG("%d lines found. in %ld ms", lines.size(), std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());    
