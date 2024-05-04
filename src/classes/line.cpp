@@ -33,5 +33,5 @@ Line::Line(Vector direction, Vector offset) {
     m_direction = normed_direction;
 
     Vector new_offset(offset.x, offset.y);
-    offset = new_offset;
+    m_offset = new_offset;
 }
