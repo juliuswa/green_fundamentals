@@ -2,7 +2,6 @@
 #define GREEN_FUNDAMENTALS_VECTOR_H
 
 #include <cmath>
-#include <cstdlib>
 
 class Vector {
 public:
@@ -15,6 +14,5 @@ public:
     float get_length();
     float scalar_product(Vector b);
 };
-
 
 #endif //GREEN_FUNDAMENTALS_VECTOR_H
