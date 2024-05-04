@@ -8,7 +8,7 @@ std::list<Vector> GridDetector::get_measurements(const sensor_msgs::LaserScan::C
 
     for(int i = 0; i < laser_scan->ranges.size(); i++) {
         float r = laser_scan->ranges[i];
-        float theta = i * laser_scan->angle_increment;
+        float theta = i * laser_scan->angle_increment + theta_offset;
 
         if (r != r) {
             continue;
@@ -23,36 +23,45 @@ std::list<Vector> GridDetector::get_measurements(const sensor_msgs::LaserScan::C
 }
 
 std::list<Line> GridDetector::find_lines(std::list<Vector> measurements)
-{     
+{    
     Vector points[measurements.size()];
     std::copy(measurements.begin(), measurements.end(), points);
 
     std::list<Line> discovered_lines;
     std::set<int> covered;
-
-    int count_iteration = 0;
-
-    for (int u = 0; u < sizeof(points) - 1; u++) {
+    
+    for (int u = 0; u < measurements.size() - 1; u++) {
         if (covered.count(u)) {
             continue;
         }
+        
+        if (u % 1 == 0) {
+            ROS_DEBUG("%d", u);
+        }
 
-        for (int v = u + 1; v < sizeof(points); v++) {
+        for (int v = u + 1; v < measurements.size(); v++) {
             if (covered.count(v)) {
                 continue;
-            }            
+            }   
+
+            if (v % 1 == 0) {
+                ROS_DEBUG("u %d", v);
+            }         
 
             Line line(points[u], points[v]);
+            
             std::list<int> matched;
 
-            for (int w = 0; w < sizeof(points); w++) {
+            for (int w = 0; w < measurements.size(); w++) {
                 if (covered.count(w)) {
                     continue;
                 }
 
+                
                 if (line.get_distance_to_point(points[w], epsilon) < epsilon) {
                     matched.push_back(w);
                 }
+                
             }
 
             if (matched.size() < min_matches) {
@@ -69,29 +78,19 @@ std::list<Line> GridDetector::find_lines(std::list<Vector> measurements)
 
 
 std::string generateSpace(const std::list<Vector>& points) {
-    int width = 100;
+    int width = 125;
     int height = 50;
     
-    float minX = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::min();
-    float minY = std::numeric_limits<float>::max();
-    float maxY = std::numeric_limits<float>::min();
+    float dimension = 1.1;
 
-    for (const auto& p : points) {
-        minX = std::min(minX, p.x);
-        maxX = std::max(maxX, p.x);
-        minY = std::min(minY, p.y);
-        maxY = std::max(maxY, p.y);
-    }
-
-    float stepX = (maxX - minX) / width;
-    float stepY = (maxY - minY) / height;
+    float stepX = (dimension * 2) / static_cast<float>(width);
+    float stepY = (dimension * 2) / static_cast<float>(height);
 
     std::string grid(width * height, ' ');
 
     for (const auto& p : points) {
-        int xIndex = static_cast<int>((p.x - minX) / stepX);
-        int yIndex = static_cast<int>((p.y - minY) / stepY);
+        int xIndex = static_cast<int>((p.x + dimension) / stepX);
+        int yIndex = static_cast<int>((p.y + dimension) / stepY);
 
         grid[yIndex * width + xIndex] = 'X';
     }
@@ -110,7 +109,8 @@ void GridDetector::detect_grid(const sensor_msgs::LaserScan::ConstPtr& laser_sca
 
     std::list<Vector> measurements = get_measurements(laser_scan);
     std::list<Line> lines = find_lines(measurements);
-
+    
+    /*
     Line* closest_line = nullptr;
     float closest_distance = 1.0;
 
@@ -125,8 +125,10 @@ void GridDetector::detect_grid(const sensor_msgs::LaserScan::ConstPtr& laser_sca
         }
     }
 
-    ROS_DEBUG("%s", generateSpace(measurements).c_str());
     ROS_DEBUG("%d lines found. Closest distance = %f", lines.size(), closest_distance);
+    */
+
+    ROS_DEBUG("%s", generateSpace(measurements).c_str());
 }
 
 GridDetector::GridDetector() {}

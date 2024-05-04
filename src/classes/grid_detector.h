@@ -12,6 +12,7 @@
 
 class GridDetector {
 private:
+    const float theta_offset = 2.3; 
     const float epsilon = 0.02;
     const int min_matches = 5;
     const int max_iteration = 1000;
