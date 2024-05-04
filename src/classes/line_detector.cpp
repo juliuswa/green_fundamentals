@@ -53,6 +53,7 @@ std::string generateSpace(const std::list<Vector>& points) {
 void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::list<Vector> measurements = get_measurements(laser_scan);
     ROS_DEBUG("%d measurements taken.", measurements.size()); 
+    ROS_DEBUG("%s", generateSpace(measurements).c_str());
 
     Vector point_array[measurements.size()];
     std::copy(measurements.begin(), measurements.end(), point_array);
