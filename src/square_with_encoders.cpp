@@ -10,7 +10,7 @@
 #include <ros/console.h>
 #include "classes/driver.h"
 
-std::deque<std::vector<float>> drive_commands;
+std::deque<wheelCommand> drive_commands;
 
 void stop_driving(int sig) {
     ROS_DEBUG("stop_driving");
@@ -53,15 +53,15 @@ int main(int argc, char **argv) {
     for (int rounds = 0; rounds < 5; rounds++) {
         for (int side = 0; side < 4; side++) {
 
-            std::vector<float> straight_command;
-            straight_command.push_back(square_size / revolution_dist * 2 * M_PI);
-            straight_command.push_back(square_size / revolution_dist * 2 * M_PI);
+            wheelCommand straight_command;
+            straight_command.left_wheel = square_size / revolution_dist * 2 * M_PI;
+            straight_command.right_wheel = square_size / revolution_dist * 2 * M_PI;
 
             drive_commands.push_back(straight_command);
 
-            std::vector<float> turn_command;
-            turn_command.push_back(right_angle_turn_distance / revolution_dist * 2 * M_PI);
-            turn_command.push_back(-1 * right_angle_turn_distance / revolution_dist * 2 * M_PI);
+            wheelCommand turn_command;
+            turn_command.left_wheel = right_angle_turn_distance / revolution_dist * 2 * M_PI;
+            turn_command.right_wheel = -1 * right_angle_turn_distance / revolution_dist * 2 * M_PI;
 
             drive_commands.push_back(turn_command);
         }
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     while(ros::ok()) {
         while(!drive_commands.empty()) {
             ros::spinOnce();
-            std::vector<float> current_command = drive_commands.front();
+            wheelCommand current_command = drive_commands.front();
             drive_commands.pop_front();
 
             driver.execute_command(current_command);

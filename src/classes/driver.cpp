@@ -8,8 +8,8 @@ void Driver::drive() {
 }
 
 bool Driver::command_done() {
-    return std::abs(current_command[0] - current_did[0]) < tolerance
-           && std::abs(current_command[1] - current_did[1]) < tolerance
+    return std::abs(current_command.left_wheel - current_did.left_wheel) < tolerance
+           && std::abs(current_command.right_wheel - current_did.right_wheel) < tolerance
            && !(std::abs(speed_left) > 1.0)
            && !(std::abs(speed_right) > 1.0);
 }
@@ -22,32 +22,32 @@ float Driver::calculate_speed(float delta, float velocity) {
 
 void Driver::calculate_wheel_speeds(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet) {
     ROS_DEBUG("calculate_wheel_speeds");
-    speed_left = calculate_speed(current_command[0] - current_did[0], speed_left);
-    speed_right = calculate_speed(current_command[1] - current_did[1], speed_right);
+    speed_left = calculate_speed(current_command.left_wheel - current_did.left_wheel, speed_left);
+    speed_right = calculate_speed(current_command.right_wheel - current_did.right_wheel, speed_right);
 
     left_encoder_current = sensor_packet->encoderLeft;
     right_encoder_current = sensor_packet->encoderRight;
 
-    current_did[0] = left_encoder_current - left_encoder_before_command;
-    current_did[1] = right_encoder_current - right_encoder_before_command;
+    current_did.left_wheel = left_encoder_current - left_encoder_before_command;
+    current_did.right_wheel = right_encoder_current - right_encoder_before_command;
 }
 
-void Driver::execute_command(std::vector<float>& command) {
-    ROS_INFO("DRIVER: new command [%f, %f]", command[0], command[1]);
+void Driver::execute_command(wheelCommand& command) {
+    ROS_INFO("DRIVER: new command [%f, %f]", command.left_wheel, command.right_wheel);
     current_command = command;
 
     left_encoder_before_command = left_encoder_current;
     right_encoder_before_command = right_encoder_current;
 
-    current_did[0] = 0.0;
-    current_did[1] = 0.0;
+    current_did.left_wheel = 0;
+    current_did.right_wheel = 0;
 
     while(!command_done()) {
         drive();
 
         ROS_DEBUG("command: (l=%f, r=%f) | did: (l=%f, r=%f) | speed: (l=%f, r=%f)",
-                 current_command[0], current_command[1],
-                 current_did[0], current_did[1],
+                 current_command.left_wheel, current_command.right_wheel,
+                 current_did.left_wheel, current_did.right_wheel,
                  speed_left, speed_right);
 
         ros::spinOnce();
@@ -65,9 +65,7 @@ Driver::Driver(ros::NodeHandle& nh)
 {
     diff_drive = nh.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
-    current_command.push_back(0.0);
-    current_command.push_back(0.0);
+    current_command = {0.0, 0.0};
 
-    current_did.push_back(0.0);
-    current_did.push_back(0.0);
+    current_did = {0.0, 0.0};
 }

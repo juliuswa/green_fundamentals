@@ -9,8 +9,10 @@ public:
     float y;
 
     Vector(float x, float y);
-
     Vector();
+
+    float get_length();
+    float scalar_product(Vector b);
 };
 
 
