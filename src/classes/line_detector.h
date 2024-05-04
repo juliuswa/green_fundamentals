@@ -13,10 +13,9 @@
 
 class LineDetector {
 private:
-    const float theta_offset = 2.3; 
-    const float epsilon = 0.5;
-    const int min_matches = 8;
-    const int max_iteration = 1000;
+    const float theta_offset = 0.74; 
+    const float epsilon = 0.2;
+    const int min_matches = 5;
 
     float m_last_measurement[1000];
 

@@ -2,6 +2,7 @@
 #define GREEN_FUNDAMENTALS_VECTOR_H
 
 #include <cmath>
+#include <cstdlib>
 
 class Vector {
 public:

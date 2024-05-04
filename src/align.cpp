@@ -7,6 +7,7 @@
 #include "classes/vector.h"
 #include "classes/driver.h"
 #include <deque>
+#include "classes/line.h"
 
 std::deque<wheelCommand> drive_commands;
 
@@ -56,6 +57,38 @@ void drive_align_at_point(Vector dest_point, Vector align_direction) {
     drive_commands.push_back(align_turn_command);
 }
 
+/*
+std::Pair<Vector, Vector> get_midpoint_from_lines(std::vector<Line> lines, Vector sensor_point) 
+{
+    std::vector<Line> shiftedLines;
+    for (const Line& line : foundLines) {
+        Line shiftedLine = displaceLine(line, sensor);
+        shiftedLines.push_back(shiftedLine);
+    }
+
+    std::vector<std::pair<Line, Line>> linePairs;
+    for (size_t i = 0; i < shiftedLines.size(); ++i) {
+        for (size_t j = i + 1; j < shiftedLines.size(); ++j) {
+            double angleDegrees = angleBetweenVectors(shiftedLines[i].ori, shiftedLines[j].ori);
+            if (std::abs(angleDegrees - 90) < thresholdDegrees) {
+                linePairs.emplace_back(shiftedLines[i], shiftedLines[j]);
+            }
+        }
+    }
+
+    std::vector<Vector> intersections;
+    for (const auto& pair : linePairs) {
+        Vector intersection = findLineIntersection(pair.first, pair.second);
+        if (intersection != nullptr) {
+            intersections.push_back(intersection);
+        }
+        
+    }
+
+    Vector averagePoint = computeMean(intersections);
+}
+*/
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "wanderer");
@@ -74,8 +107,9 @@ int main(int argc, char **argv)
     ROS_INFO("subscribed to scan_filtered.");
 
     while (ros::ok()) {
+        ros::spinOnce();
+
         while(!drive_commands.empty()) {
-            ros::spinOnce();
             wheelCommand current_command = drive_commands.front();
             drive_commands.pop_front();
 

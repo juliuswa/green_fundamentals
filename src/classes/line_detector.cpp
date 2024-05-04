@@ -9,13 +9,12 @@ std::list<Vector> LineDetector::get_measurements(const sensor_msgs::LaserScan::C
     for(int i = 0; i < laser_scan->ranges.size(); i++) {
         float r = laser_scan->ranges[i];
         
-        if (r != r || r - m_last_measurement[i] < 0.000001) {
+        if (r != r || r == m_last_measurement[i]) {
             continue;
         }        
-
+theta_offset
         float theta = i * laser_scan->angle_increment + theta_offset;
 
-        
         Vector vector(r * std::cos(theta), r * std::sin(theta));
 
         all_vectors.push_back(vector);
@@ -76,8 +75,8 @@ std::string generateSpace(const std::list<Vector>& points) {
     
     float dimension = 1.1;
 
-    float stepX = (dimension * 2) / static_cast<float>(width);
-    float stepY = (dimension * 2) / static_cast<float>(height);
+    float stepY = (dimension * 2) / static_cast<float>(width);
+    float stepX = (dimension * 2) / static_cast<float>(height);
 
     std::string grid(width * height, ' ');
 
@@ -85,7 +84,7 @@ std::string generateSpace(const std::list<Vector>& points) {
         int xIndex = static_cast<int>((p.x + dimension) / stepX);
         int yIndex = static_cast<int>((p.y + dimension) / stepY);
 
-        grid[yIndex * width + xIndex] = 'X';
+        grid[xIndex * width + yIndex] = '+';
     }
 
     std::string result;
@@ -99,8 +98,11 @@ std::string generateSpace(const std::list<Vector>& points) {
 
 void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::list<Vector> measurements = get_measurements(laser_scan);
-    std::copy(laser_scan->ranges.begin(), laser_scan->ranges.end(), m_last_measurement);
     ROS_DEBUG("%d measurements taken.", measurements.size()); 
+
+    std::copy(laser_scan->ranges.begin(), laser_scan->ranges.end(), m_last_measurement);
+
+    ROS_DEBUG("%s", generateSpace(measurements).c_str());
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     std::list<Line> lines = find_lines(measurements);
@@ -117,13 +119,13 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
 
     for (int i = 0; i < lines.size(); ++i) {
         float distance = line_array[i].get_distance_to_point(robot_offset);
-        float angle = robot_direction.scalar_product(line_array[i].m_direction);
+
+        float angle = acos(robot_direction.scalar_product(line_array[i].m_direction) / 
+            (robot_direction.get_length() * line_array[i].m_direction.get_length()));
 
         ROS_DEBUG("g%d = distance: %f, angle %f°.", i,
             distance, angle);
     }
-
-    ROS_DEBUG("%s", generateSpace(measurements).c_str());
 }
 
 LineDetector::LineDetector() {}
