@@ -1,6 +1,8 @@
 #include "../Eigen/Dense"
 #include "../classes/line.h"
 #include "../classes/vector.h"
+#include <math.h>
+#include <cfloat>
 
 // Vergleich https://colab.research.google.com/drive/1EEDDlQFIfz_srAhyCRq71XHXUHVcb7Vq?usp=sharing
 
@@ -24,7 +26,7 @@ static Vector find_line_intersection(const Line& line1, const Line& line2) {
     // Solve the linear system A * [t, s] = b
     if (!A.fullPivLu().isInvertible()) {
         // If the matrix is singular (lines are parallel or coincident), return a zero vector to indicate no valid intersection
-        return Vector(0, 0);
+        return Vector(FLT_MAX, FLT_MAX);
     }
     Eigen::Vector2f ts = A.fullPivLu().solve(b);
 
@@ -53,13 +55,21 @@ static std::pair<Line, Vector> displace_line(const Line& line, const Vector& poi
 
     if ((A + perpendicular_vector1 - P).norm() < (A + perpendicular_vector2 - P).norm()) {
         // perpendicular_vector1 is closer to the point
-        Vector displacement1(perpendicular_vector1[0], perpendicular_vector1[1]);
-        return {Line(line.m_offset + displacement1 * distance, line.m_offset), displacement1};
+        Vector displacement1(perpendicular_vector1[0] * distance, perpendicular_vector1[1] * distance);
+        Vector new_offset = Vector(line.m_offset.x + displacement1.x, line.m_offset.y + displacement1.y);
+        return {Line(new_offset, line.m_offset), displacement1};
     } else {
         // perpendicular_vector2 is closer to the point
-        Vector displacement2(perpendicular_vector2[0], perpendicular_vector2[1]);
-        return {Line(line.m_offset + displacement2 * distance, line.m_offset), displacement2};
+        Vector displacement2(perpendicular_vector2[0] * distance, perpendicular_vector2[1] * distance);
+        Vector new_offset = Vector(line.m_offset.x + displacement2.x, line.m_offset.y + displacement2.y);
+        return {Line(new_offset, line.m_offset), displacement2};
     }
+}
+
+
+static float rad_to_deg(float rad) 
+{
+    return rad * 180./M_PI;
 }
 
 static std::pair<Vector, Vector> get_midpoint_from_lines(const std::vector<Line>& lines, const Vector& sensor, float threshold_degrees = 15.0) {
@@ -69,7 +79,9 @@ static std::pair<Vector, Vector> get_midpoint_from_lines(const std::vector<Line>
     Vector perp; // Assuming perp is calculated somewhere within displace_line
 
     for (const Line& line : lines) {
-        Line shifted = displace_line(line, sensor);
+        std::pair<Line, Vector> temp_pair = displace_line(line, sensor);
+        Line shifted = temp_pair.first;
+        perp = temp_pair.second;
         shifted_lines.push_back(shifted);
     }
 
@@ -77,7 +89,7 @@ static std::pair<Vector, Vector> get_midpoint_from_lines(const std::vector<Line>
     std::vector<std::pair<Line, Line>> line_pairs;
     for (size_t i = 0; i < shifted_lines.size(); ++i) {
         for (size_t j = i + 1; j < shifted_lines.size(); ++j) {
-            float angle_degrees = std::abs(std::degrees(angle_between_vectors(shifted_lines[i].m_direction, shifted_lines[j].m_direction)) - 90);
+            float angle_degrees = std::abs(rad_to_deg(angle_between_vectors(shifted_lines[i].m_direction, shifted_lines[j].m_direction)) - 90);
             if (angle_degrees < threshold_degrees) {
                 line_pairs.emplace_back(shifted_lines[i], shifted_lines[j]);
             }
@@ -88,7 +100,7 @@ static std::pair<Vector, Vector> get_midpoint_from_lines(const std::vector<Line>
     std::vector<Vector> intersections;
     for (const auto& pair : line_pairs) {
         Vector intersection = find_line_intersection(pair.first, pair.second);
-        if (intersection != nullptr) { 
+        if (intersection.x == FLT_MAX && intersection.y == FLT_MAX) { 
             intersections.emplace_back(intersection);
         }
     }
@@ -103,6 +115,8 @@ static std::pair<Vector, Vector> get_midpoint_from_lines(const std::vector<Line>
         average_point.x /= intersections.size();
         average_point.y /= intersections.size();
     }
+
+    Vector new_perp = Vector(perp.x * -1, perp.y * -1);
     
-    return {average_point, -perp};
+    return {average_point, new_perp};
 }
