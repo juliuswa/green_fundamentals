@@ -23,16 +23,17 @@ void stop_driving(int sig) {
     ros::shutdown();
 }
 
-void drive_align_at_point(Vector dest_point, Vector align_direction) {
+void center_aligned_in_cell(Vector dest_point, Vector align_direction) {
     // drive to destination point
     const float wheel_radius = 0.0308;
     const float wheel_base = 0.265;
-    float revolution_dist = wheel_radius * M_PI * 2;  // Umfang rad
+    float revolution_dist = wheel_radius * M_PI * 2;
 
     Vector vec_x = {1, 0};
 
     float theta = std::acos(vec_x.scalar_product(dest_point) / (vec_x.get_length() * dest_point.get_length()));
     float theta_in_rad = theta * M_PI / 180;
+    if(dest_point.cross_product(align_direction) < 0) theta_in_rad = -theta_in_rad; 
     float turn_distance = wheel_base / 2 * theta_in_rad;
 
     wheelCommand turn_command;
