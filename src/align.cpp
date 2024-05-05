@@ -32,9 +32,8 @@ void center_aligned_in_cell(Vector dest_point, Vector align_direction) {
     Vector vec_x = {1, 0};
 
     float theta = std::acos(vec_x.scalar_product(dest_point) / (vec_x.get_length() * dest_point.get_length()));
-    float theta_in_rad = theta * M_PI / 180;
-    if(dest_point.cross_product(align_direction) < 0) theta_in_rad = -theta_in_rad; 
-    float turn_distance = wheel_base / 2 * theta_in_rad;
+    if(dest_point.cross_product(align_direction) < 0) theta = -theta; 
+    float turn_distance = wheel_base / 2 * theta;
 
     wheelCommand turn_command;
     turn_command.left_wheel = -1 * turn_distance / revolution_dist * 2 * M_PI;
@@ -48,14 +47,15 @@ void center_aligned_in_cell(Vector dest_point, Vector align_direction) {
 
     // align towards wall
     float align_angle = std::acos(dest_point.scalar_product(align_direction) / (dest_point.get_length() * align_direction.get_length()));
-    float align_angle_in_rad = align_angle * M_PI / 180;
-    if(dest_point.cross_product(align_direction) < 0) align_angle_in_rad = -align_angle_in_rad; 
-    float align_turn_distance = wheel_base / 2 * align_angle_in_rad;
+    if(dest_point.cross_product(align_direction) < 0) align_angle = -align_angle; 
+    float align_turn_distance = wheel_base / 2 * align_angle;
 
     wheelCommand align_turn_command;
     align_turn_command.left_wheel = -1 * align_turn_distance / revolution_dist * 2 * M_PI;
     align_turn_command.right_wheel = align_turn_distance / revolution_dist * 2 * M_PI;
     drive_commands.push_back(align_turn_command);
+
+    return;
 }
 
 /*
@@ -109,7 +109,10 @@ int main(int argc, char **argv)
 
     while (ros::ok()) {
         ros::spinOnce();
+        Vector a = {1,1};
+	Vector b = {0,1};
 
+        center_aligned_in_cell(a,b);
         while(!drive_commands.empty()) {
             wheelCommand current_command = drive_commands.front();
             drive_commands.pop_front();
