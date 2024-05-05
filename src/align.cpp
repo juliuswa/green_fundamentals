@@ -36,8 +36,8 @@ void drive_align_at_point(Vector dest_point, Vector align_direction) {
     float turn_distance = wheel_base / 2 * theta_in_rad;
 
     wheelCommand turn_command;
-    turn_command.left_wheel = turn_distance / revolution_dist * 2 * M_PI;
-    turn_command.right_wheel = -1 * turn_distance / revolution_dist * 2 * M_PI;
+    turn_command.left_wheel = -1 * turn_distance / revolution_dist * 2 * M_PI;
+    turn_command.right_wheel = turn_distance / revolution_dist * 2 * M_PI;
     drive_commands.push_back(turn_command);
 
     wheelCommand direction_command;
@@ -48,11 +48,12 @@ void drive_align_at_point(Vector dest_point, Vector align_direction) {
     // align towards wall
     float align_angle = std::acos(dest_point.scalar_product(align_direction) / (dest_point.get_length() * align_direction.get_length()));
     float align_angle_in_rad = align_angle * M_PI / 180;
+    if(dest_point.cross_product(align_direction) < 0) align_angle_in_rad = -align_angle_in_rad; 
     float align_turn_distance = wheel_base / 2 * align_angle_in_rad;
 
     wheelCommand align_turn_command;
-    align_turn_command.left_wheel = align_turn_distance / revolution_dist * 2 * M_PI;
-    align_turn_command.right_wheel = -1 * align_turn_distance / revolution_dist * 2 * M_PI;
+    align_turn_command.left_wheel = -1 * align_turn_distance / revolution_dist * 2 * M_PI;
+    align_turn_command.right_wheel = align_turn_distance / revolution_dist * 2 * M_PI;
     drive_commands.push_back(align_turn_command);
 }
 

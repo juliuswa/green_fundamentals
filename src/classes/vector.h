@@ -13,6 +13,7 @@ public:
 
     float get_length();
     float scalar_product(Vector b);
+    float cross_product(Vector b); 
 };
 
 #endif //GREEN_FUNDAMENTALS_VECTOR_H
