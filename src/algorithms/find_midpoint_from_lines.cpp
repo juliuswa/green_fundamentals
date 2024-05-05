@@ -8,7 +8,7 @@ static float angle_between_vectors(const Vector& a, const Vector& b) {
     float dot = a.scalar_product(b);
     float len_a = a.get_length();
     float len_b = b.get_length();
-    return acos(dot / (len_a * len_b)); # clip angle between 1.0 and -1.0
+    return acos(dot / (len_a * len_b)); // clip angle between 1.0 and -1.0
 }
 
 static Vector find_line_intersection(const Line& line1, const Line& line2) {
@@ -22,12 +22,11 @@ static Vector find_line_intersection(const Line& line1, const Line& line2) {
          line2.m_offset.y - line1.m_offset.y; // Should be a vector
 
     // Solve the linear system A * [t, s] = b
-    Eigen::Vector2f ts;
-    bool solvable = A.lu().solve(b, &ts);
-    if (!solvable) {
-        // If the system is not solvable (singular matrix), return a zero vector to indicate no intersection
-        return nullptr;
+    if (!A.fullPivLu().isInvertible()) {
+        // If the matrix is singular (lines are parallel or coincident), return a zero vector to indicate no valid intersection
+        return Vector(0, 0);
     }
+    Eigen::Vector2f ts = A.fullPivLu().solve(b);
 
     float t = ts[0];
 
