@@ -8,15 +8,13 @@
 #include <list>
 #include <set>
 #include <chrono>
-#include "line.h"
-#include "vector.h"
 #include "../algorithms/ransack.cpp"
 
 class LineDetector {
 private:
     const float theta_offset = 0.74; 
-    const float epsilon = 0.2;
-    const int min_matches = 5;
+    const float epsilon = 0.05;
+    const int min_matches = 10;
 
     float m_last_measurement[1000];
 

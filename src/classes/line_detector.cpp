@@ -12,7 +12,7 @@ std::list<Vector> LineDetector::get_measurements(const sensor_msgs::LaserScan::C
         if (r != r || r == m_last_measurement[i]) {
             continue;
         }        
-        
+
         float theta = i * laser_scan->angle_increment + theta_offset;
 
         Vector vector(r * std::cos(theta), r * std::sin(theta));
@@ -53,6 +53,7 @@ std::string generateSpace(const std::list<Vector>& points) {
 void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::list<Vector> measurements = get_measurements(laser_scan);
     ROS_DEBUG("%d measurements taken.", measurements.size()); 
+    ROS_DEBUG("%s", generateSpace(measurements).c_str());
 
     Vector point_array[measurements.size()];
     std::copy(measurements.begin(), measurements.end(), point_array);
@@ -79,6 +80,7 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
         ROS_DEBUG("g%d = distance: %f, angle %f°.", i,
             distance, angle);
     }
+
 }
 
 LineDetector::LineDetector() {}

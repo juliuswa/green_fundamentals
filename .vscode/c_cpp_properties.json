@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "/opt/ros/noetic/include/**",
-                "/home/julius/catkin_ws/devel/include/**"
+                "/home/green/green_ws/devel/include/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

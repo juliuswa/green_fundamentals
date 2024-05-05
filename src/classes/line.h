@@ -2,7 +2,6 @@
 #define GREEN_FUNDAMENTALS_LINE_H
 
 #include "vector.h"
-#include <string>
 
 class Line {
 public:
