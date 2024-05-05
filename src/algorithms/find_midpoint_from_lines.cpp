@@ -1,4 +1,4 @@
-#include <Eigen/Dense>
+#include "../Eigen/Dense"
 #include "../classes/line.h"
 #include "../classes/vector.h"
 
