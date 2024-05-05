@@ -42,7 +42,7 @@ static Eigen::Vector2f toEigenVector(const Vector& v) {
     return Eigen::Vector2f(v.x, v.y);
 }
 
-static std::pair<Line, Vector> displace_line(const Line& line, const Vector& point, float distance = 1.5f) {
+static std::pair<Line, Vector> displace_line(const Line& line, const Vector& point, float distance = 0.39f) {
     Eigen::Vector2f A = toEigenVector(line.m_offset);
     Eigen::Vector2f B = toEigenVector(line.m_offset) + toEigenVector(line.m_direction);
     Eigen::Vector2f P = toEigenVector(point);
@@ -72,7 +72,11 @@ static float rad_to_deg(float rad)
     return rad * 180./M_PI;
 }
 
-static std::pair<Vector, Vector> get_midpoint_from_lines(const std::vector<Line>& lines, const Vector& sensor, float threshold_degrees = 15.0) {
+static std::pair<Vector, Vector> get_midpoint_from_lines(
+    const std::vector<Line>& lines, 
+    const Vector& sensor, 
+    float threshold_degrees = 15.0) 
+{
     
     // 1.  Shift lines in sensor direction
     std::vector<Line> shifted_lines;

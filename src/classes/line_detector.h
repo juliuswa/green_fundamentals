@@ -9,6 +9,7 @@
 #include <set>
 #include <chrono>
 #include "../algorithms/ransack.cpp"
+#include "../algorithms/find_midpoint_from_lines.cpp"
 
 class LineDetector {
 private:
@@ -21,6 +22,7 @@ private:
 public:
     LineDetector();
     void detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
+    std::pair<Vector, Vector> mid_and_ori = {Vector(FLT_MAX, FLT_MAX), Vector(FLT_MAX, FLT_MAX)};
 
 private:
     std::list<Vector> get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);

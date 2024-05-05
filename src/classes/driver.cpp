@@ -21,7 +21,7 @@ float Driver::calculate_speed(float delta, float velocity) {
 }
 
 void Driver::calculate_wheel_speeds(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet) {
-    ROS_DEBUG("calculate_wheel_speeds");
+    //ROS_DEBUG("calculate_wheel_speeds");
     speed_left = calculate_speed(current_command.left_wheel - current_did.left_wheel, speed_left);
     speed_right = calculate_speed(current_command.right_wheel - current_did.right_wheel, speed_right);
 
@@ -45,10 +45,10 @@ void Driver::execute_command(wheelCommand& command) {
     while(!command_done()) {
         drive();
 
-        ROS_DEBUG("command: (l=%f, r=%f) | did: (l=%f, r=%f) | speed: (l=%f, r=%f)",
-                 current_command.left_wheel, current_command.right_wheel,
-                 current_did.left_wheel, current_did.right_wheel,
-                 speed_left, speed_right);
+        // ROS_DEBUG("command: (l=%f, r=%f) | did: (l=%f, r=%f) | speed: (l=%f, r=%f)",
+        //          current_command.left_wheel, current_command.right_wheel,
+        //          current_did.left_wheel, current_did.right_wheel,
+        //          speed_left, speed_right);
 
         ros::spinOnce();
     }

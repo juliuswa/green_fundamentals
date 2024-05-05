@@ -107,20 +107,26 @@ int main(int argc, char **argv)
 
     ROS_INFO("subscribed to scan_filtered.");
 
-    while (ros::ok()) {
-        ros::spinOnce();
-        Vector a = {1,1};
-	Vector b = {0,1};
+    signal(SIGINT, stop_driving);
 
-        center_aligned_in_cell(a,b);
-        while(!drive_commands.empty()) {
-            wheelCommand current_command = drive_commands.front();
-            drive_commands.pop_front();
+    Vector mid = line_detector.mid_and_ori.first;
+    Vector ori = line_detector.mid_and_ori.second;
 
-            driver.execute_command(current_command);
+    while (true) {
+        mid = line_detector.mid_and_ori.first;
+        ori = line_detector.mid_and_ori.second;
+
+        if (mid.x != FLT_MAX && mid.y != FLT_MAX) { 
+            break;
         }
+    }
 
-        signal(SIGINT, stop_driving);
+    center_aligned_in_cell(mid, ori);
+    while(!drive_commands.empty()) {
+        wheelCommand current_command = drive_commands.front();
+        drive_commands.pop_front();
+
+        driver.execute_command(current_command);
     }
 
     return 0;

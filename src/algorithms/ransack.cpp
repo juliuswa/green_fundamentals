@@ -1,11 +1,12 @@
 #include <cstdlib>
-#include <list>
 #include <set>
+#include <vector>
+#include <list>
 #include "../classes/line.h"
 
-static std::list<Line> perform_ransack(Vector point_array[], int array_size, float epsilon, int min_matches)
+static std::vector<Line> perform_ransack(Vector point_array[], int array_size, float epsilon, int min_matches)
 {    
-    std::list<Line> discovered_lines;
+    std::vector<Line> discovered_lines;
     std::set<int> covered;
     
     for (int u = 0; u < array_size - 1; u++) {

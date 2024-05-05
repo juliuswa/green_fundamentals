@@ -1,0 +1,48 @@
+# start roscore
+roscore
+
+# start the laser and robot driver
+roslaunch create_fundamentals laser.launch
+rosrun create_fundamentals driver.py
+
+# explore topics
+rostopic list
+
+# have a look at what kind of information you get from the robot! look at the encoder values!
+rostopic echo sensorPacket
+
+# explore services
+rosservice list
+# be careful! robot will start moving (slowly) in a straight line with the following command.
+# it will not stop unless you call the next command.
+rosservice call diff_drive 1 1
+# stop the movement of the robot
+rosservice call diff_drive 0 0
+
+## try out some examples
+
+# print the distance to the closest object in front of the robot 
+rosrun <TEAMCOLOR>_fundamentals example_laser
+
+# robot will move for some time in a straight line and then stop
+rosrun <TEAMCOLOR>_fundamentals example_moving
+
+# robot will play a song! you can store and play some songs on the robot.
+rosrun <TEAMCOLOR>_fundamentals example_song.py
+
+# other nice tools 
+rosrun rqt_graph rqt_graph
+rviz
+# rviz: press add topic, choose /scan, change frame to laser in top left menu thing
+
+# if you want to use ROS across multiple computers, connect them using cable or wireless. Make sure that the machines can ping each other. Decide which one of the machines should be the master and note the ip-address of this computer. Put this IP-address in the snippet below and copy the snipped to the bottom of the .bashrc in your home directory (.bashrc is a script that is called every time you open a new console) at EVERY of the connected computers.
+
+me=$(hostname -I | cut -f1 -d' ')
+master=192.168.0.SOMETHING # SOMETHING depends on your robot's IP address on the network, use "ip a" command to find out!
+echo "setting $master as ROS MASTER for me ($me)"
+export ROS_MASTER_URI=http://$master:11311
+export ROS_IP=$me
+
+# run roscore only at the master-computer. Try rostopic list on the other machines. If it worked, you should see:
+/rosout
+/rosout_agg

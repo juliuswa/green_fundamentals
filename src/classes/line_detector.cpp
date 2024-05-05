@@ -53,19 +53,23 @@ std::string generateSpace(const std::list<Vector>& points) {
 void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::list<Vector> measurements = get_measurements(laser_scan);
     ROS_DEBUG("%d measurements taken.", measurements.size()); 
-    ROS_DEBUG("%s", generateSpace(measurements).c_str());
+    //ROS_DEBUG("%s", generateSpace(measurements).c_str());
 
     Vector point_array[measurements.size()];
     std::copy(measurements.begin(), measurements.end(), point_array);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    std::list<Line> lines = perform_ransack(point_array, measurements.size(), epsilon, min_matches);
+    std::vector<Line> lines = perform_ransack(point_array, measurements.size(), epsilon, min_matches);
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
     ROS_DEBUG("%d lines found. in %ld ms", lines.size(), std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());    
 
     Line line_array[lines.size()];
     std::copy(lines.begin(), lines.end(), line_array);
+
+    ROS_DEBUG("Starting Midpoint calculation"); 
+    mid_and_ori = get_midpoint_from_lines(lines, Vector(0., 0.));
+    ROS_DEBUG("Midpoint calculation ended"); 
 
     std::string str;
     Vector robot_direction(1, 0);
@@ -80,7 +84,6 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
         ROS_DEBUG("g%d = distance: %f, angle %f°.", i,
             distance, angle);
     }
-
 }
 
 LineDetector::LineDetector() {}
