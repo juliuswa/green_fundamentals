@@ -51,6 +51,10 @@ std::string generateSpace(const std::list<Vector>& points) {
 
 
 void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
+    if (received_packet) {
+        return;
+    }
+    ROS_DEBUG("Received LaserScan"); 
     std::list<Vector> measurements = get_measurements(laser_scan);
     ROS_DEBUG("%d measurements taken.", measurements.size()); 
     //ROS_DEBUG("%s", generateSpace(measurements).c_str());
@@ -58,11 +62,16 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     Vector point_array[measurements.size()];
     std::copy(measurements.begin(), measurements.end(), point_array);
 
+    ROS_DEBUG("Starting RANSAC"); 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     std::vector<Line> lines = perform_ransack(point_array, measurements.size(), epsilon, min_matches);
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
     ROS_DEBUG("%d lines found. in %ld ms", lines.size(), std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());    
+    for (int i = 0; i < lines.size(); ++i) {
+        // ROS_DEBUG("Line %d: offset (%f, %f) direction (%f, %f)", i, lines[i].m_offset.x, lines[i].m_offset.y, lines[i].m_direction.x, lines[i].m_direction.y);
+        ROS_DEBUG("Line(np.array([%f, %f]), np.array([%f, %f]))", lines[i].m_offset.x, lines[i].m_offset.y, lines[i].m_direction.x, lines[i].m_direction.y);
+    }
 
     Line line_array[lines.size()];
     std::copy(lines.begin(), lines.end(), line_array);
@@ -70,20 +79,23 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     ROS_DEBUG("Starting Midpoint calculation"); 
     mid_and_ori = get_midpoint_from_lines(lines, Vector(0., 0.));
     ROS_DEBUG("Midpoint calculation ended"); 
+    ROS_DEBUG("Midpoint at: (%f, %f)", mid_and_ori.first.x, mid_and_ori.first.y); 
 
     std::string str;
     Vector robot_direction(1, 0);
     Vector robot_offset(0, 0);
 
-    for (int i = 0; i < lines.size(); ++i) {
-        float distance = line_array[i].get_distance_to_point(robot_offset);
+    // for (int i = 0; i < lines.size(); ++i) {
+    //     float distance = line_array[i].get_distance_to_point(robot_offset);
 
-        float angle = acos(robot_direction.scalar_product(line_array[i].m_direction) / 
-            (robot_direction.get_length() * line_array[i].m_direction.get_length()));
+    //     float angle = acos(robot_direction.scalar_product(line_array[i].m_direction) / 
+    //         (robot_direction.get_length() * line_array[i].m_direction.get_length()));
 
-        ROS_DEBUG("g%d = distance: %f, angle %f°.", i,
-            distance, angle);
-    }
+    //     ROS_DEBUG("g%d = distance: %f, angle %f°.", i,
+    //         distance, angle);
+    // }
+
+    received_packet = true;
 }
 
 LineDetector::LineDetector() {}

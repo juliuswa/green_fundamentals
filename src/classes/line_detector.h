@@ -14,10 +14,12 @@
 class LineDetector {
 private:
     const float theta_offset = 0.74; 
-    const float epsilon = 0.05;
-    const int min_matches = 10;
+    const float epsilon = 0.1;
+    const int min_matches = 2;
 
     float m_last_measurement[1000];
+
+    bool received_packet = false;
 
 public:
     LineDetector();

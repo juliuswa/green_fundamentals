@@ -21,6 +21,7 @@ void stop_driving(int sig) {
 
     diffDrive.call(srv);
     ros::shutdown();
+    exit(1);
 }
 
 void center_aligned_in_cell(Vector dest_point, Vector align_direction) {
@@ -98,20 +99,20 @@ int main(int argc, char **argv)
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
         ros::console::notifyLoggerLevelsChanged();
     }
-
+    ROS_DEBUG("Register line_detector as subscriber"); 
     LineDetector line_detector;
     ros::Subscriber sub = n.subscribe("scan_filtered", 1, &LineDetector::detect, &line_detector);
 
+    ROS_DEBUG("Register Driver as subscriber"); 
     Driver driver(n);
     ros::Subscriber sensorSub = n.subscribe("sensorPacket", 1, &Driver::calculate_wheel_speeds, &driver);
-
-    ROS_INFO("subscribed to scan_filtered.");
 
     signal(SIGINT, stop_driving);
 
     Vector mid = line_detector.mid_and_ori.first;
     Vector ori = line_detector.mid_and_ori.second;
 
+    ROS_DEBUG("Entering while loop to wait for midpoint."); 
     while (true) {
         mid = line_detector.mid_and_ori.first;
         ori = line_detector.mid_and_ori.second;
@@ -119,8 +120,17 @@ int main(int argc, char **argv)
         if (mid.x != FLT_MAX && mid.y != FLT_MAX) { 
             break;
         }
+        ros::spinOnce();
     }
 
+    if (mid.x == 0. && mid.y == 0.) { 
+            mid.x = 0.1;
+            mid.y = 0.1;
+    }
+
+    ROS_DEBUG("Midpoint at: (%f, %f)", mid.x, mid.y); 
+
+    ROS_DEBUG("Start driving to point"); 
     center_aligned_in_cell(mid, ori);
     while(!drive_commands.empty()) {
         wheelCommand current_command = drive_commands.front();
