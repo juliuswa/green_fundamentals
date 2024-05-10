@@ -129,6 +129,7 @@ int main(int argc, char **argv)
     }
 
     ROS_DEBUG("Midpoint at: (%f, %f)", mid.x, mid.y); 
+    ROS_DEBUG("Ori at: (%f, %f)", ori.x, ori.y); 
 
     ROS_DEBUG("Start driving to point"); 
     center_aligned_in_cell(mid, ori);
