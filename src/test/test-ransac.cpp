@@ -8,9 +8,14 @@
  * This is a test where the robot was placed facing a single straight wall. The wall is perpendicular to the wall
  * with a distance of 30cm. After applying the ransac(k) algorithm a single wall is expected to be detected with the 
  * offset of (30,0) and the direction of (0,1). 
+ * 
+ * RUN WITH
+ * catkin_make run_tests
 */
 
-std::list<Vector> get_measurements(std::vector<float>& ranges) 
+std::list<Vector> old_get_measurements(std::vector<float>& ranges) 
+// Line Direction: (0.738469, 0.674288)
+// Line Offset: (0.013952, 0.0128973)
 {
     std::list<Vector> all_vectors;
 
@@ -30,6 +35,62 @@ std::list<Vector> get_measurements(std::vector<float>& ranges)
 
         all_vectors.push_back(vector);
     }
+    return all_vectors;
+}
+
+std::list<Vector> get_measurements(std::vector<float>& ranges) 
+{
+    std::list<Vector> all_vectors;
+    float angle_increment = 0.006135923322290182;
+    float offset_of_laser = 0.13;
+
+    // TODO sicherstellen dass nicht einfach 13cm als x genommen wird, die enden machen irgendwie keinen Sinn gerade
+
+    int center_index = ranges.size() / 2;
+    float index_range = (M_PI / 2.) / angle_increment;  // nur 180° anschauen
+
+    for (int angle_offset = 0; angle_offset <= index_range ; angle_offset++) {  // linke Seite von 0° bis 90°
+        int index = center_index + angle_offset; 
+        ROS_INFO("index: %d", index);
+        ROS_INFO("angle_offset: %d", angle_offset);
+        if(ranges[index] != ranges[index]) continue;  // nan
+
+        float r_laser = ranges[index];  // these are in relation to laser
+        float theta_laser = angle_offset * angle_increment;
+        ROS_INFO("r_l, theta_l: %f   -    %f", r_laser, theta_laser);
+
+        float x = offset_of_laser + (r_laser * std::cos(theta_laser));  // these are to (0, 0)
+        float y = r_laser * std::sin(theta_laser);
+
+        Vector vector(x, y);
+        ROS_INFO("point(np.array([%f, %f])", vector.x, vector.y);
+        ROS_INFO("-------------------------------------------------------------");
+        ROS_INFO("-------------------------------------------------------------");
+
+        all_vectors.push_back(vector);
+    }
+
+    for (int angle_offset = 1; angle_offset <= index_range ; angle_offset++) {
+        int index = center_index - angle_offset; 
+        ROS_INFO("index: %d", index);
+        ROS_INFO("angle_offset: %d", angle_offset);
+        if(ranges[index] != ranges[index]) continue;  // nan
+
+        float r_laser = ranges[index];  // these are in relation to laser
+        float theta_laser = (2 * M_PI) - angle_offset * angle_increment;  // 360° - the angle from x-axis
+        ROS_INFO("r_l, theta_l: %f   -    %f", r_laser, theta_laser);
+
+        float x = offset_of_laser + (r_laser * std::cos(theta_laser));  // these are to (0, 0)
+        float y = r_laser * std::sin(theta_laser);
+
+        Vector vector(x, y);
+        ROS_INFO("point(np.array([%f, %f])", vector.x, vector.y);
+        ROS_INFO("-------------------------------------------------------------");
+        ROS_INFO("-------------------------------------------------------------");
+
+        all_vectors.push_back(vector);
+    }
+
     return all_vectors;
 }
 

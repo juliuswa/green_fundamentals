@@ -1,3 +1,4 @@
+#include "ros/ros.h"
 #include <cstdlib>
 #include <set>
 #include <vector>
@@ -20,6 +21,9 @@ static std::vector<Line> perform_ransack(Vector point_array[], int array_size, f
             }     
 
             Line line(point_array[u], point_array[v]);
+            // ROS_DEBUG("Line(np.array([%f, %f]), np.array([%f, %f]))", line.m_offset.x, line.m_offset.y, line.m_direction.x, line.m_direction.y);
+            // ROS_INFO("point(np.array([%f, %f])", point_array[u].x, point_array[u].y);
+            // ROS_INFO("point(np.array([%f, %f])", point_array[v].x, point_array[v].y);
             std::list<int> matched;
 
             for (int w = 0; w < array_size; w++) {
@@ -31,8 +35,7 @@ static std::vector<Line> perform_ransack(Vector point_array[], int array_size, f
 
                 if (distance < epsilon) {
                     matched.push_back(w);
-                }
-                
+                }                
             }
 
             if (matched.size() < min_matches) {
