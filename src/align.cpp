@@ -93,7 +93,7 @@ std::Pair<Vector, Vector> get_midpoint_from_lines(std::vector<Line> lines, Vecto
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "wanderer");
+    ros::init(argc, argv, "align");
     ros::NodeHandle n;
 
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
