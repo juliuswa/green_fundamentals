@@ -20,10 +20,11 @@ static std::vector<Line> perform_ransack(Vector point_array[], int array_size, f
                 continue;
             }     
 
-            Line line(point_array[u], point_array[v]);
-            // ROS_DEBUG("Line(np.array([%f, %f]), np.array([%f, %f]))", line.m_offset.x, line.m_offset.y, line.m_direction.x, line.m_direction.y);
-            // ROS_INFO("point(np.array([%f, %f])", point_array[u].x, point_array[u].y);
-            // ROS_INFO("point(np.array([%f, %f])", point_array[v].x, point_array[v].y);
+            Vector dif (point_array[v].x - point_array[u].x, point_array[v].y - point_array[u].y);
+            Line line(dif, point_array[v]);
+            // ROS_DEBUG("Ransack: Line(np.array([%f, %f]), np.array([%f, %f]))", line.m_offset.x, line.m_offset.y, line.m_direction.x, line.m_direction.y);
+            // ROS_INFO("Ransack: point(np.array([%f, %f])", point_array[u].x, point_array[u].y);
+            // ROS_INFO("Ransack: offset(np.array([%f, %f])", point_array[v].x, point_array[v].y);
             std::list<int> matched;
 
             for (int w = 0; w < array_size; w++) {
@@ -33,7 +34,7 @@ static std::vector<Line> perform_ransack(Vector point_array[], int array_size, f
 
                 float distance = line.get_distance_to_point(point_array[w]);
 
-                if (distance < epsilon) {
+                if (std::abs(distance) < epsilon) {
                     matched.push_back(w);
                 }                
             }
@@ -42,6 +43,8 @@ static std::vector<Line> perform_ransack(Vector point_array[], int array_size, f
                 continue;
             }
 
+            matched.push_back(u);
+            matched.push_back(v);
             discovered_lines.push_back(line);
             covered.insert(matched.begin(), matched.end());
         }

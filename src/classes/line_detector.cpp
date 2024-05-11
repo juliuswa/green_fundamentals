@@ -37,7 +37,7 @@ std::list<Vector> LineDetector::get_measurements(const sensor_msgs::LaserScan::C
         float y = r_laser * std::sin(theta_laser);
 
         Vector vector(x, y);
-        ROS_INFO("point(np.array([%f, %f])", vector.x, vector.y);
+        // ROS_INFO("LeftMeas: point(np.array([%f, %f])", vector.x, vector.y);
 
         all_vectors.push_back(vector);
     }
@@ -53,7 +53,7 @@ std::list<Vector> LineDetector::get_measurements(const sensor_msgs::LaserScan::C
         float y = r_laser * std::sin(theta_laser);
 
         Vector vector(x, y);
-        ROS_INFO("point(np.array([%f, %f])", vector.x, vector.y);
+        // ROS_INFO("RightMeaas: point(np.array([%f, %f])", vector.x, vector.y);
 
         all_vectors.push_back(vector);
     }
@@ -109,7 +109,7 @@ void LineDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     ROS_DEBUG("%ld lines found. in %ld ms", lines.size(), std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());    
     for (int i = 0; i < lines.size(); ++i) {
         // ROS_DEBUG("Line %d: offset (%f, %f) direction (%f, %f)", i, lines[i].m_offset.x, lines[i].m_offset.y, lines[i].m_direction.x, lines[i].m_direction.y);
-        ROS_DEBUG("Line(np.array([%f, %f]), np.array([%f, %f]))", lines[i].m_offset.x, lines[i].m_offset.y, lines[i].m_direction.x, lines[i].m_direction.y);
+        ROS_DEBUG("Detector: Line(np.array([%f, %f]), np.array([%f, %f]))", lines[i].m_offset.x, lines[i].m_offset.y, lines[i].m_direction.x, lines[i].m_direction.y);
     }
 
     Line line_array[lines.size()];

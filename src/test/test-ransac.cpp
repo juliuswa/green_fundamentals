@@ -134,7 +134,7 @@ TEST(RansacTest, Perpendicular30) {
         ASSERT_NEAR(direction.x, expected_direction.x, epsilon);
         ASSERT_NEAR(direction.y, expected_direction.y, epsilon);
         ASSERT_NEAR(offset.x, expected_offset.x, epsilon);
-        ASSERT_NEAR(offset.x, expected_offset.y, epsilon);
+        ASSERT_NEAR(offset.y, expected_offset.y, epsilon);
     }
 }
 

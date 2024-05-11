@@ -104,7 +104,7 @@ static std::pair<Vector, Vector> get_midpoint_from_lines(
     std::vector<Vector> intersections;
     for (const auto& pair : line_pairs) {
         Vector intersection = find_line_intersection(pair.first, pair.second);
-        if (intersection.x == FLT_MAX && intersection.y == FLT_MAX) { 
+        if (intersection.x != FLT_MAX && intersection.y != FLT_MAX) { 
             intersections.emplace_back(intersection);
         }
     }
@@ -118,7 +118,6 @@ static std::pair<Vector, Vector> get_midpoint_from_lines(
         }
         average_point.x /= intersections.size();
         average_point.y /= intersections.size();
-    }
 
     Vector new_perp = Vector(perp.x * -1, perp.y * -1);
     

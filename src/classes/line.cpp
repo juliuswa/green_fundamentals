@@ -5,7 +5,7 @@
 #include "line.h"
 
 float Line::get_distance_to_point(Vector point) {
-    return (point.x - m_offset.x) / m_direction.x - (point.y - m_offset.y) / m_direction.y;
+    return (point.x - m_offset.x) * m_direction.y - (point.y - m_offset.y) * m_direction.x;
 }
 
 Line::Line(Vector direction, Vector offset) {
