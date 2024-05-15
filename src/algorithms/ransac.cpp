@@ -10,22 +10,21 @@ const int second_index_offset = 10;
 const float epsilon = 0.05;
 const int min_score = 8;
 
-static Line get_line_candidate(Eigen::Vector2f point_array[]) {
-    int point_array_size = sizeof(point_array) / sizeof(point_array[0]);
-
+static Line get_line_candidate(Eigen::Vector2f point_array[], int point_array_size) {
     int randomIndex1 = rand() % point_array_size;
-    int randomIndex2 = randomIndex1 + (rand() % second_index_offset);
+    int randomIndex2 = (randomIndex1 + (rand() % second_index_offset)) % point_array_size;
 
     Eigen::Vector2f direction = point_array[randomIndex2] - point_array[randomIndex1];
     return Line(direction, point_array[randomIndex1]);
 }
 
-static int evaluate_line(Line line, Eigen::Vector2f point_array[]) {
-    int point_array_size = sizeof(point_array) / sizeof(point_array[0]);
+static int evaluate_line(Line line, Eigen::Vector2f point_array[], int point_array_size) {
     int hits = 0;
 
     for (int i = 0; i < point_array_size; i++) {
-        if (line.get_distance_to_point(point_array[i]) < epsilon) {
+        float distance = std::abs(line.get_distance_to_point(point_array[i]));
+        
+        if (distance < epsilon) {
             hits += 1;
         }
     }
@@ -33,15 +32,15 @@ static int evaluate_line(Line line, Eigen::Vector2f point_array[]) {
     return hits;
 }
 
-static std::vector<Line> perform_ransac(Eigen::Vector2f point_array[])
+static std::vector<Line> perform_ransac(Eigen::Vector2f point_array[], int point_array_size)
 {    
     std::vector<Line> lines;
 
     for (int i = 0; i < candidate_count; i++) {
-        Line candidate = get_line_candidate(point_array);
-        int score = evaluate_line(candidate, point_array);
+        Line candidate = get_line_candidate(point_array, point_array_size);
+        candidate.m_score = evaluate_line(candidate, point_array, point_array_size);
 
-        if (score > min_score) {
+        if (candidate.m_score > min_score) {
             lines.push_back(candidate);
         }
     }

@@ -61,10 +61,9 @@ std::list<Eigen::Vector2f> GridDetector::get_measurements(const sensor_msgs::Las
     // return all_vectors;
 }
 
-
 std::string generateSpace(const std::list<Eigen::Vector2f>& points) {
-    int width = 125;
-    int height = 50;
+    int width = 150;
+    int height = 60;
     
     float dimension = 1.1;
 
@@ -88,7 +87,6 @@ std::string generateSpace(const std::list<Eigen::Vector2f>& points) {
     return result;
 }
 
-
 void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     // if (received_packet) {
     //     return;
@@ -104,18 +102,18 @@ void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
 
     ROS_DEBUG("Starting RANSAC"); 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    std::vector<Line> lines = perform_ransac(point_array);
+    std::vector<Line> lines = perform_ransac(point_array, measurements.size());
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
     ROS_DEBUG("%ld lines found. in %ld ms", lines.size(), std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());    
     
-    for (int i = 0; i < lines.size(); ++i) {
-        ROS_DEBUG("Line %d: offset (%f, %f) direction (%f, %f)", i, 
+    for (int i = 0; i < lines.size(); i++) {
+        ROS_DEBUG("score: %d, offset: (%f, %f), direction: (%f, %f)", lines[i].m_score,
             lines[i].m_offset[0], lines[i].m_offset[1], 
             lines[i].m_direction[0], lines[i].m_direction[1]);
-        // ROS_DEBUG("Detector: Line(np.array([%f, %f]), np.array([%f, %f]))", lines[i].m_offset.x, lines[i].m_offset.y, lines[i].m_direction.x, lines[i].m_direction.y);
-    }
 
+    }
+    
     // Line line_array[lines.size()];
     // std::copy(lines.begin(), lines.end(), line_array);
 
