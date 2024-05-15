@@ -70,6 +70,7 @@ std::vector<Eigen::Vector2f> GridDetector::summarize_lines(std::vector<Line> lin
     std::sort(polar_lines.begin(), polar_lines.end(), compare_by_theta);
 
     const float radian_epsilon = 0.1;
+    const int min_group_size = 3;
 
     std::vector<Eigen::Vector2f> first_group;
     first_group.push_back(polar_lines[0]);
@@ -83,7 +84,7 @@ std::vector<Eigen::Vector2f> GridDetector::summarize_lines(std::vector<Line> lin
 
         int last_current_group_index = groups[current_group].size();
 
-        if (groups[current_group][last_current_group_index][1] + epsilon > polar_lines[i][1]) {
+        if (groups[current_group][last_current_group_index][1] + radian_epsilon > polar_lines[i][1]) {
             groups[current_group].push_back(polar_lines[i]);
             continue;
         }
@@ -97,6 +98,10 @@ std::vector<Eigen::Vector2f> GridDetector::summarize_lines(std::vector<Line> lin
     std::vector<Eigen::Vector2f> final_lines;
 
     for (int i = 0; i < groups.size(); i++) {
+        if (groups[i].size() < min_group_size) {
+            continue;
+        }
+        
         final_lines.push_back(summarize_group(groups[i]));  
     }
 
