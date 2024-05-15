@@ -4,7 +4,7 @@
 #include <deque>
 #include "sensor_msgs/LaserScan.h"
 #include "create_fundamentals/DiffDrive.h"
-#include "classes/line_detector.h"
+#include "classes/grid_detector.h"
 #include "classes/vector.h"
 #include "classes/driver.h"
 
@@ -100,8 +100,8 @@ int main(int argc, char **argv)
         ros::console::notifyLoggerLevelsChanged();
     }
     ROS_DEBUG("Register line_detector as subscriber"); 
-    LineDetector line_detector;
-    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &LineDetector::detect, &line_detector);
+    GridDetector line_detector;
+    ros::Subscriber sub = n.subscribe("scan_filtered", 1, &GridDetector::detect, &line_detector);
 
     ROS_DEBUG("Register Driver as subscriber"); 
     Driver driver(n);

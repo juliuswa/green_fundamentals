@@ -5,14 +5,48 @@
 #include <list>
 #include "../classes/line.h"
 
-static Line get_line_candidate(Eigen::Vector2f point_array[]) {
+const int candidate_count = 100;
+const int second_index_offset = 10;
+const float epsilon = 0.05;
+const int min_score = 8;
 
+static Line get_line_candidate(Eigen::Vector2f point_array[]) {
+    int point_array_size = sizeof(point_array) / sizeof(point_array[0]);
+
+    int randomIndex1 = rand() % point_array_size;
+    int randomIndex2 = randomIndex1 + (rand() % second_index_offset);
+
+    Eigen::Vector2f direction = point_array[randomIndex2] - point_array[randomIndex1];
+    return Line(direction, point_array[randomIndex1]);
 }
 
-static std::vector<Line> perform_ransack(Vector point_array[], int array_size, float epsilon, int min_matches)
+static int evaluate_line(Line line, Eigen::Vector2f point_array[]) {
+    int point_array_size = sizeof(point_array) / sizeof(point_array[0]);
+    int hits = 0;
+
+    for (int i = 0; i < point_array_size; i++) {
+        if (line.get_distance_to_point(point_array[i]) < epsilon) {
+            hits += 1;
+        }
+    }
+
+    return hits;
+}
+
+static std::vector<Line> perform_ransac(Eigen::Vector2f point_array[])
 {    
-    std::vector<Line> discovered_lines;
-    std::set<int> covered;
+    std::vector<Line> lines;
+
+    for (int i = 0; i < candidate_count; i++) {
+        Line candidate = get_line_candidate(point_array);
+        int score = evaluate_line(candidate, point_array);
+
+        if (score > min_score) {
+            lines.push_back(candidate);
+        }
+    }
+
+    return lines;
     
     // for (int u = 0; u < array_size - 1; u++) {
     //     if (covered.count(u)) {
@@ -53,6 +87,4 @@ static std::vector<Line> perform_ransack(Vector point_array[], int array_size, f
     //         covered.insert(matched.begin(), matched.end());
     //     }
     // }
-
-    return discovered_lines;
 }
