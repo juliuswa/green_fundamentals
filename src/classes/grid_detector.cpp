@@ -69,6 +69,11 @@ Eigen::Vector2f GridDetector::find_cell_midpoint(std::vector<Line> lines) {
         }
     }
 
+    if ((best_angle - M_PI / 2) > 20) {
+        Eigen::Vector2f default_midpoint {0.0, 0.0};
+        return default_midpoint;
+    }
+
     ROS_INFO("best angle is %f", best_angle * 180 / M_PI);
 
     Eigen::Vector2f cut_vertex = lines[line1].get_cut_vertex(lines[line2]);
