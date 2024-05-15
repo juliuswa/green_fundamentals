@@ -46,68 +46,35 @@ std::string generateSpace(const std::list<Eigen::Vector2f>& points) {
     return result;
 }
 
-Eigen::Vector2f GridDetector::summarize_group(std::vector<Eigen::Vector2f> lines) {
-    Eigen::Vector2f sum_vector {0.0, 0.0};
-    
-    for (int i = 0; i < lines.size(); i++) {
-        sum_vector = sum_vector + lines[i];
-    }
-
-    return sum_vector / (float)lines.size();
-}
-
-std::vector<Eigen::Vector2f> GridDetector::summarize_lines(std::vector<Line> lines) {
+Eigen::Vector2f GridDetector::find_cell_midpoint(std::vector<Line> lines) {
     std::vector<Eigen::Vector2f> polar_lines;
 
     for (int i = 0; i < lines.size(); i++) {
         polar_lines.push_back(lines[i].get_polar_representation());
     }
 
-    auto compare_by_theta = [](const Eigen::Vector2f& v1, const Eigen::Vector2f& v2) {
-        return v1[1] < v2[1];
-    };
+    int line1;
+    int line2;
+    float best_angle = 0;
 
-    std::sort(polar_lines.begin(), polar_lines.end(), compare_by_theta);
+    for (int i = 0; i < polar_lines.size(); i++)  {
+        for (int j = i + 1; j < polar_lines.size(); j++)  {
+            float angle = std::abs(polar_lines[i][1] - polar_lines[j][1]);
 
-    const float radian_epsilon = 0.2;
-    const int min_group_size = 3;
-
-    std::vector<Eigen::Vector2f> first_group;
-    first_group.push_back(polar_lines[0]);
-    std::vector<std::vector<Eigen::Vector2f>> groups;
-    groups.push_back(first_group);
-    int current_group = 0;
-
-    for (int i = 1; i < polar_lines.size(); i++) {
-        ROS_DEBUG("line %d: dist: %f, theta: %f(%f)", i, polar_lines[i][0], polar_lines[i][1], polar_lines[i][1] * 180 / M_PI);
-        int last_current_group_index = groups[current_group].size();
-
-        ROS_DEBUG("%f > %f", groups[current_group][last_current_group_index][1] + radian_epsilon, polar_lines[i][1]);
-
-        if (groups[current_group][last_current_group_index][1] + radian_epsilon > polar_lines[i][1]) {
-            ROS_DEBUG("     group %d. current group size: %d", current_group, groups[current_group].size());
-            groups[current_group].push_back(polar_lines[i]);
-            continue;
+            if (std::abs(angle - M_PI / 2) < std::abs(best_angle - M_PI / 2)) {
+                line1 = i;
+                line2 = j;
+                best_angle = angle;
+            }
         }
-        
-        std::vector<Eigen::Vector2f> new_group;
-        new_group.push_back(polar_lines[i]);
-        groups.push_back(new_group);
-        current_group += 1;
-        ROS_DEBUG("    new group %d. current group size: %d", current_group, groups[current_group].size());
-    }
-    
-    std::vector<Eigen::Vector2f> final_lines;
-
-    for (int i = 0; i < groups.size(); i++) {
-        if (groups[i].size() < min_group_size) {
-            continue;
-        }
-        
-        final_lines.push_back(summarize_group(groups[i]));  
     }
 
-    return final_lines;
+    ROS_INFO("best angle is %f", best_angle * 180 / M_PI);
+
+    Eigen::Vector2f cut_vertex = lines[line1].get_cut_vertex(lines[line2]);
+    Eigen::Vector2f midpoint_offset {0.39, 0.39};
+
+    return cut_vertex - midpoint_offset;
 }
 
 void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
@@ -127,6 +94,9 @@ void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
         ROS_DEBUG("%d: dist: %f, theta: %f",
             i, polar_line[0], polar_line[1] * 180 / M_PI);
     }
+
+    Eigen::Vector2f midpoint_delta = find_cell_midpoint(lines);
+    ROS_INFO("midpoint delta: (%f, %f)", midpoint_delta[0], midpoint_delta[1]);      
 }
 
 GridDetector::GridDetector() {}

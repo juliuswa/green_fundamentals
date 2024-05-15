@@ -14,6 +14,7 @@ public:
     Line();
     Line(Eigen::Vector2f direction, Eigen::Vector2f offset);
     float get_distance_from_point(Eigen::Vector2f point);
+    Eigen::Vector2f get_cut_vertex(Line point);
     Eigen::Vector2f get_projection_of_point(Eigen::Vector2f point);
     Eigen::Vector2f get_polar_representation();
 };

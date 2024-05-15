@@ -37,6 +37,17 @@ Eigen::Vector2f Line::get_polar_representation() {
     return polar_representation;
 }
 
+Eigen::Vector2f Line::get_cut_vertex(Line other_line) {
+  Eigen::Matrix2f A;
+  A << m_direction, other_line.m_direction;
+  Eigen::Vector2f b;
+  b << other_line.m_offset.dot(m_direction) - m_offset.dot(m_direction);
+
+  Eigen::Vector2f x = A.inverse() * b;
+  
+  return x;
+}
+
 Line::Line(Eigen::Vector2f direction, Eigen::Vector2f offset) {
     m_direction = direction / direction.norm();
     m_offset = offset;

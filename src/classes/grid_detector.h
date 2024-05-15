@@ -29,8 +29,7 @@ private:
     std::list<Eigen::Vector2f> get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
     std::list<Line> find_lines(std::list<Vector> measurements);
     float get_distance_to_line(Line line, float accuracy);
-    std::vector<Eigen::Vector2f> summarize_lines(std::vector<Line> lines);
-    Eigen::Vector2f summarize_group(std::vector<Eigen::Vector2f> lines);
+    Eigen::Vector2f find_cell_midpoint(std::vector<Line> lines);
 };
 
 #endif //GREEN_FUNDAMENTALS_GRID_DETECTOR_H
