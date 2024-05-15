@@ -7,8 +7,8 @@
 
 const int candidate_count = 100;
 const int second_index_offset = 10;
-const float epsilon = 0.05;
-const int min_score = 8;
+const float epsilon = 0.02;
+const int min_score = 100;
 
 static Line get_line_candidate(Eigen::Vector2f point_array[], int point_array_size) {
     int randomIndex1 = rand() % point_array_size;

@@ -95,7 +95,7 @@ void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     ROS_DEBUG("Received LaserScan"); 
     std::list<Eigen::Vector2f> measurements = get_measurements(laser_scan);
     ROS_DEBUG("%ld measurements taken.", measurements.size()); 
-    ROS_DEBUG("%s", generateSpace(measurements).c_str());
+    // ROS_DEBUG("%s", generateSpace(measurements).c_str());
 
     Eigen::Vector2f point_array[measurements.size()];
     std::copy(measurements.begin(), measurements.end(), point_array);
@@ -108,10 +108,11 @@ void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     ROS_DEBUG("%ld lines found. in %ld ms", lines.size(), std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());    
     
     for (int i = 0; i < lines.size(); i++) {
-        ROS_DEBUG("score: %d, offset: (%f, %f), direction: (%f, %f)", lines[i].m_score,
-            lines[i].m_offset[0], lines[i].m_offset[1], 
-            lines[i].m_direction[0], lines[i].m_direction[1]);
 
+        Eigen::Vector2f polar_representation = lines[i].get_polar_representation();
+
+        ROS_DEBUG("score: %d, distance: (%f), theta: (%f)", 
+            lines[i].m_score, polar_representation[0], polar_representation[1]);
     }
     
     // Line line_array[lines.size()];
