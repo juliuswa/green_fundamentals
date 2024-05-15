@@ -11,23 +11,23 @@
 float x = 0.;
 float y = 0.;
 float theta = 0.;
-float leftVel = 0;
-float rightVel = 0;
+
+float v = 0.;
+float w = 0.;
 
 float leftEncoderOld = 0.;
 float rightEncoderOld = 0.;
-
 float timestepOld = 0.;
 
-bool firstData = true;
+bool isFirstData = true;
 
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet, ros::Publisher& odo_pub)
 { 
-  if (firstData) {
+  if (isFirstData) {
     leftEncoderOld = msg->encoderLeft;
     rightEncoderOld = msg->encoderRight;
     timestepOld = ros::Time::now();
-    firstData = false;
+    firstisFirstDataData = false;
   }
 
   float deltaDist = 0.0f;
@@ -42,15 +42,15 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& sensor_p
   float delta_t = timestepNow - timestepOld;
   timestepOld = timestepNow;
   
-  // Calculate Distance Wheel traveled
+  // Calculate Distance Wheels traveled
   float leftEncoderNew = msg->encoderLeft; // rad
   float rightEncoderNew = msg->encoderRight; // rad
 
   float leftWheelDist = (leftEncoderNew - leftEncoderOld) * WHEEL_RADIUS; // m
   float rightWheelDist = (rightEncoderNew - rightEncoderOld) * WHEEL_RADIUS; // m
 
-  deltaDist = (rightWheelDist + leftWheelDist)/2.;
-  wheelDistDiff = rightWheelDist - leftWheelDist;
+  deltaDist = (rightWheelDist + leftWheelDist)/2.; // Distance robot traveled
+  wheelDistDiff = rightWheelDist - leftWheelDist; 
   deltaTheta = wheelDistDiff / WHEEL_BASE;
 
   if (fabs(wheelDistDiff) < EPS) {
@@ -61,6 +61,24 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& sensor_p
     deltaX = turnRadius * (sin(theta + deltaTheta) - sin(theta));
     deltaY = -turnRadius * (cos(theta + deltaTheta) - cos(theta));
   }
+
+  if (fabs(delta_t) > EPS) { // hier noch einstellen was genau das ist
+    v = deltaDist / delta_t;
+    w = deltaTheta / delta_t;
+  } else {
+    v = 0;
+    w = 0;
+  }
+
+  x += deltaX;
+  y += deltaY;
+  theta += deltaTheta;
+
+  green_fundamentals::Position odo_msg;
+  odo_msg.x = x;
+  odo_msg.y = y;
+  odo_msg.theta = theta;
+  odo_pub.publish(odo_msg);
 }
 
 
