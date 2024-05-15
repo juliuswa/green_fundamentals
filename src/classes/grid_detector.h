@@ -31,6 +31,7 @@ private:
     std::list<Eigen::Vector2f> get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
     std::list<Line> find_lines(std::list<Vector> measurements);
     float get_distance_to_line(Line line, float accuracy);
+    std::vector<Line> summarize_lines(std::vector<Line> lines);
 };
 
 #endif //GREEN_FUNDAMENTALS_GRID_DETECTOR_H

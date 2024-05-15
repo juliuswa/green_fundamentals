@@ -1,7 +1,5 @@
 #include "grid_detector.h"
 
-float offset_of_laser = 0.13;
-
 std::list<Eigen::Vector2f> GridDetector::get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan) 
 {
     std::list<Eigen::Vector2f> all_vectors;
@@ -48,8 +46,26 @@ std::string generateSpace(const std::list<Eigen::Vector2f>& points) {
     return result;
 }
 
+std::vector<Line> GridDetector::summarize_lines(std::vector<Line> lines) {
+    auto compare_by_score = [](const Line& l1, const Line& l2) {
+        return l1.m_score > l2.m_score;
+    };
+
+    std::sort(lines.begin(), lines.end(), compare_by_score);
+
+    for (int i = 0; i < lines.size(); i++) {
+        Eigen::Vector2f polar_representation = lines[i].get_polar_representation();
+
+        ROS_DEBUG("score: %d, distance: %f, theta: %f(%f deg.)", 
+            lines[i].m_score, polar_representation[0], polar_representation[1],
+            polar_representation[1] * 180 / M_PI);
+    }
+
+    return lines;
+}
+
 void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
-    
+
     ROS_DEBUG("Received LaserScan"); 
     std::list<Eigen::Vector2f> measurements = get_measurements(laser_scan);
     ROS_DEBUG("%ld measurements taken.", measurements.size()); 
@@ -59,22 +75,9 @@ void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
 
     Eigen::Vector2f point_array[measurements.size()];
     std::copy(measurements.begin(), measurements.end(), point_array);
+    std::vector<Line> lines = perform_ransac(point_array, measurements.size());   
 
-    ROS_DEBUG("Starting RANSAC"); 
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    std::vector<Line> lines = perform_ransac(point_array, measurements.size());
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-
-    ROS_DEBUG("%ld lines found. in %ld ms", lines.size(), std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());    
-    
-    for (int i = 0; i < lines.size(); i++) {
-
-        Eigen::Vector2f polar_representation = lines[i].get_polar_representation();
-
-        ROS_DEBUG("score: %d, distance: %f, theta: %f(%f deg.)", 
-            lines[i].m_score, polar_representation[0], polar_representation[1],
-            polar_representation[1] * 180 / M_PI);
-    }
+    summarize_lines(lines);  
 }
 
 GridDetector::GridDetector() {}
