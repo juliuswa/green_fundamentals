@@ -2,15 +2,16 @@
 #define GREEN_FUNDAMENTALS_LINE_H
 
 #include "vector.h"
+#include "../Eigen/Dense"
 
 class Line {
 public:
-    Vector m_direction;
-    Vector m_offset;
+    Eigen::Vector2f m_direction;
+    Eigen::Vector2f m_offset;
 
     Line();
-    Line(Vector direction, Vector offset);
-    float get_distance_to_point(Vector point);
+    Line(Eigen::Vector2f direction, Eigen::Vector2f offset);
+    float get_distance_to_point(Eigen::Vector2f point);
 };
 
 

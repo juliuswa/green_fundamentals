@@ -27,7 +27,7 @@ public:
     std::pair<Vector, Vector> mid_and_ori = {Vector(FLT_MAX, FLT_MAX), Vector(FLT_MAX, FLT_MAX)};
 
 private:
-    std::list<Vector> get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
+    std::list<Eigen::Vector2f> get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
     std::list<Line> find_lines(std::list<Vector> measurements);
     float get_distance_to_line(Line line, float accuracy);
 };

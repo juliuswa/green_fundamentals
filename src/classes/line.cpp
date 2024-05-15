@@ -1,24 +1,18 @@
-//
-// Created by laura on 03.05.24.
-//
-
 #include "line.h"
 
-float Line::get_distance_to_point(Vector point) {
-    return (point.x - m_offset.x) * m_direction.y - (point.y - m_offset.y) * m_direction.x;
+float Line::get_distance_to_point(Eigen::Vector2f point) {
+    return (point[0] - m_offset[0]) * m_direction[1] - (point[1] - m_offset[1]) * m_direction[0];
 }
 
-Line::Line(Vector direction, Vector offset) {
-    float norm = std::sqrt(pow(direction.x, 2) + pow(direction.y, 2));
-    
-    Vector normed_direction(direction.x / norm, direction.y / norm);
-    m_direction = normed_direction;
-
-    Vector new_offset(offset.x, offset.y);
-    m_offset = new_offset;
+Line::Line(Eigen::Vector2f direction, Eigen::Vector2f offset) {
+    m_direction = direction / direction.norm();
+    m_offset = offset;
 }
 
 Line::Line() {
-    m_offset = Vector(0, 0);
-    m_direction = Vector(0, 0);
+    m_offset[0] = 0.0f;
+    m_offset[1] = 0.0f;
+
+    m_direction[0] = 0.0f;
+    m_direction[1] = 0.0f;
 }
