@@ -15,7 +15,7 @@ std::list<Eigen::Vector2f> GridDetector::get_measurements(const sensor_msgs::Las
 
         float theta = i * laser_scan->angle_increment + theta_offset;
 
-        Eigen::Vector2f vector {r * std::cos(theta), r * std::sin(theta)};
+        Eigen::Vector2f vector {(r * std::cos(theta)) + x_offset, r * std::sin(theta)};
 
         all_vectors.push_back(vector);
     }
@@ -62,8 +62,8 @@ std::list<Eigen::Vector2f> GridDetector::get_measurements(const sensor_msgs::Las
 }
 
 std::string generateSpace(const std::list<Eigen::Vector2f>& points) {
-    int width = 150;
-    int height = 60;
+    int width = 125;
+    int height = 50;
     
     float dimension = 1.1;
 
@@ -76,7 +76,7 @@ std::string generateSpace(const std::list<Eigen::Vector2f>& points) {
         int xIndex = static_cast<int>((p[0] + dimension) / stepX);
         int yIndex = static_cast<int>((p[1] + dimension) / stepY);
 
-        grid[xIndex * width + yIndex] = '+';
+        grid[(height - xIndex) * width + (width - yIndex)] = '+';
     }
 
     std::string result;
@@ -97,6 +97,8 @@ void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     ROS_DEBUG("%ld measurements taken.", measurements.size()); 
     // ROS_DEBUG("%s", generateSpace(measurements).c_str());
 
+    ROS_DEBUG("%ld measurements taken.", measurements.size()); 
+
     Eigen::Vector2f point_array[measurements.size()];
     std::copy(measurements.begin(), measurements.end(), point_array);
 
@@ -111,8 +113,9 @@ void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
 
         Eigen::Vector2f polar_representation = lines[i].get_polar_representation();
 
-        ROS_DEBUG("score: %d, distance: (%f), theta: (%f)", 
-            lines[i].m_score, polar_representation[0], polar_representation[1]);
+        ROS_DEBUG("score: %d, distance: %f, theta: %f(%f deg.)", 
+            lines[i].m_score, polar_representation[0], polar_representation[1],
+            polar_representation[1] * 180 / M_PI);
     }
     
     // Line line_array[lines.size()];

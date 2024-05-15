@@ -22,7 +22,7 @@ static int evaluate_line(Line line, Eigen::Vector2f point_array[], int point_arr
     int hits = 0;
 
     for (int i = 0; i < point_array_size; i++) {
-        float distance = std::abs(line.get_distance_to_point(point_array[i]));
+        float distance = std::abs(line.get_distance_from_point(point_array[i]));
         
         if (distance < epsilon) {
             hits += 1;
