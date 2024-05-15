@@ -15,8 +15,6 @@ class GridDetector {
 private:
     const float theta_offset = - 2.37; 
     const float x_offset = 0.13;
-    const float epsilon = 0.1;
-    const int min_matches = 5;
 
     float m_last_measurement[1000];
 
@@ -31,7 +29,8 @@ private:
     std::list<Eigen::Vector2f> get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
     std::list<Line> find_lines(std::list<Vector> measurements);
     float get_distance_to_line(Line line, float accuracy);
-    std::vector<Line> summarize_lines(std::vector<Line> lines);
+    std::vector<Eigen::Vector2f> summarize_lines(std::vector<Line> lines);
+    Eigen::Vector2f summarize_group(std::vector<Eigen::Vector2f> lines);
 };
 
 #endif //GREEN_FUNDAMENTALS_GRID_DETECTOR_H

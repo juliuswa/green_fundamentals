@@ -46,22 +46,58 @@ std::string generateSpace(const std::list<Eigen::Vector2f>& points) {
     return result;
 }
 
-std::vector<Line> GridDetector::summarize_lines(std::vector<Line> lines) {
-    auto compare_by_score = [](const Line& l1, const Line& l2) {
-        return l1.m_score > l2.m_score;
-    };
-
-    std::sort(lines.begin(), lines.end(), compare_by_score);
-
+Eigen::Vector2f GridDetector::summarize_group(std::vector<Eigen::Vector2f> lines) {
+    Eigen::Vector2f sum_vector {0.0, 0.0};
+    
     for (int i = 0; i < lines.size(); i++) {
-        Eigen::Vector2f polar_representation = lines[i].get_polar_representation();
-
-        ROS_DEBUG("score: %d, distance: %f, theta: %f(%f deg.)", 
-            lines[i].m_score, polar_representation[0], polar_representation[1],
-            polar_representation[1] * 180 / M_PI);
+        sum_vector = sum_vector + lines[i];
     }
 
-    return lines;
+    return sum_vector / (float)lines.size();
+}
+
+std::vector<Eigen::Vector2f> GridDetector::summarize_lines(std::vector<Line> lines) {
+    std::vector<Eigen::Vector2f> polar_lines;
+
+    for (int i = 0; i < lines.size(); i++) {
+        polar_lines.push_back(lines[i].get_polar_representation());
+    }
+
+    auto compare_by_theta = [](const Eigen::Vector2f& v1, const Eigen::Vector2f& v2) {
+        return v1[1] > v2[1];
+    };
+
+    std::sort(polar_lines.begin(), polar_lines.end(), compare_by_theta);
+
+    const float radian_epsilon = 0.1;
+
+    std::vector<Eigen::Vector2f> first_group;
+    first_group.push_back(polar_lines[0]);
+    std::vector<std::vector<Eigen::Vector2f>> groups;
+    groups.push_back(first_group);
+    int current_group = 0;
+
+    for (int i = 1; i < polar_lines.size(); i++) {
+        int last_current_group_index = groups[current_group].size();
+
+        if (groups[current_group][last_current_group_index][1] + epsilon > polar_lines[i][1]) {
+            groups[current_group].push_back(polar_lines[i]);
+            continue;
+        }
+        
+        std::vector<Eigen::Vector2f> new_group;
+        new_group.push_back(polar_lines[i]);
+        groups.push_back(new_group);
+        current_group += 1;        
+    }
+    
+    std::vector<Eigen::Vector2f> final_lines;
+
+    for (int i = 0; i < groups.size(); i++) {
+        final_lines.push_back(summarize_group(groups[i]));  
+    }
+
+    return final_lines;
 }
 
 void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
@@ -77,7 +113,12 @@ void GridDetector::detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan) {
     std::copy(measurements.begin(), measurements.end(), point_array);
     std::vector<Line> lines = perform_ransac(point_array, measurements.size());   
 
-    summarize_lines(lines);  
+    std::vector<Eigen::Vector2f> final_lines = summarize_lines(lines);  
+
+    for (int i = 0; i < final_lines.size(); i++) {
+        ROS_DEBUG("%d: dist: %f, theta: %f",
+            i, final_lines[i][0], final_lines[i][1] * 180 / M_PI);
+    }
 }
 
 GridDetector::GridDetector() {}
