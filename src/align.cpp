@@ -109,36 +109,36 @@ int main(int argc, char **argv)
 
     signal(SIGINT, stop_driving);
 
-    Vector mid = line_detector.mid_and_ori.first;
-    Vector ori = line_detector.mid_and_ori.second;
+    // Vector mid = line_detector.mid_and_ori.first;
+    // Vector ori = line_detector.mid_and_ori.second;
 
     ROS_DEBUG("Entering while loop to wait for midpoint."); 
     while (true) {
-        mid = line_detector.mid_and_ori.first;
-        ori = line_detector.mid_and_ori.second;
+        // mid = line_detector.mid_and_ori.first;
+        // ori = line_detector.mid_and_ori.second;
 
-        if (mid.x != FLT_MAX && mid.y != FLT_MAX) { 
-            break;
-        }
+        // if (mid.x != FLT_MAX && mid.y != FLT_MAX) { 
+        //     break;
+        // }
         ros::spinOnce();
     }
 
-    if (mid.x == 0. && mid.y == 0.) { 
-            mid.x = 0.1;
-            mid.y = 0.1;
-    }
+    // if (mid.x == 0. && mid.y == 0.) { 
+    //         mid.x = 0.1;
+    //         mid.y = 0.1;
+    // }
 
-    ROS_DEBUG("Midpoint at: (%f, %f)", mid.x, mid.y); 
-    ROS_DEBUG("Ori at: (%f, %f)", ori.x, ori.y); 
+    // ROS_DEBUG("Midpoint at: (%f, %f)", mid.x, mid.y); 
+    // ROS_DEBUG("Ori at: (%f, %f)", ori.x, ori.y); 
 
-    ROS_DEBUG("Start driving to point"); 
-    center_aligned_in_cell(mid, ori);
-    while(!drive_commands.empty()) {
-        wheelCommand current_command = drive_commands.front();
-        drive_commands.pop_front();
+    // ROS_DEBUG("Start driving to point"); 
+    // center_aligned_in_cell(mid, ori);
+    // while(!drive_commands.empty()) {
+    //     wheelCommand current_command = drive_commands.front();
+    //     drive_commands.pop_front();
 
-        driver.execute_command(current_command);
-    }
+    //     driver.execute_command(current_command);
+    // }
 
     return 0;
 }
