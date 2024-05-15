@@ -31,27 +31,8 @@ Eigen::Vector2f Line::get_polar_representation() {
     float cross_product_z = position_projection[0] * reference_direction[1] - position_projection[1] * reference_direction[0];
 
     if (cross_product_z > 0) {
-        //ROS_DEBUG("is right");
         polar_representation[1] = polar_representation[1]* -1;
     }  
-
-    // TODO: Das folgende geht schöner ;)
-
-    // Eigen::Vector2f front_position {0.01, 0.0};
-    // // true if line passes behind reference_position
-    // if (get_distance_from_point(front_position) > distance) {
-    //     ROS_DEBUG("LINE BEHIND");
-
-    //     Eigen::Vector2f left_position {0.0, 0.01};
-    //     // true if line passes right of reference_position
-    //     if (get_distance_from_point(left_position) > distance) {
-    //         ROS_DEBUG("LINE TO THE RIGHT");
-    //         polar_representation[1] = -M_PI - polar_representation[1];
-    //     }
-    //     else {
-    //         polar_representation[1] = M_PI - polar_representation[1];
-    //     }
-    // }
 
     return polar_representation;
 }
