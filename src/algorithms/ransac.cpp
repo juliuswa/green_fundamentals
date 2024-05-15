@@ -22,7 +22,7 @@ static int evaluate_line(Line line, Eigen::Vector2f point_array[], int point_arr
     int hits = 0;
 
     for (int i = 0; i < point_array_size; i++) {
-        float distance = std::abs(line.get_distance_from_point(point_array[i]));
+        float distance = line.get_distance_from_point(point_array[i]);
         
         if (distance < epsilon) {
             hits += 1;
@@ -32,58 +32,45 @@ static int evaluate_line(Line line, Eigen::Vector2f point_array[], int point_arr
     return hits;
 }
 
-static std::vector<Line> perform_ransac(Eigen::Vector2f point_array[], int point_array_size)
+static std::vector<Line> perform_ransac(std::list<Eigen::Vector2f> points)
 {    
+    auto compare_by_score = [](const Line& l1, const Line& l2) {
+        return l1.m_score > l2.m_score;
+    };
+
     std::vector<Line> lines;
+    bool line_found = true;
 
-    for (int i = 0; i < candidate_count; i++) {
-        Line candidate = get_line_candidate(point_array, point_array_size);
-        candidate.m_score = evaluate_line(candidate, point_array, point_array_size);
+    while(line_found) {
+        Eigen::Vector2f point_array[points.size()];
+        std::copy(points.begin(), points.end(), point_array);
+        
+        std::vector<Line> candidates;
 
-        if (candidate.m_score > min_score) {
-            lines.push_back(candidate);
+        for (int i = 0; i < candidate_count; i++) {
+            Line candidate = get_line_candidate(point_array, points.size());
+            candidate.m_score = evaluate_line(candidate, point_array, points.size());
+            candidates.push_back(candidate);
+        }        
+
+        std::sort(candidates.begin(), candidates.end(), compare_by_score);
+
+        if (candidates[0].m_score < min_score) {
+            line_found = false;
+            continue;
         }
+
+        lines.push_back(candidates[0]);
+
+        std::list<Eigen::Vector2f> uncovered_points;
+        for (int i = 0; i < points.size(); i++) {
+            if (candidates[0].get_distance_from_point(point_array[i]) > epsilon) {
+                uncovered_points.push_back(point_array[i]);
+            }
+        } 
+
+        points = uncovered_points;
     }
 
     return lines;
-    
-    // for (int u = 0; u < array_size - 1; u++) {
-    //     if (covered.count(u)) {
-    //         continue;
-    //     }
-
-    //     for (int v = u + 1; v < array_size; v++) {
-    //         if (covered.count(v)) {
-    //             continue;
-    //         }     
-
-    //         Vector dif (point_array[v].x - point_array[u].x, point_array[v].y - point_array[u].y);
-    //         Line line(dif, point_array[v]);
-    //         // ROS_DEBUG("Ransack: Line(np.array([%f, %f]), np.array([%f, %f]))", line.m_offset.x, line.m_offset.y, line.m_direction.x, line.m_direction.y);
-    //         // ROS_INFO("Ransack: point(np.array([%f, %f])", point_array[u].x, point_array[u].y);
-    //         // ROS_INFO("Ransack: offset(np.array([%f, %f])", point_array[v].x, point_array[v].y);
-    //         std::list<int> matched;
-
-    //         for (int w = 0; w < array_size; w++) {
-    //             if (covered.count(w)) {
-    //                 continue;
-    //             }
-
-    //             float distance = line.get_distance_to_point(point_array[w]);
-
-    //             if (std::abs(distance) < epsilon) {
-    //                 matched.push_back(w);
-    //             }                
-    //         }
-
-    //         if (matched.size() < min_matches) {
-    //             continue;
-    //         }
-
-    //         matched.push_back(u);
-    //         matched.push_back(v);
-    //         discovered_lines.push_back(line);
-    //         covered.insert(matched.begin(), matched.end());
-    //     }
-    // }
 }

@@ -68,7 +68,8 @@
         "hash_set": "cpp",
         "shared_mutex": "cpp",
         "*.inc": "cpp",
-        "dense": "cpp"
+        "dense": "cpp",
+        "core": "cpp"
     },
     "cmake.configureOnOpen": false
 }
