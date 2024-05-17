@@ -27,67 +27,6 @@ void stop_driving(int sig) {
     exit(1);
 }
 
-// void center_aligned_in_cell(Vector dest_point, Vector align_direction) {
-//     // drive to destination point
-//     const float wheel_radius = 0.0308;
-//     const float wheel_base = 0.265;
-//     float revolution_dist = wheel_radius * M_PI * 2;
-
-//     Vector vec_x = {1, 0};
-
-//     float theta = std::acos(vec_x.scalar_product(dest_point) / (vec_x.get_length() * dest_point.get_length()));
-//     if(dest_point.cross_product(align_direction) < 0) theta = -theta; 
-//     float turn_distance = wheel_base / 2 * theta;
-
-//     wheelCommand turn_command;
-//     turn_command.left_wheel = -1 * turn_distance / revolution_dist * 2 * M_PI;
-//     turn_command.right_wheel = turn_distance / revolution_dist * 2 * M_PI;
-//     drive_commands.push_back(turn_command);
-
-//     wheelCommand direction_command;
-//     direction_command.left_wheel = dest_point.get_length() / revolution_dist * 2 * M_PI;
-//     direction_command.right_wheel = dest_point.get_length() / revolution_dist * 2 * M_PI;
-//     drive_commands.push_back(direction_command);
-
-//     // align towards wall
-//     float align_angle = std::acos(dest_point.scalar_product(align_direction) / (dest_point.get_length() * align_direction.get_length()));
-//     if(dest_point.cross_product(align_direction) < 0) align_angle = -align_angle; 
-//     float align_turn_distance = wheel_base / 2 * align_angle;
-
-//     wheelCommand align_turn_command;
-//     align_turn_command.left_wheel = -1 * align_turn_distance / revolution_dist * 2 * M_PI;
-//     align_turn_command.right_wheel = align_turn_distance / revolution_dist * 2 * M_PI;
-//     drive_commands.push_back(align_turn_command);
-
-//     return;
-// }
-
-void rotate(float theta) {
-    
-}
-
-void drive_to_relative_point(Driver driver, Eigen::Vector2f point) {
-    ROS_DEBUG("drive_to_relative_point"); 
-
-    std::deque<wheelCommand> drive_commands;
-
-    float midpoint_direction_theta = acos(point[0] / point.norm());
-    
-    float pre_turn_distance = wheel_base / 2 * midpoint_direction_theta;
-    
-    wheelCommand pre_turn_command;
-    pre_turn_command.left_wheel = -1 * pre_turn_distance / revolution_dist * 2 * M_PI;
-    pre_turn_command.right_wheel = pre_turn_distance / revolution_dist * 2 * M_PI;
-    drive_commands.push_back(pre_turn_command);
-
-    while(!drive_commands.empty()) {
-        wheelCommand current_command = drive_commands.front();
-        drive_commands.pop_front();
-
-        driver.execute_command(current_command);
-    }
-}
-
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "align");
@@ -103,7 +42,7 @@ int main(int argc, char **argv)
 
     ROS_DEBUG("Register Driver as subscriber"); 
     Driver driver(n);
-    ros::Subscriber sensorSub = n.subscribe("sensorPacket", 1, &Driver::calculate_wheel_speeds, &driver);
+    ros::Subscriber sensorSub = n.subscribe("sensor_packet", 1, &Driver::calculate_wheel_speeds, &driver);
 
     signal(SIGINT, stop_driving);
 
@@ -137,24 +76,36 @@ int main(int argc, char **argv)
 
     ROS_INFO("midpoint: offset = (%f, %f), theta = %f", offset[0], offset[1], theta * 180 / M_PI);
 
-    drive_to_relative_point(driver, offset);
+    ROS_DEBUG("drive_to_relative_point"); 
+    std::deque<wheelCommand> drive_commands;
 
-    // if (mid.x == 0. && mid.y == 0.) { 
-    //         mid.x = 0.1;
-    //         mid.y = 0.1;
-    // }
+    float midpoint_direction_theta = acos(offset[0] / offset.norm());
+    
+    float pre_turn_distance = wheel_base / 2 * midpoint_direction_theta;    
+    float drive_distance = offset.norm();
+    float post_turn_distance = wheel_base / 2 * (theta - midpoint_direction_theta);  
 
-    // ROS_DEBUG("Midpoint at: (%f, %f)", mid.x, mid.y); 
-    // ROS_DEBUG("Ori at: (%f, %f)", ori.x, ori.y); 
+    wheelCommand pre_turn_command;
+    pre_turn_command.left_wheel = -1 * pre_turn_distance / revolution_dist * 2 * M_PI;
+    pre_turn_command.right_wheel = pre_turn_distance / revolution_dist * 2 * M_PI;
+    drive_commands.push_back(pre_turn_command);
 
-    // ROS_DEBUG("Start driving to point"); 
-    // center_aligned_in_cell(mid, ori);
-    // while(!drive_commands.empty()) {
-    //     wheelCommand current_command = drive_commands.front();
-    //     drive_commands.pop_front();
+    wheelCommand drive_command;
+    drive_command.left_wheel = drive_distance / revolution_dist * 2 * M_PI;
+    drive_command.right_wheel = drive_distance / revolution_dist * 2 * M_PI;
+    drive_commands.push_back(drive_command);
 
-    //     driver.execute_command(current_command);
-    // }
+    wheelCommand post_turn_command;
+    post_turn_command.left_wheel = -1 * post_turn_distance / revolution_dist * 2 * M_PI;
+    post_turn_command.right_wheel = post_turn_distance / revolution_dist * 2 * M_PI;
+    drive_commands.push_back(post_turn_command);
+
+    while(!drive_commands.empty()) {
+        wheelCommand current_command = drive_commands.front();
+        drive_commands.pop_front();
+
+        driver.execute_command(current_command);
+    }
 
     return 0;
 }
