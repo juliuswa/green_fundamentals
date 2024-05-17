@@ -1,3 +1,6 @@
+#ifndef GREEN_FUNDAMENTALS_RANSAC_H
+#define GREEN_FUNDAMENTALS_RANSAC_H
+
 #include "ros/ros.h"
 #include <cstdlib>
 #include <set>
@@ -77,3 +80,5 @@ static std::vector<Line> perform_ransac(std::list<Eigen::Vector2f> points)
 
     return lines;
 }
+
+#endif //GREEN_FUNDAMENTALS_RANSAC_H

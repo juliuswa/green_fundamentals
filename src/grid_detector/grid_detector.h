@@ -9,7 +9,6 @@
 #include <set>
 #include <chrono>
 #include "../algorithms/ransac.cpp"
-#include "../algorithms/find_midpoint_from_lines.cpp"
 
 struct GridDetectorResponse {
     bool success;

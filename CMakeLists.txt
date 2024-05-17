@@ -3,7 +3,14 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(green_fundamentals)
 # Load catkin and all dependencies required for this package
-find_package(catkin REQUIRED COMPONENTS roscpp rospy sensor_msgs create_fundamentals message_generation)
+find_package(catkin REQUIRED COMPONENTS 
+  roscpp 
+  rospy 
+  std_msgs
+  sensor_msgs 
+  create_fundamentals 
+  message_generation
+)
 
 # include_directories(include ${Boost_INCLUDE_DIR} ${catkin_INCLUDE_DIRS})
 # CATKIN_MIGRATION: removed during catkin migration
@@ -33,8 +40,10 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 add_message_files(FILES Position.msg
 )
 #uncomment if you have defined services
-#add_service_files(FILES
-#)
+add_service_files(
+  FILES
+  DetectGrid.srv
+)
 
 #common commands for building c++ executables and libraries
 #add_library(${PROJECT_NAME} src/example.cpp)
@@ -52,7 +61,9 @@ add_message_files(FILES Position.msg
 
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
-   DEPENDENCIES std_msgs create_fundamentals
+   DEPENDENCIES 
+   std_msgs 
+   create_fundamentals
 )
 
 # catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
@@ -83,14 +94,21 @@ add_executable(square_with_encoders src/square_with_encoders.cpp src/classes/dri
 target_link_libraries(square_with_encoders ${catkin_LIBRARIES})
 add_dependencies(square_with_encoders create_fundamentals_generate_messages_cpp)
 
-catkin_install_python(PROGRAMS src/move_to_position.py src/odometry.py src/teleop.py
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+add_executable(grid_detection_server src/grid_detector/grid_detection_server.cpp src/classes/line.cpp)
+target_link_libraries(grid_detection_server ${catkin_LIBRARIES})
+add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp)
 
-add_executable(align src/align.cpp src/classes/driver.cpp src/grid_detector/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp src/algorithms/find_midpoint_from_lines.cpp)
+# add_executable(align src/align.cpp src/classes/driver.cpp src/grid_detector/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp src/algorithms/find_midpoint_from_lines.cpp)
+# target_link_libraries(align ${catkin_LIBRARIES})
+# add_dependencies(align create_fundamentals_generate_messages_cpp)
+
+add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp src/algorithms/find_midpoint_from_lines.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})
 add_dependencies(align create_fundamentals_generate_messages_cpp)
 
+catkin_install_python(PROGRAMS src/move_to_position.py src/odometry.py src/teleop.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Test files 
 #add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
