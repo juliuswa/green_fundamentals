@@ -37,15 +37,17 @@ Eigen::Vector2f Line::get_polar_representation() {
     return polar_representation;
 }
 
-Eigen::Vector2f Line::get_cut_vertex(Line other_line) {
-  Eigen::Matrix2f A;
-  A << m_direction, other_line.m_direction;
-  Eigen::Vector2f b;
-  b << other_line.m_offset.dot(m_direction) - m_offset.dot(m_direction);
+float determinante(Eigen::Vector2f a, Eigen::Vector2f b) {
+    return a[0] * b[1] - a[1] * b[0];
+}
 
-  Eigen::Vector2f x = A.inverse() * b;
-  
-  return x;
+Eigen::Vector2f Line::get_cut_vertex(Line other_line) {    
+    using Line2 = Eigen::Hyperplane<float,2>;
+
+    Line2 me = Line2::Through(m_offset, m_offset + m_direction);
+    Line2 other = Line2::Through(other_line.m_offset, other_line.m_offset + other_line.m_direction);
+
+    return me.intersection(other);
 }
 
 Line::Line(Eigen::Vector2f direction, Eigen::Vector2f offset) {

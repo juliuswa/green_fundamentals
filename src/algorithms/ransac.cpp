@@ -34,14 +34,17 @@ static int evaluate_line(Line line, Eigen::Vector2f point_array[], int point_arr
 
 static std::vector<Line> perform_ransac(std::list<Eigen::Vector2f> points)
 {    
+    ROS_DEBUG("started perform_ransac, points.size() = %d", points.size()); 
     auto compare_by_score = [](const Line& l1, const Line& l2) {
         return l1.m_score > l2.m_score;
     };
 
     std::vector<Line> lines;
     bool line_found = true;
+    
+    while(line_found && points.size() > min_score) {
+        ROS_DEBUG("%d lines found, points.size() = %d", lines.size(), points.size());
 
-    while(line_found) {
         Eigen::Vector2f point_array[points.size()];
         std::copy(points.begin(), points.end(), point_array);
         

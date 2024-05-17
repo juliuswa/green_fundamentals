@@ -11,25 +11,31 @@
 #include "../algorithms/ransac.cpp"
 #include "../algorithms/find_midpoint_from_lines.cpp"
 
+struct GridDetectorResponse {
+    bool success;
+    Eigen::Vector2f offset;
+    float theta;
+};
+
 class GridDetector {
 private:
     const float theta_offset = - 2.37; 
     const float x_offset = 0.13;
 
-    float m_last_measurement[1000];
+    std::list<Eigen::Vector2f> m_current_measurement;
+    float m_raw_last_measurement[2000];
 
     bool received_packet = false;
 
 public:
     GridDetector();
-    void detect(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
-    // std::pair<Vector, Vector> mid_and_ori = {Vector(FLT_MAX, FLT_MAX), Vector(FLT_MAX, FLT_MAX)};
+    void get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
+    GridDetectorResponse detect();
 
 private:
-    std::list<Eigen::Vector2f> get_measurements(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
     std::list<Line> find_lines(std::list<Vector> measurements);
     float get_distance_to_line(Line line, float accuracy);
-    Eigen::Vector2f find_cell_midpoint(std::vector<Line> lines);
+    GridDetectorResponse create_grid_detector_response(std::vector<Line> lines);
 };
 
 #endif //GREEN_FUNDAMENTALS_GRID_DETECTOR_H

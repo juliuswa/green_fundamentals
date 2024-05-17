@@ -87,7 +87,7 @@ catkin_install_python(PROGRAMS src/move_to_position.py src/odometry.py src/teleo
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-add_executable(align src/align.cpp src/classes/driver.cpp src/classes/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp src/algorithms/find_midpoint_from_lines.cpp)
+add_executable(align src/align.cpp src/classes/driver.cpp src/grid_detector/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp src/algorithms/find_midpoint_from_lines.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})
 add_dependencies(align create_fundamentals_generate_messages_cpp)
 
@@ -101,6 +101,6 @@ file(COPY src/test-input DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
 
 if (CATKIN_ENABLE_TESTING)
-  catkin_add_gtest(test-ransac src/test/test-ransac.cpp src/classes/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
+  catkin_add_gtest(test-ransac src/test/test-ransac.cpp src/grid_detector/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
   target_link_libraries(test-ransac ${catkin_LIBRARIES})
 endif()
