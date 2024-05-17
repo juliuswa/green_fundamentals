@@ -46,12 +46,16 @@ void write_detect_grid_response(std::vector<Line> lines, green_fundamentals::Det
     std::vector<Eigen::Vector2f> polar_lines;
 
     for (int i = 0; i < lines.size(); i++) {
-        polar_lines.push_back(lines[i].get_polar_representation());
+        Eigen::Vector2f polar_line = lines[i].get_polar_representation();
+        polar_lines.push_back(polar_line);
+        
+        ROS_DEBUG("%d: dist: %f, theta: %f",
+            i, polar_line[0], polar_line[1] * 180 / M_PI);
     }
 
     int line1;
     int line2;
-    float best_angle = 0;
+    float best_angle = 0.0;
 
     for (int i = 0; i < polar_lines.size(); i++)  {
         for (int j = i + 1; j < polar_lines.size(); j++)  {
@@ -65,7 +69,8 @@ void write_detect_grid_response(std::vector<Line> lines, green_fundamentals::Det
         }
     }
 
-    if ((best_angle - M_PI / 2) > 20) {
+    if (std::abs(best_angle - M_PI / 2) > 0.3) {
+        ROS_WARN("no 90 degrees angle detected.");
         return;
     }
 
@@ -74,20 +79,45 @@ void write_detect_grid_response(std::vector<Line> lines, green_fundamentals::Det
     Eigen::Vector2f cut_vertex = lines[line1].get_cut_vertex(lines[line2]);
     ROS_INFO("cut vertex = (%f, %f)", cut_vertex[0], cut_vertex[1]);
 
-    float direction1_factor = lines[line1].m_direction[0] < 0.0 ? 0.39 : -0.39;
-    float direction2_factor = lines[line2].m_direction[0] < 0.0 ? 0.39 : -0.39;
+    Eigen::Vector2f line1_direction = lines[line1].m_direction;
+    Eigen::Vector2f line2_direction = lines[line2].m_direction;
+    float factor = 0.39;
 
-    Eigen::Vector2f midpoint = cut_vertex + lines[line1].m_direction * direction1_factor + lines[line2].m_direction * direction2_factor;    
-    Eigen::Vector2f polar_line1 = lines[line1].get_polar_representation();
+    Eigen::Vector2f midpoint_versions[4];
+    midpoint_versions[0] = cut_vertex + line1_direction * factor + line2_direction * factor;
+    midpoint_versions[1] = cut_vertex + line1_direction * factor - line2_direction * factor;
+    midpoint_versions[2] = cut_vertex - line1_direction * factor + line2_direction * factor;
+    midpoint_versions[3] = cut_vertex - line1_direction * factor - line2_direction * factor;
 
-    if (midpoint.norm() > 1.0) {
-        ROS_WARN("distance_to_midpoint: %d", midpoint.norm());
+    float closest_distance = 1.0;
+    int closest_index = 4;
+
+    for (int i = 0; i < 4; i++) {
+        float distance = midpoint_versions[i].norm();
+
+        if (distance < closest_distance) {
+            closest_distance = distance;
+            closest_index = i;
+        }
     }
 
+    if (closest_index > 4) {
+        ROS_WARN("no midpoint_versions identified.");
+        return;
+    }
+
+    Eigen::Vector2f cell_center = midpoint_versions[closest_index];    
+    Eigen::Vector2f polar_line1 = lines[line1].get_polar_representation();
+
+    float mod_value = M_PI / 2;
+    float theta_offset = polar_line1[1] - std::round(polar_line1[1] / mod_value) * mod_value;
+
+    ROS_INFO("cell center = (%f, %f)", cell_center[0], cell_center[1]);
+
     res.success = true;
-    res.x_offset = midpoint[0];
-    res.y_offset = midpoint[1];
-    res.theta_offset = polar_line1[1];
+    res.x_offset = cell_center[0];
+    res.y_offset = cell_center[1];
+    res.theta_offset = theta_offset;
 
     return;
 }
@@ -109,10 +139,9 @@ bool detect_grid(green_fundamentals::DetectGrid::Request  &req, green_fundamenta
     std::vector<Line> lines = perform_ransac(m_current_measurement); 
     ROS_DEBUG("%d lines detected by ransack", lines.size());   
 
-    for (int i = 0; i < lines.size(); i++) {
-        Eigen::Vector2f polar_line = lines[i].get_polar_representation();
-        ROS_DEBUG("%d: dist: %f, theta: %f",
-            i, polar_line[0], polar_line[1] * 180 / M_PI);
+    if (lines.size() < 2) {
+        ROS_WARN("too few lines detected.");
+        return false;
     }
 
     write_detect_grid_response(lines, res);
@@ -125,6 +154,10 @@ int main(int argc, char **argv)
 {  
     ros::init(argc, argv, "grid_detection_server");
     ros::NodeHandle n;
+
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
+        ros::console::notifyLoggerLevelsChanged();
+    }
 
     ros::Subscriber sub = n.subscribe("scan_filtered", 1, get_measurements);
     ros::ServiceServer service = n.advertiseService("detect_grid", detect_grid);

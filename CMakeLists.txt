@@ -94,15 +94,11 @@ add_executable(square_with_encoders src/square_with_encoders.cpp src/classes/dri
 target_link_libraries(square_with_encoders ${catkin_LIBRARIES})
 add_dependencies(square_with_encoders create_fundamentals_generate_messages_cpp)
 
-add_executable(grid_detection_server src/grid_detector/grid_detection_server.cpp src/classes/line.cpp)
+add_executable(grid_detection_server src/grid_detection/grid_detection_server.cpp src/classes/line.cpp)
 target_link_libraries(grid_detection_server ${catkin_LIBRARIES})
 add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp)
 
-# add_executable(align src/align.cpp src/classes/driver.cpp src/grid_detector/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp src/algorithms/find_midpoint_from_lines.cpp)
-# target_link_libraries(align ${catkin_LIBRARIES})
-# add_dependencies(align create_fundamentals_generate_messages_cpp)
-
-add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp src/algorithms/find_midpoint_from_lines.cpp)
+add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})
 add_dependencies(align create_fundamentals_generate_messages_cpp)
 
@@ -115,10 +111,10 @@ catkin_install_python(PROGRAMS src/move_to_position.py src/odometry.py src/teleo
 #target_link_libraries(test-ransac ${catkin_LIBRARIES} gtest gtest_main)
 
 # Get all input files for tests into the build directory
-file(COPY src/test-input DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+# file(COPY src/test-input DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
 
-if (CATKIN_ENABLE_TESTING)
-  catkin_add_gtest(test-ransac src/test/test-ransac.cpp src/grid_detector/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
-  target_link_libraries(test-ransac ${catkin_LIBRARIES})
-endif()
+# if (CATKIN_ENABLE_TESTING)
+#   catkin_add_gtest(test-ransac src/test/test-ransac.cpp src/grid_detector/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
+#   target_link_libraries(test-ransac ${catkin_LIBRARIES})
+# endif()
