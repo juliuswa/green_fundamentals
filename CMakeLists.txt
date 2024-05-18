@@ -74,25 +74,29 @@ catkin_package(
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-add_executable(example_laser src/example_laser.cpp)
-target_link_libraries(example_laser ${catkin_LIBRARIES})
-add_dependencies(example_laser create_fundamentals_generate_messages_cpp)
+# add_executable(example_laser src/example_laser.cpp)
+# target_link_libraries(example_laser ${catkin_LIBRARIES})
+# add_dependencies(example_laser create_fundamentals_generate_messages_cpp)
 
-add_executable(example_moving src/example_moving.cpp)
-target_link_libraries(example_moving ${catkin_LIBRARIES})
-add_dependencies(example_moving create_fundamentals_generate_messages_cpp)
+# add_executable(example_moving src/example_moving.cpp)
+# target_link_libraries(example_moving ${catkin_LIBRARIES})
+# add_dependencies(example_moving create_fundamentals_generate_messages_cpp)
 
-add_executable(wanderer src/wanderer.cpp)
-target_link_libraries(wanderer ${catkin_LIBRARIES})
-add_dependencies(wanderer create_fundamentals_generate_messages_cpp)
+# add_executable(wanderer src/wanderer.cpp)
+# target_link_libraries(wanderer ${catkin_LIBRARIES})
+# add_dependencies(wanderer create_fundamentals_generate_messages_cpp)
 
-add_executable(square_no_sensors src/square_no_sensors.cpp)
-target_link_libraries(square_no_sensors ${catkin_LIBRARIES})
-add_dependencies(square_no_sensors create_fundamentals_generate_messages_cpp)
+# add_executable(square_no_sensors src/square_no_sensors.cpp)
+# target_link_libraries(square_no_sensors ${catkin_LIBRARIES})
+# add_dependencies(square_no_sensors create_fundamentals_generate_messages_cpp)
 
-add_executable(square_with_encoders src/square_with_encoders.cpp src/classes/driver.cpp)
-target_link_libraries(square_with_encoders ${catkin_LIBRARIES})
-add_dependencies(square_with_encoders create_fundamentals_generate_messages_cpp)
+# add_executable(square_with_encoders src/square_with_encoders.cpp src/classes/driver.cpp)
+# target_link_libraries(square_with_encoders ${catkin_LIBRARIES})
+# add_dependencies(square_with_encoders create_fundamentals_generate_messages_cpp)
+
+add_executable(odometry src/odometry/odometry.cpp)
+target_link_libraries(odometry ${catkin_LIBRARIES})
+add_dependencies(odometry create_fundamentals_generate_messages_cpp)
 
 add_executable(grid_detection_server src/grid_detection/grid_detection_server.cpp src/classes/line.cpp)
 target_link_libraries(grid_detection_server ${catkin_LIBRARIES})
@@ -101,10 +105,6 @@ add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp
 add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})
 add_dependencies(align create_fundamentals_generate_messages_cpp)
-
-catkin_install_python(PROGRAMS src/move_to_position.py src/odometry.py src/teleop.py
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
 
 ## Test files 
 #add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
