@@ -57,14 +57,6 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& sensor_p
 
     delta_x = turn_radius * (sin(theta + delta_theta) - sin(theta));
     delta_y = -turn_radius * (cos(theta + delta_theta) - cos(theta));
-
-    // float turn_radius = distance_center / delta_theta;
-
-    // float iccX = x - turn_radius * sin(theta);
-    // float iccY = y + turn_radius * cos(theta);
-
-    // delta_x = cos(delta_theta) * (x-iccX) - sin(delta_theta) * (y-iccY) + iccX - x;
-    // delta_y = sin(delta_theta) * (x-iccX) + cos(delta_time.toSec()) * (y-iccY) + iccY - y;
   }
 
   ROS_DEBUG("delta_x = %f, delta_y = %f, delta_theta = %f", delta_x, delta_y, delta_theta);
