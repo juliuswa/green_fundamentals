@@ -74,6 +74,8 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& sensor_p
   theta = (theta + delta_theta);
   theta = theta - std::floor(theta / (2 * M_PI)) * (2 * M_PI);
 
+  ROS_INFO("x     = %f\ny     = %f\ntheta = %f", delta_x, delta_y, delta_theta);
+
   last_left = new_left;
   last_right = new_right;
 
@@ -90,7 +92,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "odometry");
   ros::NodeHandle n;
 
-  if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+  if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
     ros::console::notifyLoggerLevelsChanged();
   }
 
