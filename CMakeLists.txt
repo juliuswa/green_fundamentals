@@ -106,10 +106,6 @@ add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})
 add_dependencies(align create_fundamentals_generate_messages_cpp)
 
-catkin_install_python(PROGRAMS src/move_to_position.py src/odometry.py src/teleop.py
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
 ## Test files 
 #add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
 #target_link_libraries(test-ransac ${catkin_LIBRARIES} gtest gtest_main)
