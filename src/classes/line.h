@@ -1,17 +1,22 @@
 #ifndef GREEN_FUNDAMENTALS_LINE_H
 #define GREEN_FUNDAMENTALS_LINE_H
 
+#include "ros/ros.h"
 #include "vector.h"
+#include "../Eigen/Dense"
 
 class Line {
 public:
-    Vector m_direction;
-    Vector m_offset;
+    Eigen::Vector2f m_direction;
+    Eigen::Vector2f m_offset;
+    int m_score;
 
     Line();
-    Line(Vector direction, Vector offset);
-    float get_distance_to_point(Vector point);
+    Line(Eigen::Vector2f direction, Eigen::Vector2f offset);
+    float get_distance_from_point(Eigen::Vector2f point);
+    Eigen::Vector2f get_cut_vertex(Line point);
+    Eigen::Vector2f get_projection_of_point(Eigen::Vector2f point);
+    Eigen::Vector2f get_polar_representation();
 };
-
 
 #endif //GREEN_FUNDAMENTALS_LINE_H

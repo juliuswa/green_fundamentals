@@ -1,24 +1,67 @@
-//
-// Created by laura on 03.05.24.
-//
-
 #include "line.h"
 
-float Line::get_distance_to_point(Vector point) {
-    return (point.x - m_offset.x) * m_direction.y - (point.y - m_offset.y) * m_direction.x;
+float Line::get_distance_from_point(Eigen::Vector2f point) {
+    return std::abs((point[0] - m_offset[0]) * m_direction[1] - (point[1] - m_offset[1]) * m_direction[0]);
 }
 
-Line::Line(Vector direction, Vector offset) {
-    float norm = std::sqrt(pow(direction.x, 2) + pow(direction.y, 2));
+Eigen::Vector2f Line::get_projection_of_point(Eigen::Vector2f point) {
+    Eigen::Vector2f delta = point - m_offset;
     
-    Vector normed_direction(direction.x / norm, direction.y / norm);
-    m_direction = normed_direction;
+    float nominator = delta[0] * m_direction[0] + delta[1] * m_direction[1];
+    float denominator = m_direction[0] * m_direction[0] + m_direction[1] * m_direction[1];
 
-    Vector new_offset(offset.x, offset.y);
-    m_offset = new_offset;
+    float lambda = nominator / denominator;
+
+    return m_offset + (m_direction * lambda);
+}
+
+Eigen::Vector2f Line::get_polar_representation() {
+    Eigen::Vector2f polar_representation;
+
+    Eigen::Vector2f reference_position {0.0, 0.0};
+    float distance = get_distance_from_point(reference_position);
+    polar_representation[0] = distance;
+
+    Eigen::Vector2f position_projection = get_projection_of_point(reference_position);
+    Eigen::Vector2f reference_direction {1.0, 0.0};
+
+    float scalar_product = position_projection[0] * reference_direction[0] + position_projection[1] * reference_direction[1];
+    polar_representation[1] = acos(scalar_product / (position_projection.norm() * reference_direction.norm()));
+
+    float cross_product_z = position_projection[0] * reference_direction[1] - position_projection[1] * reference_direction[0];
+
+    if (cross_product_z > 0) {
+        polar_representation[1] = polar_representation[1]* -1;
+    }  
+
+    return polar_representation;
+}
+
+float determinante(Eigen::Vector2f a, Eigen::Vector2f b) {
+    return a[0] * b[1] - a[1] * b[0];
+}
+
+Eigen::Vector2f Line::get_cut_vertex(Line other_line) {    
+    using Line2 = Eigen::Hyperplane<float,2>;
+
+    Line2 me = Line2::Through(m_offset, m_offset + m_direction);
+    Line2 other = Line2::Through(other_line.m_offset, other_line.m_offset + other_line.m_direction);
+
+    return me.intersection(other);
+}
+
+Line::Line(Eigen::Vector2f direction, Eigen::Vector2f offset) {
+    m_direction = direction / direction.norm();
+    m_offset = offset;
+    m_score = 0;
 }
 
 Line::Line() {
-    m_offset = Vector(0, 0);
-    m_direction = Vector(0, 0);
+    m_offset[0] = 0.0f;
+    m_offset[1] = 0.0f;
+
+    m_direction[0] = 0.0f;
+    m_direction[1] = 0.0f;
+
+    m_score = 0;
 }

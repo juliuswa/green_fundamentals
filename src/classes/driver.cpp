@@ -17,7 +17,11 @@ bool Driver::command_done() {
 float Driver::calculate_speed(float delta, float velocity) {
     float p_control = spring_constant * delta;
     float pd_control = p_control - damping_constant * velocity;
-    return pd_control < 0.0 ? std::floor(pd_control) : std::ceil(pd_control);
+    // return pd_control < 0.0 ? std::floor(pd_control) : std::ceil(pd_control);
+    
+    float desired_speed = pd_control < 0.0 ? std::floor(pd_control) : std::ceil(pd_control);
+
+    return std::abs(pd_control) > 0.5 ? desired_speed : 0.0;
 }
 
 void Driver::calculate_wheel_speeds(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet) {
@@ -52,6 +56,8 @@ void Driver::execute_command(wheelCommand& command) {
 
         ros::spinOnce();
     }
+
+    ROS_INFO("driver: command done.");
 
     speed_left = 0.0;
     speed_right = 0.0;

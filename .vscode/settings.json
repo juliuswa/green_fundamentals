@@ -15,7 +15,7 @@
         "cstdio": "cpp",
         "cstdlib": "cpp",
         "cstring": "cpp",
-        "ctime": "cpp",
+        "ctim()e": "cpp",
         "cwchar": "cpp",
         "cwctype": "cpp",
         "atomic": "cpp",
@@ -67,6 +67,9 @@
         "hash_map": "cpp",
         "hash_set": "cpp",
         "shared_mutex": "cpp",
+        "*.inc": "cpp",
+        "dense": "cpp",
+        "core": "cpp"
         "*.ipp": "cpp"
     },
     "cmake.configureOnOpen": false
