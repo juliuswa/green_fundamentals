@@ -109,8 +109,12 @@ void write_detect_grid_response(std::vector<Line> lines, green_fundamentals::Det
     Eigen::Vector2f cell_center = midpoint_versions[closest_index];    
     Eigen::Vector2f polar_line1 = lines[line1].get_polar_representation();
 
-    float mod_value = M_PI / 2;
+    float mod_value = M_PI / 2.0;
     float theta_offset = polar_line1[1] - std::round(polar_line1[1] / mod_value) * mod_value;
+
+    if (theta_offset > M_PI / 4) {
+        theta_offset = M_PI / 2 - theta_offset;
+    }
 
     ROS_INFO("cell center = (%f, %f)", cell_center[0], cell_center[1]);
 
@@ -137,7 +141,7 @@ bool detect_grid(green_fundamentals::DetectGrid::Request  &req, green_fundamenta
     }
 
     std::vector<Line> lines = perform_ransac(m_current_measurement); 
-    ROS_DEBUG("%d lines detected by ransack", lines.size());   
+    ROS_DEBUG("%ld lines detected by ransack", lines.size());   
 
     if (lines.size() < 2) {
         ROS_WARN("too few lines detected.");
