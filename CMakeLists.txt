@@ -45,6 +45,7 @@ add_service_files(
   DetectGrid.srv
   DriveTo.srv
   DriveToWaypoints.srv
+  ExecutePlan.srv
 )
 
 #common commands for building c++ executables and libraries
@@ -123,6 +124,10 @@ add_dependencies(smooth_controller create_fundamentals_generate_messages_cpp )#$
 add_executable(strict_controller src/driving/strict_waypoint_drive_controller.cpp)
 target_link_libraries(strict_controller ${catkin_LIBRARIES})
 add_dependencies(strict_controller create_fundamentals_generate_messages_cpp )#${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+
+add_executable(execute_plan_server src/execute_plan/execute_plan_server.cpp)
+target_link_libraries(execute_plan_server ${catkin_LIBRARIES})
+add_dependencies(execute_plan_server create_fundamentals_generate_messages_cpp)
 
 ## Test files 
 #add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
