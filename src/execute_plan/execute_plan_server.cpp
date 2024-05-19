@@ -6,6 +6,7 @@
 #include "create_fundamentals/SensorPacket.h"
 #include "create_fundamentals/DiffDrive.h"
 #include "green_fundamentals/Position.h"
+#include "green_fundamentals/DriveToWaypoints.h"
 
 // current position
 float x_position;
@@ -21,9 +22,12 @@ Eigen::Vector2f left;
 std::vector<Eigen::Vector2f> obstacles;
 std::vector<Eigen::Vector2f> waypoints;
 
+std::vector<float> xs, ys, xs_obst, ys_obst;
+
 bool obstacle_detected = false;
 ros::ServiceClient diff_drive;
 ros::ServiceClient grid_detection_service;
+ros::ServiceClient drive_to_waypoints_service;
 
 void update_position(const green_fundamentals::Position::ConstPtr& position) {
     x_position = position->x;
@@ -32,10 +36,17 @@ void update_position(const green_fundamentals::Position::ConstPtr& position) {
 }
 
 void get_obstacles(Eigen::Vector2f target) {
-    obstacles.push_back({target[0] + up[0] * (cell_length / 2), target[1] + up[1] * (cell_length / 2)});
-    obstacles.push_back({target[0] + down[0] * (cell_length / 2), target[1] + down[1] * (cell_length / 2)});
-    obstacles.push_back({target[0] + right[0] * (cell_length / 2), target[1] + right[1] * (cell_length / 2)});
-    obstacles.push_back({target[0] + left[0] * (cell_length / 2), target[1] + left[1] * (cell_length / 2)});
+    xs_obst.push_back(target[0] + up[0] * (cell_length / 2));
+    ys_obst.push_back(target[1] + up[1] * (cell_length / 2));
+
+    xs_obst.push_back(target[0] + down[0] * (cell_length / 2));
+    ys_obst.push_back(target[1] + down[1] * (cell_length / 2));
+
+    xs_obst.push_back(target[0] + right[0] * (cell_length / 2));
+    ys_obst.push_back(target[1] + right[1] * (cell_length / 2));
+
+    xs_obst.push_back(target[0] + left[0] * (cell_length / 2));
+    ys_obst.push_back(target[1] + left[1] * (cell_length / 2));
 }
 
 void get_waypoint(Eigen::Vector2f target, int command) {
@@ -60,7 +71,8 @@ void get_waypoint(Eigen::Vector2f target, int command) {
             ROS_ERROR("invalid command in plan");
             break;
     } 
-    waypoints.push_back(target);
+    xs.push_back(target[0]);
+    ys.push_back(target[1]);
 }
 
 void detect_crash(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet) {
@@ -79,8 +91,7 @@ bool execute_plan(green_fundamentals::ExecutePlan::Request &req, green_fundament
     int plan_size = sizeof(plan) / sizeof(int);
 
     green_fundamentals::DetectGrid detect_grid_srv;
-    green_fundamentals::DriveTo drive_to_srv;
-    //green_fundamentals::DriveToWayPoints drive_to_waypoints_srv;
+    green_fundamentals::DriveToWaypoints drive_to_waypoints_srv;
 
     for(int i = 0; i < plan_size; i++){
         if(obstacle_detected) return false;
@@ -106,12 +117,6 @@ bool execute_plan(green_fundamentals::ExecutePlan::Request &req, green_fundament
         get_waypoint(target, plan[i]);
         get_obstacles(target);
 
-        if(obstacle_detected) false;
-        // TODO call driver
-        //drive_to_waypoints_srv.
-
-        
-
         // drive_to_srv.request.x_target = target.x;
         // drive_to_srv.request.y_target = target.y;
         // drive_to_srv.request.rotate = false;
@@ -125,6 +130,18 @@ bool execute_plan(green_fundamentals::ExecutePlan::Request &req, green_fundament
         // {
         //     ROS_ERROR("failed to call driver_service");
         // }
+    }
+
+    if(obstacle_detected) return false;
+
+    drive_to_waypoints_srv.request.xs = xs;
+    drive_to_waypoints_srv.request.ys = ys;
+    drive_to_waypoints_srv.request.xs_obst = xs_obst;
+    drive_to_waypoints_srv.request.ys_obst = ys_obst;
+
+    if (!drive_to_waypoints_service.call(drive_to_waypoints_srv))
+    {
+        ROS_ERROR("failed to call driver_service");
     }
 
     return !obstacle_detected;
@@ -142,6 +159,7 @@ int main(int argc, char **argv)
     ros::ServiceServer service = n.advertiseService("execute_plan", execute_plan);
     grid_detection_service = n.serviceClient<green_fundamentals::DetectGrid>("detect_grid");
     diff_drive = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
+    drive_to_waypoints_service = n.serviceClient<green_fundamentals::DriveToWaypoints>("drive_to_waypoints");
 
     ros::Subscriber odometry_sub = n.subscribe("odometry", 1, update_position);
     ros::Subscriber sensor_sub = n.subscribe("sensor_packet", 1, detect_crash);
