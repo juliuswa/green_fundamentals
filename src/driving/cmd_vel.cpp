@@ -13,7 +13,7 @@ void callback(const green_fundamentals::Velocities::ConstPtr& msg) {
     float v = msg->v;
     float w = msg->w;
 
-    float leftVel = (v - WHEEL_BASE * w / 2) / (WHEEL_RADIUS) * 1.2;
+    float leftVel = (v - WHEEL_BASE * w / 2) / (WHEEL_RADIUS);
     float rightVel = (v + WHEEL_BASE * w / 2) / (WHEEL_RADIUS);
 
     if (fabs(leftVel) > MAX_VELOCITY || fabs(rightVel) > MAX_VELOCITY)

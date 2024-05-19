@@ -16,7 +16,7 @@ float KX = 1.;
 float KY = 1.;
 float a = 0.05;
 float rep_weight = 0.001;
-float T = 1000;
+float T = 100;
 
 Eigen::Vector2f current_p {0., 0.};
 float current_theta;
@@ -145,7 +145,7 @@ int main(int argc, char **argv)
                 cmd_pub.publish(msg);
             } else {
                 msg.v = 0;
-                msg.w = theta_error * 0.5;
+                msg.w = theta_error;
                 cmd_pub.publish(msg);
             }
         } else {
@@ -165,6 +165,8 @@ int main(int argc, char **argv)
                 std::pair<Eigen::Vector2f, Eigen::Vector2f> goal = trajectory(counter);
 
                 Eigen::Vector2f p_err = goal.first - current_p;
+
+                ROS_INFO("POS: %f, %f   GOAL: %f, %f", current_p[0], current_p[1], goal.first[0], goal.first[1]);
 
                 Eigen::Vector2f rep_forces = potential_field();
 
