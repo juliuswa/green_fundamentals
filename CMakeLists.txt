@@ -111,6 +111,18 @@ add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})
 add_dependencies(align create_fundamentals_generate_messages_cpp)
 
+add_executable(cmd_vel src/driving/cmd_vel.cpp)
+target_link_libraries(align ${catkin_LIBRARIES})
+add_dependencies(align create_fundamentals_generate_messages_cpp)
+
+add_executable(smooth_controller src/driving/smooth_waypoint_drive_controller.cpp)
+target_link_libraries(align ${catkin_LIBRARIES})
+add_dependencies(align create_fundamentals_generate_messages_cpp)
+
+add_executable(strict_controller src/driving/strict_waypoint_drive_controller.cpp)
+target_link_libraries(align ${catkin_LIBRARIES})
+add_dependencies(align create_fundamentals_generate_messages_cpp)
+
 ## Test files 
 #add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
 #target_link_libraries(test-ransac ${catkin_LIBRARIES} gtest gtest_main)

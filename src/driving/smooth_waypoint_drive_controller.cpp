@@ -106,7 +106,7 @@ void odometry_call(const green_fundamentals::Position::ConstPtr& position) {
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "controller_node");
+  ros::init(argc, argv, "smooth_controller_node");
   ros::NodeHandle n;
 
   if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
