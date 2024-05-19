@@ -16,9 +16,9 @@ std::deque<Eigen::Vector2f> obstacles;
 
 Eigen::Vector2f current_goal;
 
-float KP = 1.;
-float KD = 1.;
-float KI = 1.;
+float KP = 0.5;
+float KD = 0.01;
+float KI = 0.1;
 float I_err = 0.;
 float err_prev = 0.;
 
