@@ -1,0 +1,7 @@
+float32[] xs
+float32[] ys
+float32[] xs_obst
+float32[] ys_obst
+float32 last_theta
+---
+bool success

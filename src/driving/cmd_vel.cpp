@@ -1,5 +1,4 @@
 #include "ros/ros.h"
-#include <boost/bind.hpp>
 #include <cmath>
 
 #include "../robot_constants.h"
