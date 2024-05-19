@@ -43,6 +43,7 @@ add_message_files(FILES Position.msg
 add_service_files(
   FILES
   DetectGrid.srv
+  DriveTo.srv
 )
 
 #common commands for building c++ executables and libraries
@@ -101,6 +102,10 @@ add_dependencies(odometry create_fundamentals_generate_messages_cpp)
 add_executable(grid_detection_server src/grid_detection/grid_detection_server.cpp src/classes/line.cpp)
 target_link_libraries(grid_detection_server ${catkin_LIBRARIES})
 add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp)
+
+add_executable(driving_server src/driving/driving_server.cpp)
+target_link_libraries(driving_server ${catkin_LIBRARIES})
+add_dependencies(driving_server create_fundamentals_generate_messages_cpp)
 
 add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})

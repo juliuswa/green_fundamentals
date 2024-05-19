@@ -57,14 +57,6 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& sensor_p
 
     delta_x = turn_radius * (sin(theta + delta_theta) - sin(theta));
     delta_y = -turn_radius * (cos(theta + delta_theta) - cos(theta));
-
-    // float turn_radius = distance_center / delta_theta;
-
-    // float iccX = x - turn_radius * sin(theta);
-    // float iccY = y + turn_radius * cos(theta);
-
-    // delta_x = cos(delta_theta) * (x-iccX) - sin(delta_theta) * (y-iccY) + iccX - x;
-    // delta_y = sin(delta_theta) * (x-iccX) + cos(delta_time.toSec()) * (y-iccY) + iccY - y;
   }
 
   ROS_DEBUG("delta_x = %f, delta_y = %f, delta_theta = %f", delta_x, delta_y, delta_theta);
@@ -73,6 +65,8 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& sensor_p
   y += delta_y;
   theta = (theta + delta_theta);
   theta = theta - std::floor(theta / (2 * M_PI)) * (2 * M_PI);
+
+  ROS_INFO("\nx     = %f\ny     = %f\ntheta = %f", x, y, theta);
 
   last_left = new_left;
   last_right = new_right;
@@ -90,7 +84,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "odometry");
   ros::NodeHandle n;
 
-  if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+  if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
     ros::console::notifyLoggerLevelsChanged();
   }
 
