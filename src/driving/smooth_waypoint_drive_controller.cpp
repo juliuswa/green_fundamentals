@@ -1,7 +1,7 @@
 #include "ros/ros.h"
 #include <boost/bind.hpp>
 #include <cmath>
-#include "Eigen/Dense"
+#include "../Eigen/Dense"
 
 #include "green_fundamentals/DriveToWaypoints.h"
 #include "green_fundamentals/Velocities.h"
