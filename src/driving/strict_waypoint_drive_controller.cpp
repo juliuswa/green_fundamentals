@@ -1,6 +1,8 @@
 #include "ros/ros.h"
 #include <boost/bind.hpp>
 #include <cmath>
+#include <deque>
+
 #include "../Eigen/Dense"
 
 #include "green_fundamentals/DriveToWaypoints.h"
@@ -9,8 +11,8 @@
 
 bool is_waypoints_set = false;
 
-std::vector<Eigen::Vector2f> waypoints;
-std::vector<Eigen::Vector2f> obstacles;
+std::deque<Eigen::Vector2f> waypoints;
+std::deque<Eigen::Vector2f> obstacles;
 
 Eigen::Vector2f current_goal;
 
@@ -28,7 +30,7 @@ float current_theta;
 bool service_call(green_fundamentals::DriveToWaypoints::Request& req, green_fundamentals::DriveToWaypoints::Response& res)
 {
     if (is_waypoints_set) {
-        res.success = false
+        res.success = false;
         return false;
     }
 
@@ -54,6 +56,7 @@ bool service_call(green_fundamentals::DriveToWaypoints::Request& req, green_fund
 
     is_waypoints_set = true;
 
+    res.success = true;
     return true;
 }
 
@@ -72,9 +75,9 @@ int main(int argc, char **argv)
     ros::console::notifyLoggerLevelsChanged();
   }
 
-  ros::ServiceServer service = n.advertiseService<green_fundamentals::DriveToWaypoints>("drive_to_waypoints", service_call);
+  ros::ServiceServer service = n.advertiseService("drive_to_waypoints", service_call);
   ros::Publisher cmd_pub = n.advertise<green_fundamentals::Velocities>("cmd_vel", 1);
-  ros::Subscriber sub = n.subscribe("odometry", 1, callback);
+  ros::Subscriber sub = n.subscribe("odometry", 1, odometry_call);
 
   green_fundamentals::Velocities msg;
 
@@ -87,7 +90,7 @@ int main(int argc, char **argv)
         float dist_error = (current_goal - current_p).norm();
         float theta_goal = atan2((current_goal - current_p)[1],(current_goal - current_p)[0]);
         float theta_error = theta_goal - current_theta;
-        theta_error = atan2(sin(theta_error), cos(theta_error)) // Limits the error to (-pi, pi)
+        theta_error = atan2(sin(theta_error), cos(theta_error)); // Limits the error to (-pi, pi)
         
         float P = KP * theta_error;
         I_err += KI * theta_error;
@@ -96,7 +99,8 @@ int main(int argc, char **argv)
 
         if (state == "Wait") {
             if (waypoints.size() > 0) {
-                current_goal = waypoints.pop_front();
+                current_goal = waypoints.front();
+                waypoints.pop_front();
                 state = "Turn";
             } else {
                 is_waypoints_set = false;
@@ -127,7 +131,7 @@ int main(int argc, char **argv)
                 cmd_pub.publish(msg);
             }
             else {
-                msg.v = max(0.2, KP * dist_error);
+                msg.v = std::max(0.2, (double)KP * dist_error);
                 msg.w = P + D + I_err;
                 cmd_pub.publish(msg);
             }

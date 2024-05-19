@@ -16,16 +16,16 @@ void callback(const green_fundamentals::Velocities::ConstPtr& msg) {
     float leftVel = (2 * v - WHEEL_BASE * w) / (2 * WHEEL_RADIUS);
     float rightVel = (2 * v + WHEEL_BASE * w) / (2 * WHEEL_RADIUS);
 
-    if (fabs(leftVel) > MAX_VELOCITY or np.abs(rightVel) > MAX_VELOCITY)
+    if (fabs(leftVel) > MAX_VELOCITY || fabs(rightVel) > MAX_VELOCITY)
     {
-        float factor = MAX_VELOCITY/max(leftVel, rightVel);
+        float factor = MAX_VELOCITY/std::max(leftVel, rightVel);
         leftVel *= factor;
         rightVel *= factor;
     }
 
     srv.request.left = leftVel;
     srv.request.right = rightVel;
-    diffDrive.call(srv);
+    diff_drive_client.call(srv);
 }
 
 int main(int argc, char **argv)

@@ -30,7 +30,7 @@ Eigen::Vector2f potential_field()
     for (int i = 0; i < obstacles.size(); i++) {
         float dist = (obstacles[i] - current_p).norm();
         if (dist == 0) dist = 0.00001;
-        float repulsive_force = rep_weight/dist**2;
+        float repulsive_force = rep_weight/pow(dist, 2);
         force += repulsive_force * (current_p - obstacles[i]) / dist;
     }
 
@@ -54,7 +54,8 @@ Eigen::Vector2f bezier_curve(float t)
     Eigen::Vector2f b {0., 0.};
     for (int i = 0; i < waypoints.size(); i++){
         Eigen::Vector2f p = waypoints[i];
-        b += (binom(len(ps)-1, i) * pow(t, i) * pow(1-t, n-i)) * p;
+        int n = waypoints.size()-1;
+        b += (binom(n, i) * pow(t, i) * pow(1-t, n-i)) * p;
     }
     
     return b;
@@ -63,13 +64,13 @@ Eigen::Vector2f bezier_curve(float t)
 std::pair<Eigen::Vector2f, Eigen::Vector2f> trajectory(int t)
 {
     Eigen::Vector2f p = bezier_curve(t/T);
-    return {p, Eigen::Vector2f {0., 0.}}
+    return {p, Eigen::Vector2f {0., 0.}};
 }
 
 bool service_call(green_fundamentals::DriveToWaypoints::Request& req, green_fundamentals::DriveToWaypoints::Response& res)
 {
     if (is_waypoints_set) {
-        res.success = false
+        res.success = false;
         return false;
     }
 
@@ -95,6 +96,7 @@ bool service_call(green_fundamentals::DriveToWaypoints::Request& req, green_fund
 
     is_waypoints_set = true;
 
+    res.success = true;
     return true;
 }
 
@@ -113,9 +115,9 @@ int main(int argc, char **argv)
     ros::console::notifyLoggerLevelsChanged();
   }
 
-  ros::ServiceServer service = n.advertiseService<green_fundamentals::DriveToWaypoints>("drive_to_waypoints", service_call);
+  ros::ServiceServer service = n.advertiseService("drive_to_waypoints", service_call);
   ros::Publisher cmd_pub = n.advertise<green_fundamentals::Velocities>("cmd_vel", 1);
-  ros::Subscriber sub = n.subscribe("odometry", 1, callback);
+  ros::Subscriber sub = n.subscribe("odometry", 1, odometry_call);
 
   green_fundamentals::Velocities msg;
 
@@ -139,14 +141,14 @@ int main(int argc, char **argv)
             // Drive
             std::pair<Eigen::Vector2f, Eigen::Vector2f> goal = trajectory(counter);
 
-            p_err = goal.first - current_p;
+            Eigen::Vector2f p_err = goal.first - current_p;
 
             Eigen::Vector2f rep_forces = potential_field();
 
             goal.second += rep_forces;
 
-            msg.v = cos(current_theta)*(goal.second[0] + KX * err[0]) + sin(current_theta)*(goal.second[1] + KY * err[1]);
-            msg.w = -(1/a)*sin(current_theta)*(goal.second[0] + KX * err[0]) + (1/a)*cos(current_theta)*(goal.second[1] + KY * err[1]);
+            msg.v = cos(current_theta)*(goal.second[0] + KX * p_err[0]) + sin(current_theta)*(goal.second[1] + KY * p_err[1]);
+            msg.w = -(1/a)*sin(current_theta)*(goal.second[0] + KX * p_err[0]) + (1/a)*cos(current_theta)*(goal.second[1] + KY * p_err[1]);
 
             counter++;
             cmd_pub.publish(msg);
