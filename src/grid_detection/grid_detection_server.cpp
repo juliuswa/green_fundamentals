@@ -159,10 +159,6 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "grid_detection_server");
     ros::NodeHandle n;
 
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
-        ros::console::notifyLoggerLevelsChanged();
-    }
-
     ros::Subscriber sub = n.subscribe("scan_filtered", 1, get_measurements);
     ros::ServiceServer service = n.advertiseService("detect_grid", detect_grid);
 

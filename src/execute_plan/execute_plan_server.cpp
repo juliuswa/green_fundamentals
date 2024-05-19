@@ -48,22 +48,26 @@ void get_obstacles(Eigen::Vector2f target) {
     xs_obst.push_back(target[0] + left[0] * (cell_length / 2));
     ys_obst.push_back(target[1] + left[1] * (cell_length / 2));
 }
-
+/*RIGHT = 0
+int32 UP = 1
+int32 LEFT = 2
+int32 DOWN = 3*/
 void get_waypoint(Eigen::Vector2f target, int command) {
+    ROS_INFO("COMMAND %i", command);
     switch (command) {
-        case green_fundamentals::ExecutePlan::Request::UP:
+        case 1:
             target[0] += up[0] * cell_length;
             target[1] += up[1] * cell_length;
             break;
-        case green_fundamentals::ExecutePlan::Request::DOWN:
+        case 3:
             target[0] += down[0] * cell_length;
             target[1] += down[1] * cell_length;
             break;
-        case green_fundamentals::ExecutePlan::Request::RIGHT:
+        case 0:
             target[0] += right[0] * cell_length;
             target[1] += right[1] * cell_length;
             break;
-        case green_fundamentals::ExecutePlan::Request::LEFT:
+        case 2:
             target[0] += left[0] * cell_length;
             target[1] += left[1] * cell_length;
             break;
@@ -86,14 +90,14 @@ void detect_crash(const create_fundamentals::SensorPacket::ConstPtr& sensor_pack
     }
 }
 
-bool execute_plan(green_fundamentals::ExecutePlan::Request &req, green_fundamentals::ExecutePlan::Response &res) {
+bool execute_plan(green_fundamentals::ExecutePlan::Request& req, green_fundamentals::ExecutePlan::Response& res) {
     std::vector<int> plan = req.plan; 
-    int plan_size = sizeof(plan) / sizeof(int);
+    ROS_INFO("Plan Size %i", plan.size());
 
     green_fundamentals::DetectGrid detect_grid_srv;
     green_fundamentals::DriveToWaypoints drive_to_waypoints_srv;
 
-    for(int i = 0; i < plan_size; i++){
+    for(int i = 0; i < plan.size(); i++){
         if(obstacle_detected) return false;
 
         Eigen::Vector2f target {x_position, y_position};
@@ -102,7 +106,7 @@ bool execute_plan(green_fundamentals::ExecutePlan::Request &req, green_fundament
             target[0] += detect_grid_srv.response.x_offset;
             target[1] += detect_grid_srv.response.y_offset;
 
-            ROS_DEBUG("grid position: x_offset=%f, y_offset=%f, theta_offset=%f deg.", 
+            ROS_INFO("grid position: x_offset=%f, y_offset=%f, theta_offset=%f deg.", 
             detect_grid_srv.response.x_offset, 
             detect_grid_srv.response.y_offset, 
             detect_grid_srv.response.theta_offset * 180 / M_PI);
@@ -116,20 +120,6 @@ bool execute_plan(green_fundamentals::ExecutePlan::Request &req, green_fundament
 
         get_waypoint(target, plan[i]);
         get_obstacles(target);
-
-        // drive_to_srv.request.x_target = target.x;
-        // drive_to_srv.request.y_target = target.y;
-        // drive_to_srv.request.rotate = false;
-        // drive_to_srv.request.theta_target = 0;
-
-        // ROS_INFO("Calling drive_to with (%f, %f, %d, %f)", x, y, rotate, theta);
-
-        // // TODO nicht gegen Wand
-
-        // if (!driving_service.call(drive_to_srv))
-        // {
-        //     ROS_ERROR("failed to call driver_service");
-        // }
     }
 
     if(obstacle_detected) return false;
@@ -151,10 +141,6 @@ int main(int argc, char **argv)
 {  
     ros::init(argc, argv, "execute_plan_server");
     ros::NodeHandle n;
-
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
-        ros::console::notifyLoggerLevelsChanged();
-    }
 
     ros::ServiceServer service = n.advertiseService("execute_plan", execute_plan);
     grid_detection_service = n.serviceClient<green_fundamentals::DetectGrid>("detect_grid");

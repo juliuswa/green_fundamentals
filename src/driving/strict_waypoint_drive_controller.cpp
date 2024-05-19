@@ -17,8 +17,8 @@ std::deque<Eigen::Vector2f> obstacles;
 Eigen::Vector2f current_goal;
 
 float KP = 1.;
-float KD = 1.;
-float KI = 1.;
+float KD = 0.1;
+float KI = 0.0;
 float I_err = 0.;
 float err_prev = 0.;
 
@@ -29,6 +29,7 @@ float current_theta;
 
 bool service_call(green_fundamentals::DriveToWaypoints::Request& req, green_fundamentals::DriveToWaypoints::Response& res)
 {
+    ROS_INFO("Received Call");
     if (is_waypoints_set) {
         res.success = false;
         return false;
@@ -57,12 +58,13 @@ bool service_call(green_fundamentals::DriveToWaypoints::Request& req, green_fund
     is_waypoints_set = true;
 
     res.success = true;
+    ROS_INFO("New waypoints set");
     return true;
 }
 
 void odometry_call(const green_fundamentals::Position::ConstPtr& position) {
     current_p[0] = position->x;
-    current_p[0]= position->y;
+    current_p[1]= position->y;
     current_theta = position->theta;
 }
 
@@ -97,7 +99,10 @@ int main(int argc, char **argv)
         float D = KD * (theta_error - err_prev);
         err_prev = theta_error;
 
+        ROS_INFO("Current Goal (%f, %f) Current Position (%f, %f)", current_goal[0], current_goal[1], current_p[0], current_p[1]);
+
         if (state == "Wait") {
+            ROS_INFO("State = Wait");
             if (waypoints.size() > 0) {
                 current_goal = waypoints.front();
                 waypoints.pop_front();
@@ -112,7 +117,8 @@ int main(int argc, char **argv)
             cmd_pub.publish(msg);
         }
         else if (state == "Turn") {
-            if (fabs(theta_error) < 0.05) {
+            ROS_INFO("State = Turn, theta error=%f", fabs(theta_error));
+            if (fabs(theta_error) < 0.15) {
                 state = "Drive";
                 msg.v = 0;
                 msg.w = 0;
@@ -124,14 +130,15 @@ int main(int argc, char **argv)
             }
         }
         else if (state == "Drive") {
-            if (dist_error < 0.05) {
+            ROS_INFO("State = Drive dist_error=%f", dist_error);
+            if (dist_error < 0.1) {
                 state = "Wait";
                 msg.v = 0;
                 msg.w = 0;
                 cmd_pub.publish(msg);
             }
             else {
-                msg.v = std::max(0.2, (double)KP * dist_error);
+                msg.v = KP * dist_error;
                 msg.w = P + D + I_err;
                 cmd_pub.publish(msg);
             }

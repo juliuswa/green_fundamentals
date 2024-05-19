@@ -23,6 +23,8 @@ float current_theta;
 
 int counter = 0;
 
+std::string state = "Turn";
+
 Eigen::Vector2f potential_field()
 {
     Eigen::Vector2f force {0., 0.};
@@ -73,6 +75,8 @@ bool service_call(green_fundamentals::DriveToWaypoints::Request& req, green_fund
         res.success = false;
         return false;
     }
+
+    waypoints.push_back(current_p);
 
     // Set Waypoints
     for(int i = 0; i < req.xs.size(); i++) {
@@ -126,32 +130,52 @@ int main(int argc, char **argv)
   while (ros::ok())
   {
     if (is_waypoints_set)
-    {
-        // Check if last point is reached
-        float dist = (waypoints[waypoints.size()-1] - current_p).norm();
-        if (dist < 0.05) {
-            msg.v = 0;
-            msg.w = 0;
-            cmd_pub.publish(msg);
-            is_waypoints_set = false;
-            waypoints.clear();
-            obstacles.clear();
-        }
-        else {
-            // Drive
+    {   
+        if (state == "Turn") {
             std::pair<Eigen::Vector2f, Eigen::Vector2f> goal = trajectory(counter);
+            float theta_goal = atan2((goal.first - current_p)[1],(goal.first - current_p)[0]);
+            float theta_error = theta_goal - current_theta;
+            theta_error = atan2(sin(theta_error), cos(theta_error));
 
-            Eigen::Vector2f p_err = goal.first - current_p;
+            ROS_INFO("State = Turn");
+            if (fabs(theta_error) < 0.05) {
+                state = "Drive";
+                msg.v = 0;
+                msg.w = 0;
+                cmd_pub.publish(msg);
+            } else {
+                msg.v = 0;
+                msg.w = theta_error * 0.5;
+                cmd_pub.publish(msg);
+            }
+        } else {
+            ROS_INFO("State = Drive");
+            // Check if last point is reached
+            float dist = (waypoints[waypoints.size()-1] - current_p).norm();
+            if (dist < 0.05) {
+                msg.v = 0;
+                msg.w = 0;
+                cmd_pub.publish(msg);
+                is_waypoints_set = false;
+                waypoints.clear();
+                obstacles.clear();
+            }
+            else {
+                // Drive
+                std::pair<Eigen::Vector2f, Eigen::Vector2f> goal = trajectory(counter);
 
-            Eigen::Vector2f rep_forces = potential_field();
+                Eigen::Vector2f p_err = goal.first - current_p;
 
-            goal.second += rep_forces;
+                Eigen::Vector2f rep_forces = potential_field();
 
-            msg.v = cos(current_theta)*(goal.second[0] + KX * p_err[0]) + sin(current_theta)*(goal.second[1] + KY * p_err[1]);
-            msg.w = -(1/a)*sin(current_theta)*(goal.second[0] + KX * p_err[0]) + (1/a)*cos(current_theta)*(goal.second[1] + KY * p_err[1]);
+                goal.second += rep_forces;
 
-            counter++;
-            cmd_pub.publish(msg);
+                msg.v = cos(current_theta)*(goal.second[0] + KX * p_err[0]) + sin(current_theta)*(goal.second[1] + KY * p_err[1]);
+                msg.w = -(1/a)*sin(current_theta)*(goal.second[0] + KX * p_err[0]) + (1/a)*cos(current_theta)*(goal.second[1] + KY * p_err[1]);
+
+                counter++;
+                cmd_pub.publish(msg);
+            }
         }
     }
 

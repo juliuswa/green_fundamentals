@@ -35,7 +35,7 @@ void call_drive_to_service(float x, float y, float theta, bool rotate) {
 
     if (!driving_service.call(drive_to_srv))
     {
-        ROS_ERROR("failed to call driver_service");
+        ROS_INFO("failed to call driver_service");
     }
 }
 
@@ -43,10 +43,6 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "align");
     ros::NodeHandle n;
-
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
-        ros::console::notifyLoggerLevelsChanged();
-    }
 
     ros::Subscriber odometry_sub = n.subscribe("odometry", 1, update_position);
     ros::ServiceClient grid_detection_service = n.serviceClient<green_fundamentals::DetectGrid>("detect_grid");
@@ -61,7 +57,7 @@ int main(int argc, char **argv)
 
         if (!grid_detection_service.call(detect_grid_srv))
         {
-            ROS_ERROR("detecting grid failed.");    
+            ROS_INFO("detecting grid failed.");    
 
             float new_theta = theta_position + M_PI / 2;
             new_theta = new_theta - floor(new_theta / M_PI * 2) *  M_PI * 2;

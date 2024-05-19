@@ -33,9 +33,6 @@ int main(int argc, char **argv) {
     Driver driver(n);
     ros::Subscriber sensorSub = n.subscribe("sensor_packet", 1, &Driver::calculate_wheel_speeds, &driver);
 
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
-        ros::console::notifyLoggerLevelsChanged();
-    }
 
     create_fundamentals::ResetEncoders srv;
     encoder_client.call(srv);
