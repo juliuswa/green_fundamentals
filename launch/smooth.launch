@@ -1,0 +1,18 @@
+<launch>
+
+    <node pkg="green_fundamentals" name="odometry_node" type="odometry"/>
+
+    <node pkg="green_fundamentals" name="grid_detection_server" type="grid_detection_server"/>
+
+    <node pkg="green_fundamentals" name="driving_for_alignment" type="driving_server"/>
+
+    <node pkg="green_fundamentals" name="align_node" type="align"/>
+
+    <node pkg="green_fundamentals" name="cmd_vel_node" type="cmd_vel"/>
+
+    <node pkg="green_fundamentals" name="smooth_controller_node" type="smooth_controller"/>
+
+    <node pkg="green_fundamentals" name="execute_plan_node" type="execute_plan"/>
+  
+  </launch>
+  

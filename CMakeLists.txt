@@ -37,13 +37,14 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 #uncomment if you have defined messages
-add_message_files(FILES Position.msg
+add_message_files(FILES Position.msg Velocities.msg
 )
 #uncomment if you have defined services
 add_service_files(
   FILES
   DetectGrid.srv
   DriveTo.srv
+  DriveToWaypoints.srv
 )
 
 #common commands for building c++ executables and libraries
@@ -97,19 +98,31 @@ include_directories(include ${catkin_INCLUDE_DIRS})
 
 add_executable(odometry src/odometry/odometry.cpp)
 target_link_libraries(odometry ${catkin_LIBRARIES})
-add_dependencies(odometry create_fundamentals_generate_messages_cpp)
+add_dependencies(odometry create_fundamentals_generate_messages_cpp) #${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
 add_executable(grid_detection_server src/grid_detection/grid_detection_server.cpp src/classes/line.cpp)
 target_link_libraries(grid_detection_server ${catkin_LIBRARIES})
-add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp)
+add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
 add_executable(driving_server src/driving/driving_server.cpp)
 target_link_libraries(driving_server ${catkin_LIBRARIES})
-add_dependencies(driving_server create_fundamentals_generate_messages_cpp)
+add_dependencies(driving_server create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
 add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})
-add_dependencies(align create_fundamentals_generate_messages_cpp)
+add_dependencies(align create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+
+add_executable(cmd_vel src/driving/cmd_vel.cpp)
+target_link_libraries(cmd_vel ${catkin_LIBRARIES})
+add_dependencies(cmd_vel create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+
+add_executable(smooth_controller src/driving/smooth_waypoint_drive_controller.cpp)
+target_link_libraries(smooth_controller ${catkin_LIBRARIES})
+add_dependencies(smooth_controller create_fundamentals_generate_messages_cpp )#${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+
+add_executable(strict_controller src/driving/strict_waypoint_drive_controller.cpp)
+target_link_libraries(strict_controller ${catkin_LIBRARIES})
+add_dependencies(strict_controller create_fundamentals_generate_messages_cpp )#${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
 ## Test files 
 #add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
