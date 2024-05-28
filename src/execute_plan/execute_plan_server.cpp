@@ -92,7 +92,7 @@ void detect_crash(const create_fundamentals::SensorPacket::ConstPtr& sensor_pack
 
 bool execute_plan(green_fundamentals::ExecutePlan::Request& req, green_fundamentals::ExecutePlan::Response& res) {
     std::vector<int> plan = req.plan; 
-    ROS_INFO("Plan Size %i", plan.size());
+    ROS_INFO("Plan Size %li", plan.size());
 
     green_fundamentals::DetectGrid detect_grid_srv;
     green_fundamentals::DriveToWaypoints drive_to_waypoints_srv;
