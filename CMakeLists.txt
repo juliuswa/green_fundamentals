@@ -42,6 +42,7 @@ add_message_files(FILES
   Velocities.msg 
   Vector2f.msg
   LaserCoordinates.msg
+  Obstacle.msg
 )
 #uncomment if you have defined services
 add_service_files(
