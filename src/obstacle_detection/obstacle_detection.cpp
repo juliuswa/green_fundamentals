@@ -16,7 +16,7 @@ void detect_obstacle(const green_fundamentals::LaserCoordinates::ConstPtr& coord
     msg.front = false;
     msg.right = false;
 
-    for(Vector2f point : coordidinates) {
+    for(green_fundamentals::Vector2f point : coordinates->coordinates) {
         float dist = std::sqrt(pow(point.x, 2) + pow(point.y, 2));
 
         if(point.y > robot_radius) {
@@ -24,7 +24,7 @@ void detect_obstacle(const green_fundamentals::LaserCoordinates::ConstPtr& coord
             msg.left = dist < (robot_radius + allowed_distance / 2) ? true : msg.left;
         } else if(point.y < -robot_radius) {
             // right
-            msg.rigt = dist < (robot_radius + allowed_distance / 2) ? true : msg.right;
+            msg.right = dist < (robot_radius + allowed_distance / 2) ? true : msg.right;
         } else {  
             // front
             msg.front = dist < (robot_radius + allowed_distance) ? true : msg.front;
@@ -33,7 +33,6 @@ void detect_obstacle(const green_fundamentals::LaserCoordinates::ConstPtr& coord
         ROS_DEBUG("left: %d, front: %d, rigt: %d", msg.left, msg.front, msg.right);
     }
     
-
     obstacle_pub.publish(msg);
 }
 

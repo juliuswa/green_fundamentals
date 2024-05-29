@@ -138,6 +138,10 @@ add_executable(calculate_laser_coordinates src/obstacle_detection/calculate_lase
 target_link_libraries(calculate_laser_coordinates ${catkin_LIBRARIES})
 add_dependencies(calculate_laser_coordinates create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
+add_executable(obstacle_detection src/obstacle_detection/obstacle_detection.cpp)
+target_link_libraries(obstacle_detection ${catkin_LIBRARIES})
+add_dependencies(obstacle_detection create_fundamentals_generate_messages_cpp)
+
 ## Test files 
 #add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
 #target_link_libraries(test-ransac ${catkin_LIBRARIES} gtest gtest_main)
