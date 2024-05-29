@@ -33,8 +33,7 @@ void detect_obstacle(const green_fundamentals::LaserCoordinates::ConstPtr& coord
     msg.left = left;
     msg.front = front;
     msg.right = right;
-    ROS_INFO("-------------------------------------");
-    ROS_INFO("left: %d, front: %d, rigt: %d", msg.left, msg.front, msg.right);
+    ROS_DEBUG("left: %d, front: %d, rigt: %d", msg.left, msg.front, msg.right);
     obstacle_pub.publish(msg);
 }
 
@@ -46,6 +45,7 @@ int main(int argc, char **argv)
     ros::Subscriber coordinates_sub = n.subscribe("laser_coordinates", 1, detect_obstacle);
     obstacle_pub = n.advertise<green_fundamentals::Obstacle>("obstacle", 1);
 
+    ROS_INFO("Ready to obstacle_detection");
     ros::spin();
 
     return 0;
