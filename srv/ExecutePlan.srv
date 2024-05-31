@@ -6,5 +6,6 @@ int32 DOWN = 3
 # a plan is a sequence of actions
 int32[] plan
 ---
-# return whether plan could be executed successfully
+# return whether plan could be executed successfully and an array of the coordinates
 bool success
+Vector2f[] points
