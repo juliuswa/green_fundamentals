@@ -1,0 +1,19 @@
+<launch>
+
+    <!-- Robot Driver -->
+    <node pkg="create_fundamentals" type="driver.py" name="robot driver" output="screen" />
+
+    <!-- Laser Driver -->
+    <include file="$(find create_fundamentals)/laser.launch"/>
+
+    <!-- Node to run publish_map.py -->
+    <node pkg="green_fundamentals" type="publish_map.py" name="publish_map_node" output="screen" />
+
+    <!-- Node to run grid_to_map -->
+    <node pkg="green_fundamentals" type="grid_to_map" name="grid_to_map_node" output="screen" />
+
+    <!-- Node to run monte carlo localization -->
+    <node pkg="green_fundamentals" type="mc_localization" name="localization_node" output="screen" />
+
+    
+</launch>

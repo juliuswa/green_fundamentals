@@ -6,7 +6,6 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
-
 #include "robot_constants.h"
 
 #include "nav_msgs/OccupancyGrid.h"

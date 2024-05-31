@@ -125,7 +125,6 @@ add_dependencies(obstacle_detection create_fundamentals_generate_messages_cpp)
 #add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
 #target_link_libraries(test-ransac ${catkin_LIBRARIES} gtest gtest_main)
 
-
 add_executable(grid_to_map src/occupancy_map.cpp)
 target_link_libraries(grid_to_map ${catkin_LIBRARIES})
 add_dependencies(grid_to_map create_fundamentals_generate_messages_cpp)
