@@ -3,11 +3,16 @@
 #include <cmath>
 #include <random>
 #include "Eigen/Dense"
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
 
 #include "robot_constants.h"
 
 #include "nav_msgs/OccupancyGrid.h"
 #include "sensor_msgs/LaserScan.h"
+#include "visualization_msgs/Marker.h"
+#include "visualization_msgs/MarkerArray.h"
 #include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
 
@@ -58,6 +63,8 @@ const Eigen::Vector2f laser_offset{0.13, 0.};
 
 Particle particles[NUM_PARTICLES];
 
+ros::Publisher marker_pub, markerarray_pub;
+
 std::pair<int, int> metric_to_grid_index(float x, float y) 
 {
     int gx = x / 0.01;
@@ -66,7 +73,6 @@ std::pair<int, int> metric_to_grid_index(float x, float y)
     int col = std::min(std::max(gx, 0), map_width);
     return {row, col};
 }
-
 
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 {
@@ -227,7 +233,7 @@ void resample_particles()
         new_particles[i].position[1] += normal_dist(generator);
         new_particles[i].theta += normal_dist_theta(generator);
     }
-    
+
     std::copy(new_particles, new_particles + sizeof(Particle) * NUM_PARTICLES, particles);
     
 }
@@ -244,12 +250,70 @@ Eigen::Vector2f rotate_vector(const Eigen::Vector2f& vec, float angle)
     return rotationMatrix * vec;
 }
 
+visualization_msgs::Marker particle_to_marker(int particle_index, bool is_best)
+{
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time();
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::ARROW;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.lifetime = ros::Duration(1);
+
+    marker.pose.position.x = particles[particle_index].position[0];
+    marker.pose.position.y = particles[particle_index].position[1];
+    marker.pose.position.z = 0.;
+
+    tf2::Quaternion quaternion;
+    quaternion.setRPY(0, 0, particles[particle_index].theta);
+    marker.pose.orientation.x = quaternion.x();
+    marker.pose.orientation.y = quaternion.y();
+    marker.pose.orientation.z = quaternion.z();
+    marker.pose.orientation.w = quaternion.w();
+
+    marker.scale.x = is_best ? 0.1 : 0.05;
+    marker.scale.y = is_best ? 0.1 : 0.05;
+    marker.scale.z = is_best ? 0.1 : 0.05;
+
+    marker.color.a = 1.0; // Don't forget to set the alpha!
+    marker.color.r = is_best ? 0. : 1.0 - particles[particle_index].weight;
+    marker.color.g = is_best ? 0. : particles[particle_index].weight;
+    marker.color.b = is_best ? 1. : 0.0;
+
+    return marker;
+}
+
+void publish_particles()
+{
+    // Find best particle
+    float max_weight = 0.;
+    int index = -1;
+    for (int i = 0; i < NUM_PARTICLES; i++)
+    {
+        if (particles[i].weight > max_weight)
+        {
+            max_weight = particles[i].weight;
+            index = i;
+        }
+    }
+
+    marker_pub.publish(particle_to_marker(index, true));
+
+    visualization_msgs::MarkerArray marker_array;
+
+    for (int i = 0; i < NUM_PARTICLES; i++)
+    {
+        marker_array.markers.push_back(particle_to_marker(i, false));
+    }
+    
+    markerarray_pub.publish(marker_array);
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "mc_localization");
     ros::NodeHandle n;
-
-    //ros::Publisher map_pub = n.advertise<nav_msgs::OccupancyGrid>("map", 1);
+    
     map_sub = n.subscribe("grid_map", 1, map_callback);
 
     ROS_INFO("Starting Node");
@@ -259,7 +323,8 @@ int main(int argc, char **argv)
     ros::Subscriber odo_sub = n.subscribe("sensor_packet", 1, sensor_callback);
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
-    // publish positions
+    marker_pub = n.advertise<visualization_msgs::Marker>("marker", 1);
+    markerarray_pub = n.advertise<visualization_msgs::MarkerArray>("marker_array", 1);
 
     ros::Rate loop_rate(10);  // Hz
     while (ros::ok())
@@ -273,9 +338,10 @@ int main(int argc, char **argv)
         // Predict particle laser scan, compute error and adjust weight
         evaluate_particles();
 
+        publish_particles();
+
         // resample new particles
         resample_particles();
-
         
         loop_rate.sleep();
     }
