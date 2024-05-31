@@ -109,11 +109,7 @@ bool set_target_position(green_fundamentals::DriveTo::Request  &req, green_funda
     y_target = req.y_target;
     rotate = req.rotate;
 
-    float raw_theta = req.theta_target;
-
-    while (raw_theta < 0.0) { // Make positive
-        raw_theta = raw_theta + 2 * M_PI;
-    }
+    float raw_theta = req.theta_target - floor(req.theta_target / (2 * M_PI)) * (2 * M_PI)
 
     raw_theta = raw_theta - floor(raw_theta / (2.0 * M_PI)) * 2 * M_PI;  // modulo 2 pi
     //ROS_INFO("mod raw_theta=%f", raw_theta);
