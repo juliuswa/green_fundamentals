@@ -7,4 +7,6 @@ int32 DOWN = 3
 int32[] plan
 ---
 # return whether plan could be executed successfully
-bool success
+# bool success
+# return an array of the coordinates
+Vector2f[] points
