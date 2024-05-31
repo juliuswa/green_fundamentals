@@ -79,15 +79,17 @@ void drive_to_target(const green_fundamentals::Position::ConstPtr& position)
     else if (rotate) {
         ROS_INFO("rotating.");
 
-        float angle = theta_target - position->theta;
+        float total_angle = theta_target - position->theta;  
+        ROS_DEBUG("total_angle %f", total_angle);      
 
-        float rotation = fmod(angle + M_PI, 2 * M_PI) - M_PI;
+        float rotation = fmod(total_angle + M_PI, 2 * M_PI) - M_PI;
+        ROS_DEBUG("rotation %f", rotation);
 
-        if (rotation > 0.3) {
+        if (rotation > 0.2) {
             WheelCommand command = {-max_speed, max_speed};
             drive(command);
         }
-        else if (rotation < -0.3) {
+        else if (rotation < -0.2) {
             WheelCommand command = {max_speed, -max_speed};
             drive(command);
         }
@@ -111,13 +113,9 @@ bool set_target_position(green_fundamentals::DriveTo::Request  &req, green_funda
     y_target = req.y_target;
     rotate = req.rotate;
 
-    float raw_theta = req.theta_target - floor(req.theta_target / (2 * M_PI)) * (2 * M_PI)
+    theta_target = req.theta_target - floor(req.theta_target / (2 * M_PI)) * (2 * M_PI);
 
-    raw_theta = raw_theta - floor(raw_theta / (2.0 * M_PI)) * 2 * M_PI;  // modulo 2 pi
-    //ROS_INFO("mod raw_theta=%f", raw_theta);
-
-    theta_target = raw_theta;
-    //ROS_INFO("theta_target=%f", theta_target);
+    ROS_DEBUG("theta_target=%f", theta_target);
 
     is_target_set = true;
     return true;
