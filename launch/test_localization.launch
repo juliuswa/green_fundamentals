@@ -1,7 +1,7 @@
 <launch>
 
     <!-- Robot Driver -->
-    <node pkg="create_fundamentals" type="driver.py" name="robot driver" output="screen" />
+    <node pkg="create_fundamentals" type="driver.py" name="robot_driver" output="screen" />
 
     <!-- Laser Driver -->
     <include file="$(find create_fundamentals)/laser.launch"/>
