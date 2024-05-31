@@ -81,11 +81,13 @@ void drive_to_target(const green_fundamentals::Position::ConstPtr& position)
 
         float angle = theta_target - position->theta;
 
-        if (angle > 0.3) {
+        float rotation = fmod(angle + M_PI, 2 * M_PI) - M_PI;
+
+        if (rotation > 0.3) {
             WheelCommand command = {-max_speed, max_speed};
             drive(command);
         }
-        else if (angle < -0.3) {
+        else if (rotation < -0.3) {
             WheelCommand command = {max_speed, -max_speed};
             drive(command);
         }
