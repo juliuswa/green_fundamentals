@@ -1,8 +1,0 @@
-<launch>
-
-    <node pkg="green_fundamentals" name="odometry_node" type="odometry"/> 
-
-    <node pkg="green_fundamentals" name="cmd_vel_node" type="cmd_vel"/>
-  
-  </launch>
-  
