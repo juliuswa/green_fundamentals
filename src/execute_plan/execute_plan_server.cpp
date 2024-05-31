@@ -7,9 +7,11 @@
 bool drive_path(green_fundamentals::ExecutePlan::Request& req, green_fundamentals::ExecutePlan::Response& res) {
     std::vector<int> plan = req.plan; 
     ROS_INFO("Plan Size %li", plan.size());
+
     green_fundamentals::Vector2f target_old;
     target_old.x = 0;
     target_old.y = 0;
+    res.success = true;
 
     for(int i = 0; i < plan.size(); i++){
         green_fundamentals::Vector2f target;
@@ -33,14 +35,15 @@ bool drive_path(green_fundamentals::ExecutePlan::Request& req, green_fundamental
                 target.y = target_old.y;
                 break;
             default:
+                res.success = false;
                 ROS_ERROR("invalid command in plan");
                 break;
         }
-        rep.points.push_back(target);
+        res.points.push_back(target);
         target_old.x = target.x;
         target_old.y = target.y;
     }
-    return;
+    return res.success;
 }
 
 int main(int argc, char **argv)
