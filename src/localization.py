@@ -97,32 +97,25 @@ class ParticleFilter(object):
     def handle_observation(self, laser_scan, dt):
         """Does prediction, weight update, and resampling."""
 
-        # TODO: for every particle
+        # for every particle
         # 1) Predict its relative motion since the last time an observation was received using
         # predict_particle_odometry().
         # 2) Compute the squared norm of the difference between the particle's predicted laser scan
         # and the actual laser scan
 
-        # TODO: exponentiate the prediction errors you computed above
+        # exponentiate the prediction errors you computed above
         # using numerical stability tricks such as
         # http://timvieira.github.io/blog/post/2014/02/11/exp-normalize-trick/
         # if you think it is necessary
 
         errors = []
-        #self.weights = [0] * len(self.particles)
         for particle in self.particles:
             self.predict_particle_odometry(particle)
             #for each particle, compute the laser scan difference
             error = self.get_prediction_error_squared(laser_scan, particle)
-            #sig_error = self.sigmoid(error)
             errors.append(error)
-            #self.weights.append(exp(-error))
 
         self.weights = [exp(-error) for error in errors]
-        weight_sum = sum(self.weights)
-        N_eff = 0
-        #N_eff = sum([1 / ((weight / weight_sum) ** 2) for weight in self.weights])
-        #print "effective sample size", N_eff
 
         # Do resampling. Depending on how you implement it you might
         # or might not need to normalize your weights by their sum, so
@@ -133,39 +126,17 @@ class ParticleFilter(object):
         # get the partice id among the survived particles after resampling
         new_particles = []
         self.resample(new_particles)
-        #particle_indexes = self.resample(new_particles)
-        #remove duplicates
-        """
-        N_eff_id = set(particle_indexes)
-        print "N_eff_id",[id for id in N_eff_id]
-        #effective sample size based on particle's contribution
-        N_eff_size = len(N_eff_id)
-        #print "N_eff_size", N_eff_size
-        """
 
         # approach 2: calculate the effective sample size by weight
         sig_weight = [self.sigmoid(error) for error in errors]
         N_eff_weight = sum([1 / (weight ** 2) for weight in sig_weight])
-        #print "N_eff_weight", N_eff_weight
 
         N_eff = N_eff_weight
-        #N_eff = N_eff_size
 
         # address particle deprivation
         # 1. resample only when N_eff > N_thresh
         if N_eff > 50:
             self.particles = new_particles
-
-        #print [particle.id for particle in self.particles]
-        #print "weight", self.weights
-
-    def divide_up(self, id, particle, num, particle_list):
-        for i in xrange(int(num)):
-            xrand = np.random.uniform(particle.x*-0.5, particle.x*0.5)
-            yrand = np.random.uniform(particle.y*-0.5, particle.y*0.5)
-            theta = np.random.uniform(particle.theta*-0.5, particle.theta*0.5)
-            particle_list.append(Particle(id, xrand, yrand, theta))
-            id += 1
 
     def sigmoid(self, x):
         """Numerically-stable sigmoid function."""
@@ -185,7 +156,6 @@ class ParticleFilter(object):
         # can be done with repetition/replacement, so
         # you can sample the same particle more than once.
 
-        #particle_indexes = []
         sample_u = np.random.uniform(0,1)
         index = int(sample_u * (self.num_particles - 1))
         beta = 0.0
@@ -193,8 +163,6 @@ class ParticleFilter(object):
             self.weights = [1] * self.num_particles
             print self.weights
         max_w = max(self.weights)
-        #print "max_w", max_w
-        #print "weight", self.weights
         for particle in self.particles:
             beta += np.random.uniform(0,1) * 2.0 * max_w
             while beta > self.weights[index]:
@@ -202,11 +170,7 @@ class ParticleFilter(object):
                 index = (index + 1) % self.num_particles
 
             particle = self.particles[index]
-            #particle_indexes.append(particle.id)
             new_particles.append(Particle(particle.id, particle.x, particle.y, particle.theta))
-
-        #self.particles = new_particles
-        #return particle_indexes
 
     def simulate_laser_scan_for_particle(self, x, y, yaw_in_map, angles, min_range, max_range):
         """If the robot was at the given particle, what would its laser scan
