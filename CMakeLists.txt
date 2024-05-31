@@ -7,7 +7,9 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp 
   rospy 
   std_msgs
-  sensor_msgs 
+  sensor_msgs
+  nav_msgs
+  geometry_msgs 
   create_fundamentals 
   message_generation
 )
@@ -37,7 +39,13 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 #uncomment if you have defined messages
-add_message_files(FILES Position.msg Velocities.msg
+add_message_files(
+  FILES 
+  Cell.msg
+  Grid.msg
+  Pose.msg
+  Row.msg
+  Position.msg
 )
 #uncomment if you have defined services
 add_service_files(
@@ -66,78 +74,39 @@ add_service_files(
 generate_messages(
    DEPENDENCIES 
    std_msgs 
+   sensor_msgs 
+   nav_msgs 
+   geometry_msgs
    create_fundamentals
 )
 
-# catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
 catkin_package(
     DEPENDS python-serial
-    CATKIN_DEPENDS roscpp rospy sensor_msgs nav_msgs create_fundamentals message_runtime
+    CATKIN_DEPENDS roscpp rospy sensor_msgs nav_msgs geometry_msgs create_fundamentals message_runtime
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-# add_executable(example_laser src/example_laser.cpp)
-# target_link_libraries(example_laser ${catkin_LIBRARIES})
-# add_dependencies(example_laser create_fundamentals_generate_messages_cpp)
-
-# add_executable(example_moving src/example_moving.cpp)
-# target_link_libraries(example_moving ${catkin_LIBRARIES})
-# add_dependencies(example_moving create_fundamentals_generate_messages_cpp)
-
-# add_executable(wanderer src/wanderer.cpp)
-# target_link_libraries(wanderer ${catkin_LIBRARIES})
-# add_dependencies(wanderer create_fundamentals_generate_messages_cpp)
-
-# add_executable(square_no_sensors src/square_no_sensors.cpp)
-# target_link_libraries(square_no_sensors ${catkin_LIBRARIES})
-# add_dependencies(square_no_sensors create_fundamentals_generate_messages_cpp)
-
-# add_executable(square_with_encoders src/square_with_encoders.cpp src/classes/driver.cpp)
-# target_link_libraries(square_with_encoders ${catkin_LIBRARIES})
-# add_dependencies(square_with_encoders create_fundamentals_generate_messages_cpp)
-
 add_executable(odometry src/odometry/odometry.cpp)
 target_link_libraries(odometry ${catkin_LIBRARIES})
-add_dependencies(odometry create_fundamentals_generate_messages_cpp) #${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(odometry create_fundamentals_generate_messages_cpp)
 
 add_executable(grid_detection_server src/grid_detection/grid_detection_server.cpp src/classes/line.cpp)
 target_link_libraries(grid_detection_server ${catkin_LIBRARIES})
-add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp)
 
 add_executable(driving_server src/driving/driving_server.cpp)
 target_link_libraries(driving_server ${catkin_LIBRARIES})
-add_dependencies(driving_server create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(driving_server create_fundamentals_generate_messages_cpp)
 
 add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
 target_link_libraries(align ${catkin_LIBRARIES})
-add_dependencies(align create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(align create_fundamentals_generate_messages_cpp)
 
-add_executable(cmd_vel src/driving/cmd_vel.cpp)
-target_link_libraries(cmd_vel ${catkin_LIBRARIES})
-add_dependencies(cmd_vel create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+add_executable(grid_to_map src/occupancy_map.cpp)
+target_link_libraries(grid_to_map ${catkin_LIBRARIES})
+add_dependencies(grid_to_map create_fundamentals_generate_messages_cpp)
 
-add_executable(smooth_controller src/driving/smooth_waypoint_drive_controller.cpp)
-target_link_libraries(smooth_controller ${catkin_LIBRARIES})
-add_dependencies(smooth_controller create_fundamentals_generate_messages_cpp )#${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
-
-add_executable(strict_controller src/driving/strict_waypoint_drive_controller.cpp)
-target_link_libraries(strict_controller ${catkin_LIBRARIES})
-add_dependencies(strict_controller create_fundamentals_generate_messages_cpp )#${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
-
-add_executable(execute_plan_server src/execute_plan/execute_plan_server.cpp)
-target_link_libraries(execute_plan_server ${catkin_LIBRARIES})
-add_dependencies(execute_plan_server create_fundamentals_generate_messages_cpp)
-
-## Test files 
-#add_executable(test-ransac src/test/test-ransac.cpp src/classes/line_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
-#target_link_libraries(test-ransac ${catkin_LIBRARIES} gtest gtest_main)
-
-# Get all input files for tests into the build directory
-# file(COPY src/test-input DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-# message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
-
-# if (CATKIN_ENABLE_TESTING)
-#   catkin_add_gtest(test-ransac src/test/test-ransac.cpp src/grid_detector/grid_detector.cpp src/classes/line.cpp src/classes/vector.cpp src/algorithms/ransac.cpp)
-#   target_link_libraries(test-ransac ${catkin_LIBRARIES})
-# endif()
+add_executable(mc_localization src/monte_carlo_localization.cpp)
+target_link_libraries(mc_localization ${catkin_LIBRARIES})
+add_dependencies(mc_localization create_fundamentals_generate_messages_cpp)

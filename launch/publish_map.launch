@@ -1,0 +1,7 @@
+<launch>
+    <!-- Node to run publish_map.py -->
+    <node pkg="green_fundamentals" type="publish_map.py" name="publish_map_node" output="screen" />
+
+    <!-- Node to run grid_to_map -->
+    <node pkg="green_fundamentals" type="grid_to_map" name="grid_to_map_node" output="screen" />
+</launch>
