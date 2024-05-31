@@ -4,7 +4,6 @@
 #include <random>
 #include "Eigen/Dense"
 #include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 
 #include "robot_constants.h"
@@ -297,6 +296,8 @@ void publish_particles()
         }
     }
 
+    ROS_DEBUG("Best weight: %f", max_weight);
+
     marker_pub.publish(particle_to_marker(index, true));
 
     visualization_msgs::MarkerArray marker_array;
@@ -313,6 +314,10 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "mc_localization");
     ros::NodeHandle n;
+
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+        ros::console::notifyLoggerLevelsChanged();
+    }
     
     map_sub = n.subscribe("grid_map", 1, map_callback);
 
