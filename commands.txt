@@ -38,7 +38,7 @@ rviz
 # if you want to use ROS across multiple computers, connect them using cable or wireless. Make sure that the machines can ping each other. Decide which one of the machines should be the master and note the ip-address of this computer. Put this IP-address in the snippet below and copy the snipped to the bottom of the .bashrc in your home directory (.bashrc is a script that is called every time you open a new console) at EVERY of the connected computers.
 
 me=$(hostname -I | cut -f1 -d' ')
-master=192.168.0.SOMETHING # SOMETHING depends on your robot's IP address on the network, use "ip a" command to find out!
+master=192.168.0.7
 echo "setting $master as ROS MASTER for me ($me)"
 export ROS_MASTER_URI=http://$master:11311
 export ROS_IP=$me

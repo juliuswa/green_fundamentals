@@ -1,5 +1,4 @@
 #include "ros/ros.h"
-#include <boost/bind.hpp>
 #include <cmath>
 #include "Eigen/Dense"
 
@@ -8,7 +7,6 @@
 #include "green_fundamentals/Cell.h"
 
 #include "nav_msgs/OccupancyGrid.h"
-#include "geometry_msgs/Pose.h"
 
 #define PIXEL_SIZE 0.01     // m
 #define WALL_LENGTH 0.78    // m
