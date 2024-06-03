@@ -10,10 +10,14 @@
 #include "green_fundamentals/Position.h"
 #include "../robot_constants.h"
 
-const float max_speed = 10.0;
+const float max_speed = 14.0;
 const float min_speed = 3.0;
-const float slow_distance = 0.3;
+
+const float slow_distance = 0.2;
+const float slow_angle = 1.5;
+
 const float position_precision = 0.03;
+const float theta_precision = 0.03;
 
 ros::ServiceClient diff_drive_service;
 
@@ -93,11 +97,11 @@ void drive_to_target()
         Eigen::Vector2f pos_delta {x_target - x_current, y_target - y_current};
         ROS_DEBUG("not arrived. delta: (%f, %f)", pos_delta[0],  pos_delta[1]);
 
-        Eigen::Vector2f robot_direction {cos(theta_current), - sin(theta_current)};
+        Eigen::Vector2f robot_direction {cos(theta_current), sin(theta_current)};
         ROS_DEBUG("robot_direction: (%f, %f)", robot_direction[0],  robot_direction[1]);       
 
         float angle = acos((pos_delta[0] * robot_direction[0] + pos_delta[1] * robot_direction[1]) / pos_delta.norm());
-        ROS_DEBUG("angle = %f deg.", angle * 180 / M_PI);
+        ROS_DEBUG("angle = %f", angle);
 
         angle = std::min((float)(M_PI / 2.0), angle); // so it's between 0° and 90°
         ROS_DEBUG("capped angle = %f deg.", angle * 180 / M_PI);  
@@ -105,18 +109,21 @@ void drive_to_target()
         float cross_product_z = pos_delta[0] * robot_direction[1] - pos_delta[1] * robot_direction[0];
         ROS_DEBUG("cross_product_z = %f * %f - %f * %f = %f", pos_delta[0], robot_direction[1], pos_delta[1], robot_direction[0], cross_product_z);        
 
-        int direction = cross_product_z < 0 ? -1 : 1;
+        int direction = cross_product_z < 0 ? 1 : -1;
         ROS_DEBUG("direction = %d", direction);        
 
-        float closeness = std::exp(-angle);
-        float factor = 2 * closeness - 1;
+        float exponential_factor = 2 * std::exp(-angle) - 1;
+        float linear_factor = - 2 * angle / (M_PI / 2) + 1;
+        ROS_DEBUG("ex_factor: %f, lin_factor %f", exponential_factor, linear_factor);
+
+        float factor = (exponential_factor + linear_factor) / 2;
         ROS_DEBUG("factor = %f", factor);
         
         float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
         speed = std::min(max_speed, speed);
         speed = std::max(min_speed, speed);
 
-        if (angle * direction < 0) {
+        if (direction < 0) {
             WheelCommand command = {speed, factor * speed};
             drive(command);
         }
@@ -131,12 +138,17 @@ void drive_to_target()
         float total_angle = theta_target - theta_current;  
         ROS_DEBUG("total_angle %f", total_angle);    
 
-        if (total_angle > 0.2) {
-            WheelCommand command = {-max_speed, max_speed};
+        float speed = max_speed * (abs(total_angle) / slow_angle); // slows down when closer than "slow_angle"
+        speed = std::min(max_speed, speed);
+        speed = std::max(min_speed, speed);
+        ROS_DEBUG("rotation speed %f", speed);    
+
+        if (total_angle > theta_precision) {
+            WheelCommand command = {-speed, speed};
             drive(command);
         }
-        else if (total_angle < -0.2) {
-            WheelCommand command = {max_speed, -max_speed};
+        else if (total_angle < -theta_precision) {
+            WheelCommand command = {speed, -speed};
             drive(command);
         }
         else {
@@ -172,7 +184,7 @@ int main(int argc, char **argv)
 
     ROS_INFO("Ready to drive.");
     
-    ros::Rate r(10);
+    ros::Rate r(30);
     while(ros::ok()) {
         drive_to_target();
 
