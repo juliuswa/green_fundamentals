@@ -1,5 +1,4 @@
 #include "ros/ros.h"
-#include <boost/bind.hpp>
 #include <cmath>
 #include "Eigen/Dense"
 
@@ -8,7 +7,6 @@
 #include "green_fundamentals/Cell.h"
 
 #include "nav_msgs/OccupancyGrid.h"
-#include "geometry_msgs/Pose.h"
 
 #define PIXEL_SIZE 0.01     // m
 #define WALL_LENGTH 0.78    // m
@@ -74,6 +72,15 @@ void updateOccupancyGrid()
             int index = i * occupancy_grid.info.width + j;
             occupancy_grid.data[index] = pixel_map[i][j];
         }
+    }
+}
+
+void swap_rows()
+{
+    for (int i = 0; i < occupancy_grid.info.height / 2; ++i) {
+        int* temp = pixel_map[i];
+        pixel_map[i] = pixel_map[occupancy_grid.info.height - 1 - i];
+        pixel_map[occupancy_grid.info.height - 1 - i] = temp;
     }
 }
 
@@ -169,6 +176,8 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
         }
 
     }
+
+    swap_rows(); // for occupancygrid message
 
     updateOccupancyGrid();
 
