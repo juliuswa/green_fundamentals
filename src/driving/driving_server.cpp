@@ -11,11 +11,20 @@
 #include "../robot_constants.h"
 
 const float max_speed = 10.0;
+const float min_speed = 3.0;
+const float slow_distance = 0.3;
 const float position_precision = 0.03;
 
-bool is_target_set = false;
-
 ros::ServiceClient diff_drive_service;
+
+float last_left_encoder = 0.0;
+float last_right_encoder = 0.0;
+
+float x_current = 0.0;
+float y_current = 0.0;
+float theta_current = 0.0;
+
+bool has_target = false;
 
 float x_target = 0.0;
 float y_target = 0.0;
@@ -28,6 +37,41 @@ struct WheelCommand {
     float right_wheel;
 };
 
+void set_odometry(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet) {
+    ROS_DEBUG("set_odometry");
+    float new_left = sensor_packet->encoderLeft; // rad
+    float new_right = sensor_packet->encoderRight; // rad
+
+    float distance_left = (new_left - last_left_encoder) * WHEEL_RADIUS; // m
+    float distance_right = (new_right - last_right_encoder) * WHEEL_RADIUS; // m
+    float distance = (distance_left + distance_right) / 2;
+
+    float delta_theta = (distance_right - distance_left) / WHEEL_BASE;
+
+    x_current += distance * cos(theta_current + delta_theta/2);
+    y_current += distance * sin(theta_current + delta_theta/2);
+    theta_current += delta_theta;
+
+    last_left_encoder = new_left;
+    last_right_encoder = new_right;
+}
+
+bool set_target_position(green_fundamentals::DriveTo::Request  &req, green_fundamentals::DriveTo::Response &res) {
+    ROS_DEBUG("set_target_position");
+    x_current = 0.0;
+    y_current = 0.0;
+    theta_current = 0.0;
+
+    x_target = req.x_target;
+    y_target = req.y_target;
+    theta_target = req.theta_target;
+    
+    rotate = req.rotate;
+    has_target = true;
+
+    return true;
+}
+
 void drive(WheelCommand& command) {
     create_fundamentals::DiffDrive srv;
     srv.request.left = command.left_wheel;
@@ -35,90 +79,80 @@ void drive(WheelCommand& command) {
     diff_drive_service.call(srv);
 }
 
-bool arrived(const green_fundamentals::Position::ConstPtr& position) {
-    return std::abs(x_target - position->x) < position_precision && std::abs(y_target - position->y) < position_precision;
+bool arrived() {
+    return std::abs(x_target - x_current) < position_precision && std::abs(y_target - y_current) < position_precision;
 }
 
-void drive_to_target(const green_fundamentals::Position::ConstPtr& position)
+void drive_to_target()
 { 
-    if (!is_target_set) return;
-    ROS_INFO("current position: x=%f, y=%f, theta=%f deg.", position->x, position->y, position->theta * 180 / M_PI);
-    ROS_INFO("current target: x=%f, y=%f, theta=%f", x_target, y_target, theta_target);
+    if (!has_target) return;
+    ROS_INFO("current: x=%f, y=%f, theta=%f", x_current, y_current, theta_current);
+    ROS_INFO("target:  x=%f, y=%f, theta=%f", x_target, y_target, theta_target);
 
-    if (!arrived(position)) {
-        Eigen::Vector2f pos_delta {x_target - position->x, y_target - position->y};
-        ROS_INFO("not arrived. delta: (%f, %f)", pos_delta[0],  pos_delta[1]);
+    if (!arrived()) {
+        Eigen::Vector2f pos_delta {x_target - x_current, y_target - y_current};
+        ROS_DEBUG("not arrived. delta: (%f, %f)", pos_delta[0],  pos_delta[1]);
 
-        Eigen::Vector2f robot_direction {cos(position->theta), sin(position->theta)};
-        //ROS_INFO("robot_direction: (%f, %f)", robot_direction[0],  robot_direction[1]);       
+        Eigen::Vector2f robot_direction {cos(theta_current), - sin(theta_current)};
+        ROS_DEBUG("robot_direction: (%f, %f)", robot_direction[0],  robot_direction[1]);       
 
         float angle = acos((pos_delta[0] * robot_direction[0] + pos_delta[1] * robot_direction[1]) / pos_delta.norm());
-        //ROS_INFO("angle = %f deg.", angle * 180 / M_PI);
+        ROS_DEBUG("angle = %f deg.", angle * 180 / M_PI);
 
         angle = std::min((float)(M_PI / 2.0), angle); // so it's between 0° and 90°
-        //ROS_INFO("capped angle = %f deg.", angle * 180 / M_PI);  
+        ROS_DEBUG("capped angle = %f deg.", angle * 180 / M_PI);  
 
         float cross_product_z = pos_delta[0] * robot_direction[1] - pos_delta[1] * robot_direction[0];
-        //ROS_INFO("cross_product_z = %f * %f - %f * %f = %f", pos_delta[0], robot_direction[1], pos_delta[1], robot_direction[0], cross_product_z);        
+        ROS_DEBUG("cross_product_z = %f * %f - %f * %f = %f", pos_delta[0], robot_direction[1], pos_delta[1], robot_direction[0], cross_product_z);        
 
         int direction = cross_product_z < 0 ? -1 : 1;
-        //ROS_INFO("direction = %d", direction);        
+        ROS_DEBUG("direction = %d", direction);        
 
-        float factor = 1 - 2 * std::abs(angle) / (M_PI / 2);
-        //ROS_INFO("factor = %f", factor);
+        float closeness = std::exp(-angle);
+        float factor = 2 * closeness - 1;
+        ROS_DEBUG("factor = %f", factor);
+        
+        float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
+        speed = std::min(max_speed, speed);
+        speed = std::max(min_speed, speed);
 
-        if (angle < 0) {
-            WheelCommand command = {max_speed, factor * max_speed};
+        if (angle * direction < 0) {
+            WheelCommand command = {speed, factor * speed};
             drive(command);
         }
         else {
-            WheelCommand command = {factor * max_speed, max_speed};
+            WheelCommand command = {factor * speed, speed};
             drive(command);
         }
     }
     else if (rotate) {
         ROS_INFO("rotating.");
 
-        float total_angle = theta_target - position->theta;  
-        ROS_DEBUG("total_angle %f", total_angle);      
+        float total_angle = theta_target - theta_current;  
+        ROS_DEBUG("total_angle %f", total_angle);    
 
-        float rotation = fmod(total_angle + M_PI, 2 * M_PI) - M_PI;
-        ROS_DEBUG("rotation %f", rotation);
-
-        if (rotation > 0.2) {
+        if (total_angle > 0.2) {
             WheelCommand command = {-max_speed, max_speed};
             drive(command);
         }
-        else if (rotation < -0.2) {
+        else if (total_angle < -0.2) {
             WheelCommand command = {max_speed, -max_speed};
             drive(command);
         }
         else {
             WheelCommand command = {0.0, 0.0};
             drive(command);
-            ROS_INFO("arrived.");
-            is_target_set = false;
+
+            ROS_INFO("finished rotating.");
+            rotate = false;
         }
     } 
     else {
         ROS_INFO("arrived.");
         WheelCommand command = {0.0, 0.0};
         drive(command);
-        is_target_set = false;
+        has_target = false;
     }
-}
-
-bool set_target_position(green_fundamentals::DriveTo::Request  &req, green_fundamentals::DriveTo::Response &res) {
-    x_target = req.x_target;
-    y_target = req.y_target;
-    rotate = req.rotate;
-
-    theta_target = req.theta_target - floor(req.theta_target / (2 * M_PI)) * (2 * M_PI);
-
-    ROS_DEBUG("theta_target=%f", theta_target);
-
-    is_target_set = true;
-    return true;
 }
 
 
@@ -127,12 +161,24 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "driving_server");
     ros::NodeHandle n;
 
-    ros::Subscriber odometry_sub = n.subscribe("odometry", 1, drive_to_target);
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+        ros::console::notifyLoggerLevelsChanged();
+    }
+
+    ros::Subscriber sensor_sub = n.subscribe("sensor_packet", 1, set_odometry);
     ros::ServiceServer drive_to_service = n.advertiseService("drive_to", set_target_position);
 
     diff_drive_service = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 
-    ros::spin();
+    ROS_INFO("Ready to drive.");
+    
+    ros::Rate r(10);
+    while(ros::ok()) {
+        drive_to_target();
+
+        ros::spinOnce();
+        r.sleep();
+    }
 
     return 0;
 }

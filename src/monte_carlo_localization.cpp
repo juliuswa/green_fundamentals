@@ -14,17 +14,35 @@
 #include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
 
-#define SUBSAMPLE_LASERS 32
-#define NUM_PARTICLES 50
+#define SUBSAMPLE_LASERS 64
+#define NUM_PARTICLES 2000
 #define RAY_STEP_SIZE 0.01
 
 #define RESAMPLE_STD_POS 0.02
-#define RESAMPLE_STD_THETA 0.005
+#define RESAMPLE_STD_THETA 0.02
 
 struct Particle {
     Eigen::Vector2f position;
     float theta;
     float weight = 0.;
+
+    Particle() = default;
+
+    Particle(const Eigen::Vector2f& pos, float t, float w) 
+        : position(pos), theta(t), weight(w) {}
+
+    Particle(const Particle& other)
+        : position(other.position), theta(other.theta), weight(other.weight) {}
+
+    Particle& operator=(const Particle& other) {
+        if (this != &other) {
+            position = other.position;
+            theta = other.theta;
+            weight = other.weight;
+        }
+
+        return *this;
+    }
 };
 
 // Receive Map
@@ -60,6 +78,7 @@ float dtheta = 0.;
 const Eigen::Vector2f laser_offset{0.13, 0.};
 
 Particle particles[NUM_PARTICLES];
+Particle new_particles[NUM_PARTICLES];
 
 ros::Publisher marker_pub, markerarray_pub;
 
@@ -67,8 +86,8 @@ std::pair<int, int> metric_to_grid_index(float x, float y)
 {
     int gx = x / 0.01;
     int gy = y / 0.01;
-    int row = std::min(std::max(gy, 0), map_height);
-    int col = std::min(std::max(gx, 0), map_width);
+    int row = std::min(std::max(gy, 0), map_height -1);
+    int col = std::min(std::max(gx, 0), map_width -1);
     return {row, col};
 }
 
@@ -91,8 +110,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 }
 
 void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
-{
-    
+{    
     map_height = msg->info.height;
     map_width = msg->info.width;
 
@@ -129,7 +147,7 @@ void init_particles()
 
         float theta = uni_dist(generator) * (2 * M_PI);
         Eigen::Vector2f pos{x, y};
-        Particle particle{pos, theta};
+        Particle particle{pos, theta, 0.};
         particles[i] = particle;
     }
 }
@@ -155,16 +173,24 @@ void evaluate_particles()
 {
     for (int p = 0; p < NUM_PARTICLES; p++)
     {
-        // Add laser offset
+        ROS_DEBUG("particle %d: x=%f, y=%f, th=%f", p, particles[p].position[0], particles[p].position[0], particles[p].theta);
+        // TODO: Add laser offset
 
-        // Simulate laser measurements
         float total_delta = 0.;
-        // Subsample laser scan
+
         for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
         {
-            int index = i * current_scan.ranges.size() / SUBSAMPLE_LASERS;
-            float real_distance = current_scan.ranges[index];
+            // ROS_DEBUG("laser: %d", i);
 
+            int index = i * current_scan.ranges.size() / SUBSAMPLE_LASERS;
+            
+            float real_distance = current_scan.ranges[index];
+            
+            while (real_distance != real_distance || real_distance <= 0.03) {
+                index = (index + 1) % current_scan.ranges.size();
+                real_distance = current_scan.ranges[index];
+            }            
+            
             // Get laser angle
             float angle = current_scan.angle_min + current_scan.angle_increment * index;
 
@@ -174,6 +200,8 @@ void evaluate_particles()
             float ray_x = particles[p].position[0];
             float ray_y = particles[p].position[1];
 
+
+            // ROS_DEBUG("ray casting");
             while (r <= 1.0) 
             {
                 ray_x += r * std::cos(ray_angle);
@@ -188,19 +216,17 @@ void evaluate_particles()
                 r += RAY_STEP_SIZE;
             }
 
-            total_delta += fabs(r - real_distance);
-            
+            // ROS_DEBUG("index %d, distance: %f, r: %f", i, real_distance, r);
+
+            total_delta += fabs(r - real_distance);            
         }
 
         particles[p].weight = std::exp(-total_delta);
-
     }
 }
 
 void resample_particles()
 {
-    Particle new_particles[NUM_PARTICLES];
-
     float max_weight = 0.;
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
@@ -209,6 +235,7 @@ void resample_particles()
             max_weight = particles[i].weight;
         }
     }
+    ROS_INFO("max weight: %f", max_weight);
 
     std::default_random_engine generator;
     std::uniform_real_distribution<float> uni_dist(0., 1.);
@@ -218,6 +245,7 @@ void resample_particles()
     int index = uni_dist(generator) * NUM_PARTICLES;
     double beta = 0.0;
     
+    ROS_DEBUG("resampling... ");
     for (int i = 0; i < NUM_PARTICLES; ++i)
     {
         beta += uni_dist(generator) * 2 * max_weight;
@@ -232,8 +260,11 @@ void resample_particles()
         new_particles[i].theta += normal_dist_theta(generator);
     }
 
-    std::copy(new_particles, new_particles + sizeof(Particle) * NUM_PARTICLES, particles);
-    
+    ROS_DEBUG("copying... ");
+
+    for (int i = 0; i < NUM_PARTICLES; i++) {
+        particles[i] = new_particles[i];
+    }    
 }
 
 Eigen::Vector2f rotate_vector(const Eigen::Vector2f& vec, float angle)
@@ -253,14 +284,14 @@ visualization_msgs::Marker particle_to_marker(int particle_index, bool is_best)
     visualization_msgs::Marker marker;
     marker.header.frame_id = "map";
     marker.header.stamp = ros::Time();
-    marker.id = 0;
+    marker.id = is_best ? NUM_PARTICLES : particle_index;
     marker.type = visualization_msgs::Marker::ARROW;
     marker.action = visualization_msgs::Marker::ADD;
     marker.lifetime = ros::Duration(1);
 
     marker.pose.position.x = particles[particle_index].position[0];
     marker.pose.position.y = particles[particle_index].position[1];
-    marker.pose.position.z = 0.;
+    marker.pose.position.z = 0.05;
 
     tf2::Quaternion quaternion;
     quaternion.setRPY(0, 0, particles[particle_index].theta);
@@ -269,9 +300,9 @@ visualization_msgs::Marker particle_to_marker(int particle_index, bool is_best)
     marker.pose.orientation.z = quaternion.z();
     marker.pose.orientation.w = quaternion.w();
 
-    marker.scale.x = is_best ? 0.1 : 0.05;
-    marker.scale.y = is_best ? 0.1 : 0.05;
-    marker.scale.z = is_best ? 0.1 : 0.05;
+    marker.scale.x = is_best ? 0.1 : 0.5;
+    marker.scale.y = is_best ? 0.05 : 0.02;
+    marker.scale.z = is_best ? 0.05 : 0.02;
 
     marker.color.a = 1.0; // Don't forget to set the alpha!
     marker.color.r = is_best ? 0. : 1.0 - particles[particle_index].weight;
@@ -314,11 +345,11 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "mc_localization");
     ros::NodeHandle n;
 
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
     }
     
-    map_sub = n.subscribe("grid_map", 1, map_callback);
+    map_sub = n.subscribe("map", 1, map_callback);
 
     ROS_INFO("Starting Node");
 
@@ -334,17 +365,22 @@ int main(int argc, char **argv)
     while (ros::ok())
     {
         ros::spinOnce();
-        if (!map_received || counter_laser < 2 || counter_sensor < 2) continue;
+        if (!map_received || counter_laser < 2 || counter_sensor < 2) {
+            ROS_DEBUG("counter_laser: %d, counter_sensor: %d", counter_laser, counter_sensor );
+            continue ;
+        }
 
-        // Update particle position
+        
+        ROS_DEBUG("update_particles");
         update_particles();
 
-        // Predict particle laser scan, compute error and adjust weight
+        ROS_DEBUG("evaluate_particles");
         evaluate_particles();
 
+        ROS_DEBUG("publish_particles");
         publish_particles();
 
-        // resample new particles
+        ROS_DEBUG("resample_particles");
         resample_particles();
         
         loop_rate.sleep();
