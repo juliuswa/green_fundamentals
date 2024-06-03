@@ -75,6 +75,15 @@ void updateOccupancyGrid()
     }
 }
 
+void swap_rows()
+{
+    for (int i = 0; i < occupancy_grid.info.height / 2; ++i) {
+        int* temp = pixel_map[i];
+        pixel_map[i] = pixel_map[occupancy_grid.info.height - 1 - i];
+        pixel_map[occupancy_grid.info.height - 1 - i] = temp;
+    }
+}
+
 void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
 {
     int rows = msg->rows.size();
@@ -167,6 +176,8 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
         }
 
     }
+
+    swap_rows(); // for occupancygrid message
 
     updateOccupancyGrid();
 

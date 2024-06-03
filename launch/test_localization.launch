@@ -1,16 +1,19 @@
 <launch>
 
-    <!-- Robot Driver -->
-    <node pkg="create_fundamentals" type="driver.py" name="robot_driver" output="screen" />
+    <!--node pkg="create_fundamentals" type="driver.py" name="robot_driver" output="screen" /-->
 
-    <!-- Laser Driver -->
     <!--include file="$(find create_fundamentals)/laser.launch"/-->
 
-    <!-- Node to run publish_map.py -->
-    <node pkg="green_fundamentals" type="publish_map.py" name="publish_map_node" output="screen" />
+    <!--node pkg="green_fundamentals" type="publish_map.py" name="publish_map_node" output="screen" /-->
 
-    <!-- Node to run grid_to_map -->
-    <node pkg="green_fundamentals" type="grid_to_map" name="grid_to_map_node" output="screen" />
+    <!--node pkg="green_fundamentals" type="grid_to_map" name="grid_to_map_node" output="screen" /-->
+
+    <!-- Map Server -->
+    <arg name="map_file" default="$(find green_fundamentals)/maze1.yaml" />
+    <node name="map_server" pkg="map_server" type="map_server" output="screen">
+        <param name="frame_id" value="map" />
+        <param name="map_file" value="$(arg map_file)" />
+    </node>
 
     <!-- Node to run monte carlo localization -->
     <node pkg="green_fundamentals" type="mc_localization" name="localization_node" output="screen" />
