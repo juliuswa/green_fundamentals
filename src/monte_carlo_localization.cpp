@@ -17,8 +17,8 @@
 #include "create_fundamentals/SensorPacket.h"
 
 #define SUBSAMPLE_LASERS 32
-#define NUM_PARTICLES 2000
-#define NUM_RANDOM_PARTICLES 100
+#define NUM_PARTICLES 400
+#define NUM_RANDOM_PARTICLES 5
 #define RAY_STEP_SIZE 0.01
 
 #define RESAMPLE_STD_POS 0.02
@@ -74,8 +74,6 @@ bool is_first_encoder_measurement = true;
 float dx = 0.;
 float dy = 0.;
 float dtheta = 0.;
-
-const Eigen::Vector2f laser_offset{0.13, 0.};
 
 std::default_random_engine generator;
 
@@ -185,6 +183,9 @@ void evaluate_particles(const sensor_msgs::LaserScan::ConstPtr& msg)
 
         float total_delta = 0.;
 
+        float laser_x =  particles[p].position[0] + 0.13 * std::cos(particles[p].theta);
+        float laser_y =  particles[p].position[1] + 0.13 * std::sin(particles[p].theta);
+
         /*
         sensor_msgs::PointCloud expected_ray_points;
         sensor_msgs::PointCloud actual_ray_points;
@@ -211,14 +212,14 @@ void evaluate_particles(const sensor_msgs::LaserScan::ConstPtr& msg)
 
             float r = RAY_STEP_SIZE;
             
-            float ray_x = 0.;
-            float ray_y = 0.;
+            float ray_x = laser_x;
+            float ray_y = laser_y;
 
             // ROS_DEBUG("ray casting");
             while (r < 1.0) 
             {
-                ray_x = particles[p].position[0] + r * std::cos(ray_angle);
-                ray_y = particles[p].position[1] + r * std::sin(ray_angle);
+                ray_x = laser_x + r * std::cos(ray_angle);
+                ray_y = laser_y + r * std::sin(ray_angle);
 
                 if (ray_x > x_max || ray_x < x_min || ray_y > y_max || ray_y < y_min) break;
 
