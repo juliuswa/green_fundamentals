@@ -330,7 +330,6 @@ class ParticleFilter(object):
             self.dx += p_lastbaselink_currbaselink[0]
             self.dy += p_lastbaselink_currbaselink[1]
 
-
     def predict_particle_odometry(self, particle):
         """
         Where will the particle go after time dt passes?
@@ -353,7 +352,6 @@ class ParticleFilter(object):
         particle.x += v * cos(particle.theta) + nx
         particle.y += v * sin(particle.theta) + ny
         particle.theta += self.dyaw + ntheta
-
 
     def metric_to_grid_coords(self, x, y):
         """Converts metric coordinates to occupancy grid coordinates"""
