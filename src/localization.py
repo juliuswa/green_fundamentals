@@ -280,8 +280,6 @@ class ParticleFilter(object):
         # actual ranges and angles
         [actual_ranges, angles] = self.subsample_laser_scan(laser_scan_msg)
 
-        min_range = min(actual_ranges)
-        max_range = max(actual_ranges)
         # TODO: simulate a laser scan using one of the methods of this class
         predict_ranges = self.simulate_laser_scan_for_particle(particle.x, particle.y, particle.theta, angles, self.laser_min_range, self.laser_max_range)
 

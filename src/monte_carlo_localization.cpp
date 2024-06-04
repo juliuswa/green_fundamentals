@@ -111,10 +111,28 @@ float get_particle_error(const sensor_msgs::LaserScan::ConstPtr& msg, const Part
     float laser_x =  particle.x + 0.13 * std::cos(particle.theta);
     float laser_y =  particle.y + 0.13 * std::sin(particle.theta);
 
+    /*
+        If the robot is out of bounds or is in a wall return a large error
+    */
+    {
+        if (particle.x > x_max || particle.x < 0 || particle.y > y_max || particle.y < 0) return 300.;
+        if (laser_x > x_max || laser_x < 0 || laser_y > y_max || laser_y < 0) return 300.;
+        std::pair<int, int> grid_index = metric_to_grid_index(particle.x, particle.y);
+        if (map_data[grid_index.first][grid_index.second] != 0) return 300.;
+        grid_index = metric_to_grid_index(laser_x, laser_y);
+        if (map_data[grid_index.first][grid_index.second] != 0) return 300.;
+    }
+    
+    /*
+        Subsample the laser ranges
+    */
     for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
     {
         int index = i * msg->ranges.size() / SUBSAMPLE_LASERS;
-        
+
+        /*
+            Clip the actual range between 0.01 and 1.0
+        */
         float real_distance = msg->ranges[index];
         if (real_distance != real_distance) {
             real_distance = 1.0;
@@ -126,7 +144,7 @@ float get_particle_error(const sensor_msgs::LaserScan::ConstPtr& msg, const Part
         float ray_x = laser_x;
         float ray_y = laser_y;
         float ray_angle = particle.theta + (msg->angle_min + msg->angle_increment * index);
-        float r = 0.;
+        float r = RAY_STEP_SIZE;
         while (r < 1.0) 
         {
             ray_x = laser_x + r * std::cos(ray_angle);
@@ -142,7 +160,16 @@ float get_particle_error(const sensor_msgs::LaserScan::ConstPtr& msg, const Part
             r += RAY_STEP_SIZE;
         }
 
-        total_delta += fabs(r - real_distance);            
+        /*
+            Clip the expected range between 0.01 and 1.0
+        */
+        if (r >= 1.0) {
+            r = 1.0;
+        } else if (r <= RAY_STEP_SIZE) {
+            r = RAY_STEP_SIZE;
+        }
+
+        total_delta += pow(r - real_distance, 2);
     }
 
     return total_delta;
@@ -253,6 +280,13 @@ void publish_particles()
 */
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
+
+    bool enough_movement = relative_distance > DISTANCE_THRESHOLD || relative_theta > THETA_THRESHOLD;
+
+    if (!enough_movement) return;
+    // Only Move when the movement was big enough.
+    // Just not move the particle or dont localize at all?
+
     float weights[NUM_PARTICLES];
 
     for (int i = 0; i < NUM_PARTICLES; i++)
@@ -261,18 +295,12 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
             Motion Update:
             Move the particle by the distance the robot traveled and apply some noise.
         */
+        float x_delta = relative_distance * cos(particles[i].theta + relative_theta/2);
+        float y_delta = relative_distance * sin(particles[i].theta + relative_theta/2);
 
-        if (relative_distance > DISTANCE_THRESHOLD || relative_theta > THETA_THRESHOLD)
-        {
-            // Only Move when the movement was big enough.
-            // Just not move the particle or dont localize at all?
-            float x_delta = relative_distance * cos(particles[i].theta + relative_theta/2);
-            float y_delta = relative_distance * sin(particles[i].theta + relative_theta/2);
-
-            particles[i].x += x_delta + normal_dist_pos(generator);
-            particles[i].y += y_delta + normal_dist_pos(generator);
-            particles[i].theta += relative_theta + normal_dist_theta(generator);
-        }
+        particles[i].x += x_delta + normal_dist_pos(generator);
+        particles[i].y += y_delta + normal_dist_pos(generator);
+        particles[i].theta += relative_theta + normal_dist_theta(generator);
 
         /*
             Sensor Update:
