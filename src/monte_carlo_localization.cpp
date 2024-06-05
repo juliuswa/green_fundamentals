@@ -16,36 +16,56 @@
 #include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
 
+// MCL Algorithm
 #define SUBSAMPLE_LASERS 32
-#define NUM_PARTICLES 400
-#define NUM_RANDOM_PARTICLES 5
+#define NUM_PARTICLES 500
 #define RAY_STEP_SIZE 0.01
+
+// Motion Model 
 #define RESAMPLE_STD_POS 0.02
 #define RESAMPLE_STD_THETA 0.04
-#define DISTANCE_THRESHOLD 0.01
-#define THETA_THRESHOLD 0.02
 
+// Sensor Model
+#define Z_HIT 1.0
+#define Z_SHORT 0.1
+#define Z_MAX 0.05
+#define Z_RAND 0.05
+#define SIGMA_HIT 0.2
+#define LAMBDA_SHORT 0.1
+
+// Only update when robot moved enough
+#define DISTANCE_THRESHOLD 0.05
+#define THETA_THRESHOLD M_PI/6.0
+
+// Adapted MCL Algorithm
+#define ALPHA_FAST 0.1
+#define ALPHA_SLOW 0.001
+float W_SLOW = 0.;
+float W_FAST = 0.;
+
+// Flags
+bool converged = false;
+bool first_localization_done = false; // first localization without movement needed
+bool map_received = false;
+bool is_first_encoder_measurement = true;
+
+// Particles
 struct Particle {
     float x, y, theta;
 };
+Particle particles[NUM_PARTICLES];
 
 // Map
 ros::Subscriber map_sub;
-bool map_received = false;
-
 std::vector<std::vector<int8_t>> map_data;
 int map_height, map_width;
-
 float x_max, y_max; // m
 
 // Encoder values
 float last_left = 0.;
 float last_right = 0.;
-
 float current_left = 0.;
 float current_right = 0.;
-
-bool is_first_encoder_measurement = true;
 
 // Relative motion since the last time particles were updated
 float relative_distance = 0.;
@@ -53,13 +73,9 @@ float relative_theta = 0.;
 
 // Random generators
 std::default_random_engine generator;
-
 std::uniform_real_distribution<float> uniform_dist(0., 1.);
 std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS);
 std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA);
-
-// Particles
-Particle particles[NUM_PARTICLES];
 
 // Publishers
 ros::Publisher pose_pub, posearray_pub, actual_ray_pub, expected_ray_pub;
@@ -98,16 +114,20 @@ Particle get_random_particle()
 
 int draw_particle_from_weight(float weights[])
 {
-
+   
 }
 
 /*
     Perform Ray Marching to get expected ranges and compute error to actual ranges.
+    Then calculate probability of Particle and return weight.
 */
-float get_particle_error(const sensor_msgs::LaserScan::ConstPtr& msg, const Particle& particle) 
+float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Particle& particle) 
 {
-    float total_delta = 0.;
+    float q = 1.; // Probability of the particle given the observation
 
+    /*
+        Position of the laser in the global space.
+    */
     float laser_x =  particle.x + 0.13 * std::cos(particle.theta);
     float laser_y =  particle.y + 0.13 * std::sin(particle.theta);
 
@@ -115,16 +135,16 @@ float get_particle_error(const sensor_msgs::LaserScan::ConstPtr& msg, const Part
         If the robot is out of bounds or is in a wall return a large error
     */
     {
-        if (particle.x > x_max || particle.x < 0 || particle.y > y_max || particle.y < 0) return 300.;
-        if (laser_x > x_max || laser_x < 0 || laser_y > y_max || laser_y < 0) return 300.;
+        if (particle.x > x_max || particle.x < 0 || particle.y > y_max || particle.y < 0) return 0.;
+        if (laser_x > x_max || laser_x < 0 || laser_y > y_max || laser_y < 0) return 0.;
         std::pair<int, int> grid_index = metric_to_grid_index(particle.x, particle.y);
-        if (map_data[grid_index.first][grid_index.second] != 0) return 300.;
+        if (map_data[grid_index.first][grid_index.second] != 0) return 0.;
         grid_index = metric_to_grid_index(laser_x, laser_y);
-        if (map_data[grid_index.first][grid_index.second] != 0) return 300.;
+        if (map_data[grid_index.first][grid_index.second] != 0) return 0.;
     }
     
     /*
-        Subsample the laser ranges
+        Subsample the laser ranges and Compute Error between Expected and Actual Ranges.
     */
     for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
     {
@@ -141,6 +161,9 @@ float get_particle_error(const sensor_msgs::LaserScan::ConstPtr& msg, const Part
             real_distance = RAY_STEP_SIZE;
         }
 
+        /*
+            Perform Ray Marching to get expected Distance.
+        */
         float ray_x = laser_x;
         float ray_y = laser_y;
         float ray_angle = particle.theta + (msg->angle_min + msg->angle_increment * index);
@@ -163,16 +186,33 @@ float get_particle_error(const sensor_msgs::LaserScan::ConstPtr& msg, const Part
         /*
             Clip the expected range between 0.01 and 1.0
         */
-        if (r >= 1.0) {
+        if (r > 1.0) {
             r = 1.0;
-        } else if (r <= RAY_STEP_SIZE) {
+        } else if (r < RAY_STEP_SIZE) {
             r = RAY_STEP_SIZE;
         }
+        
 
-        total_delta += pow(r - real_distance, 2);
+        /*
+            Compute probability of range measurement.
+        */
+        float error = real_distance - r;
+        float p = 0.;
+
+        // From "Probabilistic Robotics"
+        // 1. Probability for good but noisy measurement
+        p += Z_HIT * exp(-(error * error) / (2 * SIGMA_HIT * SIGMA_HIT));
+        // 2. Probability for unexpected Obstacle
+        //if(error < 0) p += Z_SHORT * LAMBDA_SHORT * exp(-LAMBDA_SHORT*real_distance);
+        // 3. Probability for Failure to detect obstacle
+        //if(real_distance == 1.0) p += Z_MAX * 1.0;
+        // 4. Probability for Random measurement
+        //if(real_distance < 1.0) p += Z_RAND;
+
+        q *= p;
     }
 
-    return total_delta;
+    return q;
 }
 
 void resample_particles()
@@ -232,8 +272,8 @@ geometry_msgs::Pose particle_to_pose(int particle_index)
 {
     geometry_msgs::Pose pose;
 
-    pose.position.x = particles[particle_index].position[0];
-    pose.position.y = particles[particle_index].position[1];
+    pose.position.x = particles[particle_index].x;
+    pose.position.y = particles[particle_index].y;
     pose.position.z = 0.05;
 
     tf2::Quaternion quaternion;
@@ -283,12 +323,14 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
     bool enough_movement = relative_distance > DISTANCE_THRESHOLD || relative_theta > THETA_THRESHOLD;
 
-    if (!enough_movement) return;
+    bool update = enough_movement || !first_localization_done;
+
+    if (!update) return;
     // Only Move when the movement was big enough.
     // Just not move the particle or dont localize at all?
 
     float weights[NUM_PARTICLES];
-
+    float total_weight = 0.;
     for (int i = 0; i < NUM_PARTICLES; i++)
     {   
         /*
@@ -306,36 +348,120 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
             Sensor Update:
             Calculate the weight of the particle given the laser measurement by ray marching.
         */
-        float error = get_particle_error(msg, particles[i]);
-        weights[i] = std::exp(-error);
+        float particle_weight = get_particle_weight(msg, particles[i]);
+        weights[i] = particle_weight;
+        total_weight += particle_weight;
     }
-
-    // Reset distance traveled by robot
+    /*
+        Reset distance traveled by robot
+    */
     relative_distance = 0.;
     relative_theta = 0.;
 
     /*
+        Normalize weights and compute w_slow and w_fast for adaptive sampling.
+    */
+    float avg_weight = total_weight / NUM_PARTICLES;
+    float N_effective = 0.;
+    if (total_weight > 0.)
+    {
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            weights[i] /= total_weight;
+            N_effective += weights[i] * weights[i];
+        }
+        if(W_SLOW == 0.0)
+            W_SLOW = avg_weight;
+        else
+            W_SLOW += ALPHA_SLOW * (avg_weight - W_SLOW);
+        if(W_FAST == 0.0)
+            W_FAST = avg_weight;
+        else
+            W_FAST += ALPHA_FAST * (avg_weight - W_FAST);
+    } 
+    else 
+    {
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            weights[i] = 1.0 / NUM_PARTICLES;
+        }
+    }
+    if (N_effective > 0) N_effective = 1.0/N_effective;
+
+    /*
         Resample:
         Draw new particles from the current particles proportional to the weight.
+        Only if effective sample size is big enough.
     */
-    Particle new_particles[NUM_PARTICLES];
-    for (int i = 0; i < NUM_PARTICLES; i++)
+
+    if (N_effective > 0.5*NUM_PARTICLES)
     {
-        int particle_index = draw_particle_from_weight(weights);
-        new_particles[i] = particles[particle_index];
+        float cumulative_weights[NUM_PARTICLES + 1];
+        cumulative_weights[0] = 0.;
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            cumulative_weights[i+1] = cumulative_weights[i] + weights[i];
+        }
+
+        Particle new_particles[NUM_PARTICLES];
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            if (uniform_dist(generator) < std::max(0., 1. - W_FAST / W_SLOW))
+            {
+                // Sample random particle
+                // TODO Make sure that the random particle kinda conforms to the measurement.
+                new_particles[i] = get_random_particle();
+            } 
+            else
+            {
+                // Draw from particles
+                float rand = uniform_dist(generator);
+                int particle_index;
+                for(particle_index = 0; particle_index < NUM_PARTICLES; particle_index++)
+                {
+                    if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
+                }
+                new_particles[i] = particles[particle_index];
+            }
+        }
+
+        /*
+            Copy particles
+        */
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            particles[i] = new_particles[i];
+        }
+
+        /*
+            Check if localization has converged.
+        */
+        float mean_x = 0.;
+        float mean_y = 0.;
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            mean_x += particles[i].x;
+            mean_y += particles[i].y;
+        }
+        mean_x /= NUM_PARTICLES;
+        mean_y /= NUM_PARTICLES;
+        bool converged_temp = true;
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            Particle particle = particles[i];
+            if (particle.x - mean_x > 0.1 || particle.y - mean_y > 0.1)
+            {
+                converged_temp = false;
+                break;
+            }
+        }
+        converged = converged_temp;
     }
 
     /*
-        Copy particles
+        From now on only update when robot moved.
     */
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        particles[i] = new_particles[i];
-    }
-
-    publish_particles();
-
-    resample_particles();
+    first_localization_done = true;
 }
 
 /*
