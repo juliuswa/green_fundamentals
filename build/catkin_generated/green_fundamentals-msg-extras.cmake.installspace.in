@@ -1,0 +1,2 @@
+set(green_fundamentals_MESSAGE_FILES "msg/Cell.msg;msg/Grid.msg;msg/Pose.msg;msg/Row.msg;msg/Position.msg;msg/Vector2f.msg;msg/LaserCoordinates.msg;msg/Obstacle.msg")
+set(green_fundamentals_SERVICE_FILES "srv/DetectGrid.srv;srv/DriveTo.srv;srv/DriveToWaypoints.srv;srv/ExecutePlan.srv")

@@ -130,3 +130,7 @@ add_dependencies(grid_to_map create_fundamentals_generate_messages_cpp)
 add_executable(mc_localization src/monte_carlo_localization.cpp)
 target_link_libraries(mc_localization ${catkin_LIBRARIES})
 add_dependencies(mc_localization create_fundamentals_generate_messages_cpp)
+
+add_executable(motion_planning_server src/motion_planning/motion_planning_server.cpp)
+target_link_libraries(motion_planning_server ${catkin_LIBRARIES})
+add_dependencies(motion_planning_server create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
