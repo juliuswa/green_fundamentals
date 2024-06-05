@@ -213,7 +213,6 @@ class ParticleFilter(object):
 
         return ranges
 
-
     def subsample_laser_scan(self, laser_scan_msg):
         """Subsamples a set number of beams (self.eval_beams) from the incoming actual laser scan. It also
         converts the Inf range measurements into max_range range measurements, in order to be able to
@@ -283,20 +282,15 @@ class ParticleFilter(object):
 
         min_range = min(actual_ranges)
         max_range = max(actual_ranges)
-        #print "min_range", min_range
-        #print "max_range", max_range
         # TODO: simulate a laser scan using one of the methods of this class
         predict_ranges = self.simulate_laser_scan_for_particle(particle.x, particle.y, particle.theta, angles, self.laser_min_range, self.laser_max_range)
-        #predict_ranges = self.simulate_laser_scan_for_particle(particle.x, particle.y, particle.theta, angles, min_range, max_range)
 
         # TODO: compute the difference bwteen predicted ranges and actual ranges
-
         diff = [actual_range - predict_range for actual_range, predict_range in zip(actual_ranges, predict_ranges)]
         #print "diff", diff
         # Take the squared norm of that difference
         norm_error = 0
         norm_error = np.linalg.norm(diff)
-        print "norm_error", norm_error
         return norm_error**2
 
     def handle_odometry(self, robot_odom):
