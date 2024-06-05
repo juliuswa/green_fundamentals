@@ -101,7 +101,7 @@ green_fundamentals::Position get_align_position() {
     float cell_mid_y = cell_y * CELL_LENGTH + CELL_LENGTH / 2;
     //ROS_DEBUG("cell_mid: (%f, %f)", cell_mid_x, cell_mid_y);
 
-    float theta_delta = position.theta - floor(position.theta / (M_PI / 2)) * (M_PI / 2);
+    float theta_delta = floor(position.theta / (M_PI / 2)) * (M_PI / 2);
     //ROS_DEBUG("global_theta: %f deg.", theta_delta * 180 / M_PI);
 
     green_fundamentals::Position position;
@@ -120,6 +120,10 @@ bool is_same_position(green_fundamentals::Position p1,  green_fundamentals::Posi
     return abs(p1.x - p2.x) < POS_EPSILON && abs(p1.y - p2.y) < POS_EPSILON;
 }
 
+green_fundamentals::Position get_target() {
+    return get_align_position();
+}
+
 void main_loop() {
     green_fundamentals::Position last_position;
     green_fundamentals::Position target_position;
@@ -134,20 +138,25 @@ void main_loop() {
         }
         
         last_position = target_position;
-
-        if (!aligned) {
-            target_position = get_align_position();
-        }
-
+            
+        target_position = get_target();
         ROS_INFO("target_position: (%f, %f), th: %f", target_position.x, target_position.y, target_position.theta);
 
         if (is_same_position(position, target_position)) {
-            aligned = true;
             continue;
         }
 
-        call_drive_to_service(position, target_position, true);
-
+        if (!obstacle) {            
+            call_drive_to_service(position, target_position, true);
+        }
+        else {
+            green_fundamentals::Position turned_position;
+            turned_position.x = position.x;
+            turned_position.y = position.y;
+            turned_position.theta = position.theta + 0.5;
+            call_drive_to_service(position, turned_position, true);
+        }
+        
         loop_rate.sleep();
     }    
 }

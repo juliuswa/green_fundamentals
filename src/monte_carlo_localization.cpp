@@ -21,10 +21,10 @@
 #define NUM_RANDOM_PARTICLES 5
 #define RAY_STEP_SIZE 0.01
 
-#define NUM_BINS 100
+#define NUM_BINS 200
 
 #define RESAMPLE_STD_POS 0.02
-#define RESAMPLE_STD_THETA 0.04
+#define RESAMPLE_STD_THETA 0.02
 
 struct Particle {
     Eigen::Vector2f position;
@@ -60,9 +60,9 @@ int map_height, map_width;
 
 // Localization parameters
 float x_min = 0.0; // m
-float x_max = 3.0;
+float x_max = CELL_LENGTH * 3.0;
 float y_min = 0.0;
-float y_max = 3.0;
+float y_max = CELL_LENGTH * 3.0;
 
 float last_left = 0.;
 float last_right = 0.;
@@ -89,6 +89,8 @@ Particle particles[PARTICLES_PER_BIN * NUM_BINS];
 Particle new_particles[PARTICLES_PER_BIN * NUM_BINS];
 
 int sample_size = PARTICLES_PER_BIN * NUM_BINS;
+int last_sample_size = PARTICLES_PER_BIN * NUM_BINS;
+
 int bins[NUM_BINS];
 int bin_division = floor(std::sqrt(NUM_BINS));
 float bin_x = (x_max - x_min) / bin_division;
@@ -107,7 +109,7 @@ std::pair<int, int> metric_to_grid_index(float x, float y)
 }
 
 int get_bin_for_position(int i) {
-    return floor(particles[i].position[0] / bin_x) + bin_division * floor(particles[i].position[1] / bin_y) ;
+    return std::min((int)(floor(particles[i].position[0] / bin_x) + bin_division * floor(particles[i].position[1] / bin_y)), NUM_BINS - 1);
 }
 
 void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
@@ -291,7 +293,7 @@ void resample_particles()
     std::default_random_engine generator;
     std::uniform_real_distribution<float> uni_dist(0., 1.);
 
-    int index = uni_dist(generator) * sample_size;
+    int index = uni_dist(generator) * last_sample_size;
     std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS / 4);
     std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 4);
     
@@ -306,7 +308,7 @@ void resample_particles()
         while (beta > particles[index].weight)
         {
             beta -= particles[index].weight;
-            index = (index + 1) % sample_size;
+            index = (index + 1) % last_sample_size;
         }
 
         new_particles[i] = particles[index];
@@ -333,6 +335,7 @@ void resample_particles()
         bins[bin] += 1;
     }
     
+    last_sample_size = sample_size;
     sample_size = 0;
 
     for (int i = 0; i < NUM_BINS; i++) {
