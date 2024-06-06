@@ -24,7 +24,7 @@
 #define WALL 100
 #define FREE 0
 
-ros::NodeHandle n;
+
 
 ros::Subscriber grid_map_sub;
 int** pixel_map = nullptr;
@@ -198,19 +198,19 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
 
     grid_map_sub.shutdown();
 
-    n.setParam("grid_num_rows", rows);
-    n.setParam("grid_num_cols", cols);
-    n.setParam("wall_length_pixels", wall_length_pixels);
-    n.setParam("corner_pixels", corner_pixels);
-    n.setParam("x_max", width_pixels * PIXEL_SIZE);
-    n.setParam("y_max", height_pixels * PIXEL_SIZE);
-    n.setParam("pixel_size", PIXEL_SIZE);
+    ros::param::set("grid_num_rows", rows);
+    ros::param::set("grid_num_cols", cols);
+    ros::param::set("wall_length_pixels", wall_length_pixels);
+    ros::param::set("corner_pixels", corner_pixels);
+    ros::param::set("x_max", width_pixels * PIXEL_SIZE);
+    ros::param::set("y_max", height_pixels * PIXEL_SIZE);
+    ros::param::set("pixel_size", PIXEL_SIZE);
 }
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "grid_to_map");
-
+    ros::NodeHandle n;
     ros::Publisher map_pub = n.advertise<nav_msgs::OccupancyGrid>("map", 1);
     grid_map_sub = n.subscribe("grid_map", 1, map_callback);
 
