@@ -43,6 +43,7 @@ echo "setting $master as ROS MASTER for me ($me)"
 export ROS_MASTER_URI=http://$master:11311
 export ROS_IP=$me
 
+
 # run roscore only at the master-computer. Try rostopic list on the other machines. If it worked, you should see:
 /rosout
 /rosout_agg
