@@ -214,69 +214,16 @@ float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Par
     return q;
 }
 
-void resample_particles()
-{
-    float max_weight = 0.;
-
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        if (particles[i].weight > max_weight)
-        {
-            max_weight = particles[i].weight;
-        }
-    }
-
-    ROS_INFO("max weight: %f", max_weight);
-
-    std::default_random_engine generator;
-    std::uniform_real_distribution<float> uni_dist(0., 1.);
-
-    int index = uni_dist(generator) * NUM_PARTICLES;
-    std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS / 2);
-    std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 2);
-    
-    double beta = 0.0;
-    
-    ROS_DEBUG("resampling... ");
-    for (int i = 0; i < NUM_PARTICLES - NUM_RANDOM_PARTICLES; ++i)
-    {
-        beta += uni_dist(generator) * 2 * max_weight;
-
-        while (beta > particles[index].weight)
-        {
-            beta -= particles[index].weight;
-            index = (index + 1) % NUM_PARTICLES;
-        }
-
-        new_particles[i] = particles[index];
-        new_particles[i].position[0] += normal_dist_pos(generator);
-        new_particles[i].position[1] += normal_dist_pos(generator);
-        new_particles[i].theta += normal_dist_theta(generator);
-    }
-
-    for (int i = NUM_PARTICLES - NUM_RANDOM_PARTICLES; i < NUM_PARTICLES; ++i)
-    {
-        new_particles[i] = get_random_particle();
-    }
-
-    ROS_DEBUG("copying... ");
-
-    for (int i = 0; i < NUM_PARTICLES; i++) 
-    {
-        particles[i] = new_particles[i];
-    }    
-}
-
-geometry_msgs::Pose particle_to_pose(int particle_index)
+geometry_msgs::Pose particle_to_pose(const Particle& particle)
 {
     geometry_msgs::Pose pose;
 
-    pose.position.x = particles[particle_index].x;
-    pose.position.y = particles[particle_index].y;
+    pose.position.x = particle.x;
+    pose.position.y = particle.y;
     pose.position.z = 0.05;
 
     tf2::Quaternion quaternion;
-    quaternion.setRPY(0, 0, particles[particle_index].theta);
+    quaternion.setRPY(0, 0, particle.theta);
     pose.orientation.x = quaternion.x();
     pose.orientation.y = quaternion.y();
     pose.orientation.z = quaternion.z();
@@ -285,30 +232,16 @@ geometry_msgs::Pose particle_to_pose(int particle_index)
     return pose;
 }
 
-void publish_particles()
+void publish_particles(const Particle& best_particle)
 {
-    // Find best particle
-    float max_weight = 0.;
-    int index = -1;
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        if (particles[i].weight > max_weight)
-        {
-            max_weight = particles[i].weight;
-            index = i;
-        }
-    }
-
-    ROS_DEBUG("Best weight: %f", max_weight);
-
-    pose_pub.publish(particle_to_pose(index));
+    pose_pub.publish(particle_to_pose(best_particle));
 
     geometry_msgs::PoseArray pose_array;
     pose_array.header.frame_id = "map";
 
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        pose_array.poses.push_back(particle_to_pose(i));
+        pose_array.poses.push_back(particle_to_pose(particles[i]));
     }
     
     posearray_pub.publish(pose_array);
@@ -363,12 +296,19 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     */
     float avg_weight = total_weight / NUM_PARTICLES;
     float N_effective = 0.;
+    float best_weight = -1;
+    int best_index = -1;
     if (total_weight > 0.)
     {
         for (int i = 0; i < NUM_PARTICLES; i++)
         {
             weights[i] /= total_weight;
             N_effective += weights[i] * weights[i];
+            if (weights[i] > best_weight) 
+            {
+                best_index = i;
+                best_weight = weights[i];
+            }
         }
         if(W_SLOW == 0.0)
             W_SLOW = avg_weight;
@@ -394,7 +334,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
         Only if effective sample size is big enough.
     */
 
-    if (N_effective > 0.5*NUM_PARTICLES)
+    if (N_effective > 0.5 * NUM_PARTICLES)
     {
         float cumulative_weights[NUM_PARTICLES + 1];
         cumulative_weights[0] = 0.;
@@ -424,6 +364,11 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
                 new_particles[i] = particles[particle_index];
             }
         }
+
+        /*
+            Publish particles.
+        */
+       publish_particles(particles[best_index]);
 
         /*
             Copy particles
