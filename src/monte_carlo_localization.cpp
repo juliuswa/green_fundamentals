@@ -18,29 +18,29 @@
 #include "create_fundamentals/SensorPacket.h"
 
 // MCL Algorithm
-#define SUBSAMPLE_LASERS 32
-#define NUM_PARTICLES 500
-#define RAY_STEP_SIZE 0.01
+const int SUBSAMPLE_LASERS = 32;
+const int NUM_PARTICLES = 500;
+const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
-#define RESAMPLE_STD_POS 0.02
-#define RESAMPLE_STD_THETA 0.04
+const float RESAMPLE_STD_POS = 0.02;
+const float RESAMPLE_STD_THETA = 0.04;
 
 // Sensor Model
-#define Z_HIT 1.0
-#define Z_SHORT 0.1
-#define Z_MAX 0.05
-#define Z_RAND 0.05
-#define SIGMA_HIT 0.2
-#define LAMBDA_SHORT 0.1
+const float Z_HIT = 1.0;
+const float Z_SHORT = 0.1;
+const float Z_MAX = 0.05;
+const float Z_RAND = 0.05;
+const float SIGMA_HIT = 0.2;
+const float LAMBDA_SHORT = 0.1;
 
 // Only update when robot moved enough
-#define DISTANCE_THRESHOLD 0.05
-#define THETA_THRESHOLD M_PI/6.0
+const float DISTANCE_THRESHOLD = 0.05;
+const float THETA_THRESHOLD = M_PI/6.0;
 
 // Adapted MCL Algorithm
-#define ALPHA_FAST 0.1
-#define ALPHA_SLOW 0.001
+const float ALPHA_FAST = 0.1;
+const float ALPHA_SLOW = 0.001;
 float W_SLOW = 0.;
 float W_FAST = 0.;
 
