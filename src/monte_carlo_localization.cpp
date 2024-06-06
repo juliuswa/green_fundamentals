@@ -1,8 +1,9 @@
 #include "ros/ros.h"
-#include <boost/bind.hpp>
 #include <cmath>
 #include <random>
+#include <mutex>
 #include "Eigen/Dense"
+
 #include <tf2/LinearMath/Quaternion.h>
 
 #include "robot_constants.h"
@@ -80,6 +81,9 @@ std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA);
 // Publishers
 ros::Publisher pose_pub, posearray_pub, actual_ray_pub, expected_ray_pub;
 
+// Mutex for thread safety
+std::mutex mtx;
+
 /*
     Compute Map Indexes from metric Coordinates.
 */
@@ -110,11 +114,6 @@ Particle get_random_particle()
 
     Particle particle{x, y, theta};
     return particle;
-}
-
-int draw_particle_from_weight(float weights[])
-{
-   
 }
 
 /*
@@ -320,6 +319,7 @@ void publish_particles()
 */
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
+    std::lock_guard<std::mutex> lock(mtx);
 
     bool enough_movement = relative_distance > DISTANCE_THRESHOLD || relative_theta > THETA_THRESHOLD;
 
@@ -469,6 +469,8 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 */
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 {   
+    std::lock_guard<std::mutex> lock(mtx);
+
     last_left = current_left;
     last_right = current_right;
     current_left = msg->encoderLeft;
@@ -478,6 +480,7 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
         last_right = current_right;
 
         is_first_encoder_measurement = false;
+        return;
     }
     
     float distance_left = (current_left - last_left) * WHEEL_RADIUS;
