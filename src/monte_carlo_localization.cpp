@@ -27,16 +27,16 @@ const float RESAMPLE_STD_POS = 0.02;
 const float RESAMPLE_STD_THETA = 0.04;
 
 // Sensor Model
-const float Z_HIT = 1.0;
-const float Z_SHORT = 0.1;
-const float Z_MAX = 0.05;
+const float Z_HIT = 0.95;
+const float Z_SHORT = 0.;
+const float Z_MAX = 0.0;
 const float Z_RAND = 0.05;
-const float SIGMA_HIT = 0.2;
+const float SIGMA_HIT = 0.1;
 const float LAMBDA_SHORT = 0.1;
 
 // Only update when robot moved enough
 const float DISTANCE_THRESHOLD = 0.05;
-const float THETA_THRESHOLD = M_PI/6.0;
+const float THETA_THRESHOLD = 10. * M_PI/180.0;
 
 // Adapted MCL Algorithm
 const float ALPHA_FAST = 0.1;
@@ -96,6 +96,13 @@ std::pair<int, int> metric_to_grid_index(float x, float y)
 
     return {row, col};
 }
+/*
+    Normalize angle between -pi and +pi.
+*/
+double normalize(double theta)
+{
+  return atan2(sin(theta),cos(theta));
+}
 
 /*
     Generate random Particle that is in a free cell.
@@ -110,7 +117,7 @@ Particle get_random_particle()
         grid_index = metric_to_grid_index(x, y);
     } while (map_data[grid_index.first][grid_index.second] != 0);
     
-    float theta = uniform_dist(generator) * (2 * M_PI);
+    float theta = normalize(uniform_dist(generator) * (2 * M_PI));
 
     Particle particle{x, y, theta};
     return particle;
@@ -206,7 +213,7 @@ float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Par
         // 3. Probability for Failure to detect obstacle
         //if(real_distance == 1.0) p += Z_MAX * 1.0;
         // 4. Probability for Random measurement
-        //if(real_distance < 1.0) p += Z_RAND;
+        if(real_distance < 1.0) p += Z_RAND;
 
         q *= p;
     }
@@ -254,13 +261,12 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
     std::lock_guard<std::mutex> lock(mtx);
 
-    bool enough_movement = relative_distance > DISTANCE_THRESHOLD || relative_theta > THETA_THRESHOLD;
+    bool enough_movement = fabs(relative_distance) > DISTANCE_THRESHOLD || fabs(relative_theta) > THETA_THRESHOLD;
 
     bool update = enough_movement || !first_localization_done;
 
     if (!update) return;
-    // Only Move when the movement was big enough.
-    // Just not move the particle or dont localize at all?
+    // Only Update when the movement was big enough.
 
     float weights[NUM_PARTICLES];
     float total_weight = 0.;
@@ -275,7 +281,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
         particles[i].x += x_delta + normal_dist_pos(generator);
         particles[i].y += y_delta + normal_dist_pos(generator);
-        particles[i].theta += relative_theta + normal_dist_theta(generator);
+        particles[i].theta = normalize(particles[i].theta + relative_theta + normal_dist_theta(generator));
 
         /*
             Sensor Update:
@@ -467,6 +473,9 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
     map_sub.shutdown();
 }
 
+/*
+    Starting point. First wait for the map and then start the localization.
+*/
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "mc_localization");
