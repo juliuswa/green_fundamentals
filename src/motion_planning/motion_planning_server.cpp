@@ -1,53 +1,43 @@
 #include <cstdlib>
 #include "ros/ros.h"
 #include "../Eigen/Dense"
+#include <random>
 
 #include "nav_msgs/OccupancyGrid.h"
 #include "green_fundamentals/Position.h"
+#include "green_fundamentals/Cell.h"
+#include "green_fundamentals/Grid.h"
 #include "green_fundamentals/Obstacle.h"
 #include "green_fundamentals/DriveTo.h"
 #include "../robot_constants.h"
 
 green_fundamentals::Position position;
-
-green_fundamentals::Position current_target;
-green_fundamentals::Position last_target;
+green_fundamentals::Position target_position;
 
 bool aligned = false;
 bool obstacle = false;
 
-// Map data
-ros::Subscriber map_sub;
-bool map_received = false;
-std::vector<std::vector<int8_t>> map_data;
-int map_height, map_width;
+int mode = 0;
 
+// Map data
+ros::Subscriber grid_map_sub;
+bool map_received = false;
+std::vector<green_fundamentals::Cell> flat_map;
 
 ros::ServiceClient driving_service;
 
-void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
-{    
-    map_height = msg->info.height;
-    map_width = msg->info.width;
-
-    // Resize the map_data to match the map dimensions
-    map_data.resize(map_height);
-    for (int i = 0; i < map_height; ++i) {
-        map_data[i].resize(map_width);
-    }
-
-    // Fill the 2D array with the occupancy data
-    for (int y = 0; y < map_height; ++y) {
-        for (int x = 0; x < map_width; ++x) {
-            // Calculate the index in the 1D data array
-            int index = x + y * map_width;
-            map_data[y][x] = msg->data[index];
+void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
+{     
+    for (const auto& row : msg->rows)
+    {
+        for (const auto& cell : row.cells)
+        {
+            flat_map.push_back(cell);
         }
     }
 
-    ROS_INFO("Map received");
+    grid_map_sub.shutdown();
     map_received = true;
-    map_sub.shutdown();
 }
 
 void set_obstacle(const green_fundamentals::Obstacle::ConstPtr& obst) {    
@@ -90,23 +80,32 @@ void call_drive_to_service(green_fundamentals::Position current, green_fundament
     }
 }
 
-green_fundamentals::Position get_align_position() {
-    ROS_DEBUG("position: (%f, %f) th: %f", position.x, position.y, position.theta);
+std::pair<int, int> get_current_cell() {
+    std::pair<int, int> cell {floor(position.x / CELL_LENGTH), floor(position.y / CELL_LENGTH)};
+    return cell;
+}
 
-    int cell_x = floor(position.x / CELL_LENGTH);
-    int cell_y = floor(position.y / CELL_LENGTH);
-    ROS_DEBUG("cell: (%d, %d)", cell_x, cell_y);
-
-    float cell_mid_x = cell_x * CELL_LENGTH + CELL_LENGTH / 2;
-    float cell_mid_y = cell_y * CELL_LENGTH + CELL_LENGTH / 2;
-    //ROS_DEBUG("cell_mid: (%f, %f)", cell_mid_x, cell_mid_y);
-
-    float theta_delta = floor(position.theta / (M_PI / 2)) * (M_PI / 2);
-    //ROS_DEBUG("global_theta: %f deg.", theta_delta * 180 / M_PI);
-
+green_fundamentals::Position get_cell_midpoint(std::pair<int, int> cell_idx) {
+    float cell_mid_x = cell_idx.first * CELL_LENGTH + CELL_LENGTH / 2;
+    float cell_mid_y = cell_idx.second * CELL_LENGTH + CELL_LENGTH / 2;
+    
     green_fundamentals::Position position;
     position.x = cell_mid_x;
     position.y = cell_mid_y;
+    position.theta = 0.0;
+
+    return position;
+}
+
+green_fundamentals::Position get_align_position() {
+    ROS_DEBUG("position: (%f, %f) th: %f", position.x, position.y, position.theta);
+
+    std::pair<int, int> cell = get_current_cell();
+
+    green_fundamentals::Position position = get_cell_midpoint(cell);
+
+    float theta_delta = floor(position.theta / (M_PI / 2)) * (M_PI / 2);
+    //ROS_DEBUG("global_theta: %f deg.", theta_delta * 180 / M_PI);
     position.theta = theta_delta;
 
     return position;
@@ -120,14 +119,65 @@ bool is_same_position(green_fundamentals::Position p1,  green_fundamentals::Posi
     return abs(p1.x - p2.x) < POS_EPSILON && abs(p1.y - p2.y) < POS_EPSILON;
 }
 
+green_fundamentals::Position get_neighbor_cell_midpoint() {
+    std::pair<int, int> cell_idx = get_current_cell();
+    ROS_DEBUG("current cell: (%d, %d)", cell_idx.first, cell_idx.second);
+    
+    //TODO: remove hardcoded "3"
+    green_fundamentals::Cell cell = flat_map[cell_idx.first + 3 * (2 - cell_idx.second)];
+
+    std::default_random_engine generator;
+    std::uniform_real_distribution<float> uni_dist(0., 1.);
+
+    int direction;
+
+    for (int i = 0; i < 4; i++) {
+        bool is_wall = false;
+
+        for (int j = 0; j < cell.walls.size(); j++) {
+            if (cell.walls[j] == i) {
+                is_wall = true;
+            }
+        }
+
+        if (!is_wall) {
+            direction = i;
+            break;
+        }
+    }
+
+    ROS_DEBUG("Direction: %d", direction);
+
+    if (direction == 0) {      
+        cell_idx.first += 1;  
+    }
+    else if (direction == 1) {  
+        cell_idx.second += 1;
+    }
+    else if (direction == 2) {
+        cell_idx.first -= 1;       
+    }
+    else if (direction == 3) { 
+        cell_idx.second -= 1;   
+    }
+
+    ROS_DEBUG("neighbor cell: (%d, %d)", cell_idx.first, cell_idx.second);
+    return get_cell_midpoint(cell_idx);
+}
+
 green_fundamentals::Position get_target() {
-    return get_align_position();
+    if (mode == 0) { //align
+        return get_align_position();
+    }
+    if (mode == 1) {
+        mode == 2;
+        return get_neighbor_cell_midpoint();
+    }   
+        
+    return target_position;
 }
 
 void main_loop() {
-    green_fundamentals::Position last_position;
-    green_fundamentals::Position target_position;
-
     ros::Rate loop_rate(30);
     while(ros::ok()) {
         ros::spinOnce();
@@ -136,18 +186,17 @@ void main_loop() {
             ROS_INFO("No position.");
             continue;
         }
-        
-        last_position = target_position;
             
         target_position = get_target();
         ROS_INFO("target_position: (%f, %f), th: %f", target_position.x, target_position.y, target_position.theta);
 
         if (is_same_position(position, target_position)) {
+            mode = 1;
             continue;
         }
 
         if (!obstacle) {            
-            call_drive_to_service(position, target_position, true);
+            call_drive_to_service(position, target_position, mode == 0);
         }
         else {
             green_fundamentals::Position turned_position;
@@ -170,7 +219,7 @@ int main(int argc, char **argv)
         ros::console::notifyLoggerLevelsChanged();
     }
 
-    map_sub = n.subscribe("map", 1, map_callback);
+    grid_map_sub = n.subscribe("grid_map", 1, map_callback);
     ros::Subscriber obstacle_sub = n.subscribe("obstacle", 1, set_obstacle);
 
     ros::Rate map_rate(10);

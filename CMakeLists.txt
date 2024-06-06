@@ -91,25 +91,25 @@ catkin_package(
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
-add_executable(odometry src/odometry/odometry.cpp)
-target_link_libraries(odometry ${catkin_LIBRARIES})
-add_dependencies(odometry create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+# add_executable(odometry src/odometry/odometry.cpp)
+# target_link_libraries(odometry ${catkin_LIBRARIES})
+# add_dependencies(odometry create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
-add_executable(grid_detection_server src/grid_detection/grid_detection_server.cpp src/classes/line.cpp)
-target_link_libraries(grid_detection_server ${catkin_LIBRARIES})
-add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+# add_executable(grid_detection_server src/grid_detection/grid_detection_server.cpp src/classes/line.cpp)
+# target_link_libraries(grid_detection_server ${catkin_LIBRARIES})
+# add_dependencies(grid_detection_server create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
 add_executable(driving_server src/driving/driving_server.cpp)
 target_link_libraries(driving_server ${catkin_LIBRARIES})
 add_dependencies(driving_server create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
-add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
-target_link_libraries(align ${catkin_LIBRARIES})
-add_dependencies(align create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+# add_executable(align src/align.cpp src/classes/driver.cpp src/classes/line.cpp)
+# target_link_libraries(align ${catkin_LIBRARIES})
+# add_dependencies(align create_fundamentals_generate_messages_cpp)# ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
-add_executable(execute_plan_server src/execute_plan/execute_plan_server.cpp)
-target_link_libraries(execute_plan_server ${catkin_LIBRARIES})
-add_dependencies(execute_plan_server create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+# add_executable(execute_plan_server src/execute_plan/execute_plan_server.cpp)
+# target_link_libraries(execute_plan_server ${catkin_LIBRARIES})
+# add_dependencies(execute_plan_server create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
 add_executable(calculate_laser_coordinates src/obstacle_detection/calculate_laser_coordinates.cpp)
 target_link_libraries(calculate_laser_coordinates ${catkin_LIBRARIES})
