@@ -1,5 +1,10 @@
+float32 x_current
+float32 y_current
+float32 theta_current
+
 float32 x_target
 float32 y_target
-bool rotate
 float32 theta_target
+
+bool rotate
 ---

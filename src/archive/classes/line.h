@@ -2,7 +2,6 @@
 #define GREEN_FUNDAMENTALS_LINE_H
 
 #include "ros/ros.h"
-#include "vector.h"
 #include "../Eigen/Dense"
 
 class Line {

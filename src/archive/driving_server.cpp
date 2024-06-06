@@ -8,6 +8,7 @@
 #include "create_fundamentals/DiffDrive.h"
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/Position.h"
+#include "green_fundamentals/Obstacle.h"
 #include "../robot_constants.h"
 
 const float max_speed = 14.0;
@@ -16,30 +17,34 @@ const float min_speed = 3.0;
 const float slow_distance = 0.2;
 const float slow_angle = 1.5;
 
-const float position_precision = 0.03;
-const float theta_precision = 0.03;
-
 ros::ServiceClient diff_drive_service;
 
 float last_left_encoder = 0.0;
 float last_right_encoder = 0.0;
 
-float x_current = 0.0;
-float y_current = 0.0;
-float theta_current = 0.0;
+green_fundamentals::Position current_position;
 
 bool has_target = false;
-
-float x_target = 0.0;
-float y_target = 0.0;
-float theta_target = 0.0;
+green_fundamentals::Position target_position;
 
 bool rotate = false;
+
+bool obstacle = false;
 
 struct WheelCommand {
     float left_wheel;
     float right_wheel;
 };
+
+void set_obstacle(const green_fundamentals::Obstacle::ConstPtr& obst) {
+    ROS_DEBUG("set_obstacle");
+    
+    obstacle = obst->front;
+
+    if (obstacle) {
+        ROS_INFO("Obstacle detected.");
+    }
+}
 
 void set_odometry(const create_fundamentals::SensorPacket::ConstPtr& sensor_packet) {
     ROS_DEBUG("set_odometry");
@@ -52,23 +57,24 @@ void set_odometry(const create_fundamentals::SensorPacket::ConstPtr& sensor_pack
 
     float delta_theta = (distance_right - distance_left) / WHEEL_BASE;
 
-    x_current += distance * cos(theta_current + delta_theta/2);
-    y_current += distance * sin(theta_current + delta_theta/2);
-    theta_current += delta_theta;
+    current_position.x += distance * cos(current_position.theta + delta_theta/2);
+    current_position.y += distance * sin(current_position.theta + delta_theta/2);
+    current_position.theta += delta_theta;
 
     last_left_encoder = new_left;
     last_right_encoder = new_right;
 }
 
-bool set_target_position(green_fundamentals::DriveTo::Request  &req, green_fundamentals::DriveTo::Response &res) {
-    ROS_DEBUG("set_target_position");
-    x_current = 0.0;
-    y_current = 0.0;
-    theta_current = 0.0;
+bool receive_drive_command(green_fundamentals::DriveTo::Request  &req, green_fundamentals::DriveTo::Response &res) {
+    ROS_DEBUG("receive_drive_command");
 
-    x_target = req.x_target;
-    y_target = req.y_target;
-    theta_target = req.theta_target;
+    current_position.x = req.x_current;
+    current_position.y = req.y_current;
+    current_position.theta = req.theta_current;
+
+    target_position.x = req.x_target;
+    target_position.y = req.y_target;
+    target_position.theta = req.theta_target;
     
     rotate = req.rotate;
     has_target = true;
@@ -84,20 +90,21 @@ void drive(WheelCommand& command) {
 }
 
 bool arrived() {
-    return std::abs(x_target - x_current) < position_precision && std::abs(y_target - y_current) < position_precision;
+    return std::abs(target_position.x - current_position.x) < POS_EPSILON && 
+            std::abs(target_position.y - current_position.y) < POS_EPSILON;
 }
 
 void drive_to_target()
 { 
     if (!has_target) return;
-    ROS_INFO("current: x=%f, y=%f, theta=%f", x_current, y_current, theta_current);
-    ROS_INFO("target:  x=%f, y=%f, theta=%f", x_target, y_target, theta_target);
+    ROS_INFO("current: x=%f, y=%f, theta=%f", current_position.x, current_position.y, current_position.theta);
+    ROS_INFO("target:  x=%f, y=%f, theta=%f", target_position.x, target_position.y, target_position.theta);
 
-    if (!arrived()) {
-        Eigen::Vector2f pos_delta {x_target - x_current, y_target - y_current};
+    if (!arrived() && !obstacle) {
+        Eigen::Vector2f pos_delta {target_position.x - current_position.x, target_position.y - current_position.y};
         ROS_DEBUG("not arrived. delta: (%f, %f)", pos_delta[0],  pos_delta[1]);
 
-        Eigen::Vector2f robot_direction {cos(theta_current), sin(theta_current)};
+        Eigen::Vector2f robot_direction {cos(current_position.theta), sin(current_position.theta)};
         ROS_DEBUG("robot_direction: (%f, %f)", robot_direction[0],  robot_direction[1]);       
 
         float angle = acos((pos_delta[0] * robot_direction[0] + pos_delta[1] * robot_direction[1]) / pos_delta.norm());
@@ -121,8 +128,8 @@ void drive_to_target()
         
         float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
         speed = std::min(max_speed, speed);
-        speed = std::max(min_speed, speed);
-
+        speed = std::max(min_speed, speed);        
+        
         if (direction < 0) {
             WheelCommand command = {speed, factor * speed};
             drive(command);
@@ -135,7 +142,7 @@ void drive_to_target()
     else if (rotate) {
         ROS_INFO("rotating.");
 
-        float total_angle = theta_target - theta_current;  
+        float total_angle = target_position.theta - current_position.theta;  
         ROS_DEBUG("total_angle %f", total_angle);    
 
         float speed = max_speed * (abs(total_angle) / slow_angle); // slows down when closer than "slow_angle"
@@ -143,11 +150,11 @@ void drive_to_target()
         speed = std::max(min_speed, speed);
         ROS_DEBUG("rotation speed %f", speed);    
 
-        if (total_angle > theta_precision) {
+        if (total_angle > THETA_EPSILON) {
             WheelCommand command = {-speed, speed};
             drive(command);
         }
-        else if (total_angle < -theta_precision) {
+        else if (total_angle < -THETA_EPSILON) {
             WheelCommand command = {speed, -speed};
             drive(command);
         }
@@ -178,7 +185,9 @@ int main(int argc, char **argv)
     }
 
     ros::Subscriber sensor_sub = n.subscribe("sensor_packet", 1, set_odometry);
-    ros::ServiceServer drive_to_service = n.advertiseService("drive_to", set_target_position);
+    ros::Subscriber obstacle_sub = n.subscribe("obstacle", 1, set_obstacle);
+
+    ros::ServiceServer drive_to_service = n.advertiseService("drive_to", receive_drive_command);
 
     diff_drive_service = n.serviceClient<create_fundamentals::DiffDrive>("diff_drive");
 

@@ -1,3 +1,12 @@
+/*
+    This Node listens to the "grid_map" topic and once receiving the grid_map it computes the Occupancy Grid Map and published it on the "map" topic.
+
+    Input: Grid Map -> grid_map
+
+    Output: OccupancyGrid -> map
+*/
+
+
 #include "ros/ros.h"
 #include <cmath>
 #include "Eigen/Dense"
@@ -14,6 +23,8 @@
 
 #define WALL 100
 #define FREE 0
+
+ros::NodeHandle n;
 
 ros::Subscriber grid_map_sub;
 int** pixel_map = nullptr;
@@ -186,12 +197,19 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
     ROS_INFO("Grid Map received, starting to publish OccupancyMap");
 
     grid_map_sub.shutdown();
+
+    n.setParam("grid_num_rows", rows);
+    n.setParam("grid_num_cols", cols);
+    n.setParam("wall_length_pixels", wall_length_pixels);
+    n.setParam("corner_pixels", corner_pixels);
+    n.setParam("x_max", width_pixels * PIXEL_SIZE);
+    n.setParam("y_max", height_pixels * PIXEL_SIZE);
+    n.setParam("pixel_size", PIXEL_SIZE);
 }
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "grid_to_map");
-    ros::NodeHandle n;
 
     ros::Publisher map_pub = n.advertise<nav_msgs::OccupancyGrid>("map", 1);
     grid_map_sub = n.subscribe("grid_map", 1, map_callback);

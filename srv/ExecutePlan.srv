@@ -8,4 +8,3 @@ int32[] plan
 ---
 # return whether plan could be executed successfully and an array of the coordinates
 bool success
-Vector2f[] points

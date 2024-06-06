@@ -1,1 +1,0 @@
-Vector2f[] coordinates

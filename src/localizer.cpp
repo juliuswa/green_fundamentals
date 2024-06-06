@@ -1,3 +1,11 @@
+/*
+    This Node uses Monte Carlo Localization to localize in a griven Occupancy Grid Map. It only publishes the global_position when the localization has converged.
+
+    Input: OccupancyGrid -> map, WheelEncoders -> sensor_packet, LaserScan -> scan_filtered
+
+    Output: Pose -> global_position
+*/
+
 #include "ros/ros.h"
 #include <cmath>
 #include <random>
@@ -8,6 +16,7 @@
 
 #include "robot_constants.h"
 
+#include "std_srvs/Empty.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "sensor_msgs/LaserScan.h"
 #include "geometry_msgs/Point32.h"
@@ -15,6 +24,7 @@
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/PoseArray.h"
 #include "green_fundamentals/Position.h"
+#include "green_fundamentals/Pose.h"
 #include "create_fundamentals/SensorPacket.h"
 
 // MCL Algorithm
@@ -50,6 +60,16 @@ bool first_localization_done = false; // first localization without movement nee
 bool map_received = false;
 bool is_first_encoder_measurement = true;
 
+ros::NodeHandle n;
+
+// State
+enum State {
+    IDLE,
+    LOCALIZE
+};
+
+State state = State::IDLE;
+
 // Particles
 struct Particle {
     float x, y, theta;
@@ -61,6 +81,7 @@ ros::Subscriber map_sub;
 std::vector<std::vector<int8_t>> map_data;
 int map_height, map_width;
 float x_max, y_max; // m
+int grid_rows, grid_cols;
 
 // Encoder values
 float last_left = 0.;
@@ -79,7 +100,7 @@ std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS);
 std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA);
 
 // Publishers
-ros::Publisher pose_pub, posearray_pub, actual_ray_pub, expected_ray_pub;
+ros::Publisher best_particle_viz_pub, particle_array_viz_pub, position_pub;
 
 // Mutex for thread safety
 std::mutex mtx;
@@ -154,7 +175,7 @@ float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Par
     */
     for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
     {
-        int index = i * msg->ranges.size() / SUBSAMPLE_LASERS;
+        int index = i * msg->ranges.size() / SUBSAMPLE_LASERS; // TODO Überspringe die ersten paar Laser wegen dem Balken
 
         /*
             Clip the actual range between 0.01 and 1.0
@@ -221,7 +242,7 @@ float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Par
     return q;
 }
 
-geometry_msgs::Pose particle_to_pose(const Particle& particle)
+geometry_msgs::Pose particle_to_viz_pose(const Particle& particle)
 {
     geometry_msgs::Pose pose;
 
@@ -239,19 +260,33 @@ geometry_msgs::Pose particle_to_pose(const Particle& particle)
     return pose;
 }
 
+green_fundamentals::Position particle_to_position(const Particle& particle)
+{
+    green_fundamentals::Position pos;
+
+    pos.x = particle.x;
+    pos.y = particle.y;
+    pos.theta = particle.theta;
+
+    pos.converged = converged;
+
+    return pos;
+}
+
 void publish_particles(const Particle& best_particle)
 {
-    pose_pub.publish(particle_to_pose(best_particle));
+    // Position for other nodes
+    position_pub.publish(particle_to_position(best_particle));
 
+    // Visualizations
+    best_particle_viz_pub.publish(particle_to_viz_pose(best_particle));
     geometry_msgs::PoseArray pose_array;
     pose_array.header.frame_id = "map";
-
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        pose_array.poses.push_back(particle_to_pose(particles[i]));
+        pose_array.poses.push_back(particle_to_viz_pose(particles[i]));
     }
-    
-    posearray_pub.publish(pose_array);
+    particle_array_viz_pub.publish(pose_array);
 }
 
 /*
@@ -372,9 +407,33 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
         }
 
         /*
+            Check if localization has converged.
+        */
+        float mean_x = 0.;
+        float mean_y = 0.;
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            mean_x += new_particles[i].x;
+            mean_y += new_particles[i].y;
+        }
+        mean_x /= NUM_PARTICLES;
+        mean_y /= NUM_PARTICLES;
+        bool converged_temp = true;
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            Particle particle = new_particles[i];
+            if (particle.x - mean_x > 0.1 || particle.y - mean_y > 0.1)
+            {
+                converged_temp = false;
+                break;
+            }
+        }
+        converged = converged_temp;
+
+        /*
             Publish particles.
         */
-       publish_particles(particles[best_index]);
+        publish_particles(particles[best_index]);
 
         /*
             Copy particles
@@ -383,30 +442,6 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
         {
             particles[i] = new_particles[i];
         }
-
-        /*
-            Check if localization has converged.
-        */
-        float mean_x = 0.;
-        float mean_y = 0.;
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            mean_x += particles[i].x;
-            mean_y += particles[i].y;
-        }
-        mean_x /= NUM_PARTICLES;
-        mean_y /= NUM_PARTICLES;
-        bool converged_temp = true;
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            Particle particle = particles[i];
-            if (particle.x - mean_x > 0.1 || particle.y - mean_y > 0.1)
-            {
-                converged_temp = false;
-                break;
-            }
-        }
-        converged = converged_temp;
     }
 
     /*
@@ -453,24 +488,35 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 
     // Resize the map_data to match the map dimensions
     map_data.resize(map_height);
-    for (int i = 0; i < map_height; ++i) {
+    for (int i = 0; i < map_height; ++i) 
+    {
         map_data[i].resize(map_width);
     }
 
     // Fill the 2D array with the occupancy data
-    for (int y = 0; y < map_height; ++y) {
-        for (int x = 0; x < map_width; ++x) {
+    for (int y = 0; y < map_height; ++y) 
+    {
+        for (int x = 0; x < map_width; ++x) 
+        {
             // Calculate the index in the 1D data array
             int index = x + y * map_width;
             map_data[y][x] = msg->data[index];
         }
     }
 
-    x_max = map_width / 100;
-    y_max = map_height / 100;
-
     map_received = true;
     map_sub.shutdown();
+
+    n.getParam("grid_num_rows", grid_rows);
+    n.getParam("grid_num_cols", grid_cols);
+    n.getParam("x_max", x_max);
+    n.getParam("y_max", y_max);
+}
+
+bool start_localize_callback(std_srvs::Empty::Request &req, std_srvs::Empty::Response &res)
+{
+    state = State::LOCALIZE;
+    return true;
 }
 
 /*
@@ -479,7 +525,6 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "mc_localization");
-    ros::NodeHandle n;
     ROS_INFO("Starting node.");
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
@@ -487,31 +532,39 @@ int main(int argc, char **argv)
 
     ROS_INFO("Waiting for Occupancy Map...");
     map_sub = n.subscribe("map", 1, map_callback);
-    ros::Rate loop_rate(10);
+    ros::Rate loop_rate(15);
     while (!map_received)
     {
         ros::spinOnce();
         loop_rate.sleep();
     }
 
-    ROS_INFO("Map received. Starting localization...");
-    // Subscribers
-    ros::Subscriber odo_sub = n.subscribe("sensor_packet", 1, sensor_callback);
-    ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
-
-    // Publishers
-    pose_pub = n.advertise<geometry_msgs::Pose>("pose", 1);
-    posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
+    ROS_INFO("Map received.");
     
-    // Debug Pubs
-    //actual_ray_pub = n.advertise<sensor_msgs::PointCloud>("actual_ray", 1);
-    //expected_ray_pub = n.advertise<sensor_msgs::PointCloud>("expected_ray", 1);
+    // Publishers
+    best_particle_viz_pub = n.advertise<geometry_msgs::Pose>("best_particle", 1);
+    particle_array_viz_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
+    position_pub = n.advertise<green_fundamentals::Position>("position", 1);
     
     // Initialize particles
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
         particles[i] = get_random_particle();
     }
+
+    ros::ServiceServer drive_to_service = n.advertiseService("localizer_start_localize", start_localize_callback);
+
+    while(state != State::LOCALIZE)
+    {
+        ros::spinOnce();
+        loop_rate.sleep();
+    }
+
+    ROS_INFO("Start Localization...");
+
+    // Subscribers
+    ros::Subscriber odo_sub = n.subscribe("sensor_packet", 1, sensor_callback);
+    ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
     ros::spin();
 
