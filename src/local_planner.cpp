@@ -7,8 +7,6 @@
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/ExecutePlan.h"
 
-ros::NodeHandle n;
-
 enum State {
     INIT,
     LOCALIZE,
@@ -80,11 +78,11 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
     int wall_length_pixels, corner_pixels;
     float pixel_size;
 
-    n.getParam("grid_num_rows", grid_rows);
-    n.getParam("grid_num_cols", grid_cols);
-    n.getParam("wall_length_pixels", wall_length_pixels);
-    n.getParam("corner_pixels", corner_pixels);
-    n.getParam("pixel_size", pixel_size);
+    ros::param::get("grid_num_rows", grid_rows);
+    ros::param::get("grid_num_cols", grid_cols);
+    ros::param::get("wall_length_pixels", wall_length_pixels);
+    ros::param::get("corner_pixels", corner_pixels);
+    ros::param::get("pixel_size", pixel_size);
 
     wall_length = (wall_length_pixels + corner_pixels) * pixel_size;
 
@@ -256,7 +254,8 @@ void execute_plan()
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "planner");
+    ros::init(argc, argv, "local_planner");
+    ros::NodeHandle n;
     ros::Rate loop_rate(15);
 
     ROS_INFO("Starting node.");
@@ -291,6 +290,7 @@ int main(int argc, char **argv)
         ROS_ERROR("A service is not available");
         return 1;
     }
+
     // Services
     start_localize_client = n.serviceClient<std_srvs::Empty>("localizer_start_localize");
     mover_set_idle_client = n.serviceClient<std_srvs::Empty>("mover_set_idle");
@@ -317,7 +317,7 @@ int main(int argc, char **argv)
 
     set_target();
 
-    while (current_target_reached(0.05))
+    while (!current_target_reached(0.05))
     {
         ros::spinOnce();
         loop_rate.sleep();

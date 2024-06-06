@@ -60,8 +60,6 @@ bool first_localization_done = false; // first localization without movement nee
 bool map_received = false;
 bool is_first_encoder_measurement = true;
 
-ros::NodeHandle n;
-
 // State
 enum State {
     IDLE,
@@ -507,10 +505,10 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
     map_received = true;
     map_sub.shutdown();
 
-    n.getParam("grid_num_rows", grid_rows);
-    n.getParam("grid_num_cols", grid_cols);
-    n.getParam("x_max", x_max);
-    n.getParam("y_max", y_max);
+    ros::param::get("grid_num_rows", grid_rows);
+    ros::param::get("grid_num_cols", grid_cols);
+    ros::param::get("x_max", x_max);
+    ros::param::get("y_max", y_max);
 }
 
 bool start_localize_callback(std_srvs::Empty::Request &req, std_srvs::Empty::Response &res)
@@ -525,6 +523,7 @@ bool start_localize_callback(std_srvs::Empty::Request &req, std_srvs::Empty::Res
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "mc_localization");
+    ros::NodeHandle n;
     ROS_INFO("Starting node.");
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
