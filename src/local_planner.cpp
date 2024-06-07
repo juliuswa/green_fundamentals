@@ -11,8 +11,7 @@
 #include "green_fundamentals/ExecutePlan.h"
 #include "robot_constants.h"
 
-#define REASONABLE_DISTANCE 0.2
-#define LOCALIZATION_POINTS_THRESHOLD 3
+#define REASONABLE_DISTANCE 0.3
 
 enum State {
     INIT,
@@ -40,7 +39,7 @@ struct Position {
 };
 
 bool is_localized = false;
-int localization_points = 0;
+int localization_count = 0;
 
 struct Target {
     float x, y, theta;
@@ -167,42 +166,15 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     }
 
     // Is localized?
-    if (fabs(my_position.x - old_position.x) + fabs(my_position.y - old_position.y) < REASONABLE_DISTANCE) 
+    if (fabs(my_position.x - old_position.x) < REASONABLE_DISTANCE && fabs(my_position.y - old_position.y) < REASONABLE_DISTANCE) 
     {
-        localization_points = 0;
+        localization_count++;
     }
-    
-    if (old_position.row != my_position.row || old_position.col != my_position.col)
-    {
-        // check if new cell is reachable from old cell
-        Cell old_cell = cell_info[old_position.row][old_position.col];
+    else {
+        localization_count = 0;
+    }
 
-        if (abs(old_position.row - my_position.row) + abs(old_position.col - my_position.col) > 1)
-        {
-            localization_points = 0;
-        }
-        else if (old_position.row > my_position.row && old_cell.wall_left)
-        {
-            localization_points = 0;
-        }
-        else if (old_position.row < my_position.row && old_cell.wall_right)
-        {
-            localization_points = 0;
-        }
-        else if (old_position.col > my_position.col && old_cell.wall_down)
-        {
-            localization_points = 0;
-        }
-        else if (old_position.col < my_position.col && old_cell.wall_up)
-        {
-            localization_points = 0;
-        }
-        else {
-            localization_points += 1;
-        }
-    }
-    
-    is_localized = localization_points > LOCALIZATION_POINTS_THRESHOLD;
+    is_localized = localization_count > 15;
 
     if (is_localized)
     {   
@@ -355,54 +327,19 @@ void execute_plan()
 
 void localize()
 {   
-    if (is_localized)
+    // Wander
+    std_srvs::Empty empty;
+    mover_set_wander_client.call(empty);
+
+    ros::Rate loop_rate(15);
+    while (!is_localized)
     {
-        state = State::ALIGN;
-        target_list.clear();
-        return;
+        ros::spinOnce();
+        loop_rate.sleep();
     }
-
-    // Go to neigboring cell
-    if (target_list.empty())
-    {
-        Cell current_cell = cell_info[my_position.row][my_position.col];
-        Cell neighbor_cell;
-        bool found_neighbor = false;
-
-        while (!found_neighbor) {
-            int rand_wall = rand() % 4;
-            switch (rand_wall)
-            {
-                case 0:
-                    if (!current_cell.wall_right)  {
-                        neighbor_cell = cell_info[my_position.row][my_position.col + 1];
-                        found_neighbor = true;
-                    }
-                    break;
-                case 1:
-                    if (!current_cell.wall_up)  {
-                        neighbor_cell = cell_info[my_position.row + 1][my_position.col];
-                        found_neighbor = true;
-                    }
-                    break;
-                case 2:
-                    if (!current_cell.wall_left)  {
-                        neighbor_cell = cell_info[my_position.row][my_position.col - 1];
-                        found_neighbor = true;
-                    }
-                    break;
-                case 3:
-                    if (!current_cell.wall_down)  {
-                        neighbor_cell = cell_info[my_position.row - 1][my_position.col];
-                        found_neighbor = true;
-                    }
-                    break;
-            }
-        }
-
-        add_target_front(neighbor_cell.x, neighbor_cell.y, M_PI/2, false, false);
-        set_target();
-    }
+    
+    state = State::ALIGN;
+    target_list.clear();
 }
 
 void align()
@@ -460,8 +397,7 @@ int main(int argc, char **argv)
     map_sub = n.subscribe("grid_map", 1, map_callback);
     while (!map_received)
     {
-        ros::spinOnce();
-        loop_rate.sleep();
+        
     }
     ROS_DEBUG("Occupancy Map received. Starting localization phase...");
 
