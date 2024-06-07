@@ -9,7 +9,7 @@
 #include "green_fundamentals/ExecutePlan.h"
 #include "robot_constants.h"
 
-#define REASONABLE_DISTANCE 0.2
+#define REASONABLE_DISTANCE 0.3
 #define LOCALIZATION_POINTS_THRESHOLD 3
 
 enum State {
@@ -491,34 +491,23 @@ int main(int argc, char **argv)
         ros::console::notifyLoggerLevelsChanged();
     }
 
-    ROS_DEBUG("Waiting for Occupancy Map...");
     map_sub = n.subscribe("map", 1, map_callback);
     while (!map_received)
     {
         ros::spinOnce();
         loop_rate.sleep();
     }
-    ROS_DEBUG("Occupancy Map received. Starting localization phase...");
 
     // Subscribers
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
     // Publishers
     pose_pub = n.advertise<green_fundamentals::Pose>("pose", 1);
-    /*bool localizer_available = ros::service::waitForService("localizer_start_localize", ros::Duration(10.0));
-    //bool mover_available = ros::service::waitForService("mover_set_idle", ros::Duration(10.0));
-    if (!localizer_available || !mover_available)
-    {
-        ROS_ERROR("A service is not available");
-        return 1;
-    }
     // Services
-    //start_localize_client = n.serviceClient<std_srvs::Empty>("localizer_start_localize");*/
     mover_set_idle_client = n.serviceClient<std_srvs::Empty>("mover_set_idle");
     mover_set_wander_client = n.serviceClient<std_srvs::Empty>("mover_set_wander");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     
     ros::ServiceServer execute_plan_srv = n.advertiseService("execute_plan", set_execute_plan_callback);
-    ROS_DEBUG("Advertising execute_plan service");
     
     state = State::IDLE;
     while(ros::ok()) {
