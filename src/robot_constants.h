@@ -14,7 +14,7 @@ const float CELL_LENGTH = 0.78;
 
 const float POS_EPSILON = 0.05;
 const float SOFT_EPSILON = 0.25;
-const float THETA_EPSILON = 0.04;
+const float THETA_EPSILON = 0.08;
 
 const int MAP_WIDTH = 3;
 const int MAP_HEIGHT = 3;

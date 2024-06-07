@@ -36,6 +36,7 @@ Position my_position{0., 0., 0.};
 bool is_obstacle_front = false;
 bool is_obstacle_left = false;
 bool is_obstacle_right = false;
+bool is_obstacle_far_front = false;
 Position target{0., 0., 0.};
 bool should_rotate = false;
 
@@ -109,6 +110,7 @@ void drive_to()
     {
         if (is_obstacle_front || is_obstacle_right || is_obstacle_left) {
             state = State::IDLE;
+            idle();
             return;
         }
 
@@ -130,7 +132,9 @@ void drive_to()
         
         float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
         speed = std::min(max_speed, speed);
-        speed = std::max(min_speed, speed);        
+        speed = std::max(min_speed, speed);     
+
+        if(is_obstacle_far_front) speed /= 2;
         
         if (direction < 0) 
         {
@@ -200,6 +204,7 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 void obstacle_callback(const green_fundamentals::Obstacle::ConstPtr& obst) 
 {
     is_obstacle_front = obst->front;
+    is_obstacle_far_front = obst->front;
     is_obstacle_right = obst->right;
     is_obstacle_left = obst->left;
 }

@@ -15,18 +15,19 @@
 #include "geometry_msgs/PoseArray.h"
 #include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
-#include "localizer.h"
 
-#define SUBSAMPLE_LASERS 32
-#define PARTICLES_PER_BIN 100
-#define NUM_RANDOM_PARTICLES 5
+#define SUBSAMPLE_LASERS 16
 #define RAY_STEP_SIZE 0.01
 
+#define PARTICLES_PER_BIN 100
 #define NUM_BINS 200
 #define FILLED_BIN_THRESHOLD 5
 
-#define RESAMPLE_STD_POS 0.02
-#define RESAMPLE_STD_THETA 0.02
+#define MAX_NUM_RANDOM_PARTICLES 50
+#define RELIABLE_WEIGHT 0.1
+
+#define RESAMPLE_STD_POS 0.05
+#define RESAMPLE_STD_THETA 0.05
 
 struct Particle {
     Eigen::Vector2f position;
@@ -90,10 +91,8 @@ std::default_random_engine generator;
 // Particles
 
 Particle particles[PARTICLES_PER_BIN * NUM_BINS];
-Particle new_particles[PARTICLES_PER_BIN * NUM_BINS];
 
 int sample_size = PARTICLES_PER_BIN * NUM_BINS;
-int last_sample_size = PARTICLES_PER_BIN * NUM_BINS;
 
 int bins[NUM_BINS];
 int bin_division = floor(std::sqrt(NUM_BINS));
@@ -269,27 +268,31 @@ void reset_bins() {
 void resample_particles()
 {
     float max_weight = particles[get_max_particle_idx()].weight;
-    ROS_INFO("max weight: %f", max_weight);
 
     std::uniform_real_distribution<float> uni_dist(0., 1.);
     std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS / 4);
     std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 4);
 
     int new_sample_size = calculate_sample_size();
-    ROS_DEBUG("new sample size: %d", new_sample_size);
+    int num_random_particles = std::max(0, (int)floor(MAX_NUM_RANDOM_PARTICLES * (1 - (max_weight / RELIABLE_WEIGHT))));
+
+    ROS_INFO("max weight: %f, sample size: %d, random particles: %d", 
+        max_weight, new_sample_size, num_random_particles);
 
     ROS_DEBUG("resampling... ");
-    int index = uni_dist(generator) * last_sample_size;    
+    Particle new_particles[new_sample_size];    
+    
+    int index = uni_dist(generator) * sample_size;    
     double beta = 0.0;    
     
-    for (int i = 0; i < new_sample_size - NUM_RANDOM_PARTICLES; ++i)
+    for (int i = 0; i < new_sample_size - num_random_particles; ++i)
     {
         beta += uni_dist(generator) * 2 * max_weight;
 
         while (beta > particles[index].weight)
         {
             beta -= particles[index].weight;
-            index = (index + 1) % last_sample_size;
+            index = (index + 1) % sample_size;
         }
 
         new_particles[i] = particles[index];
@@ -298,7 +301,7 @@ void resample_particles()
         new_particles[i].theta += normal_dist_theta(generator);
     }
 
-    for (int i = new_sample_size - NUM_RANDOM_PARTICLES; i < new_sample_size; ++i)
+    for (int i = new_sample_size - num_random_particles; i < new_sample_size; ++i)
     {
         new_particles[i] = get_random_particle();
     }
@@ -306,7 +309,7 @@ void resample_particles()
     ROS_DEBUG("copying... ");
   
     reset_bins();
-    for (int i = 0; i < sample_size; i++) 
+    for (int i = 0; i < new_sample_size; i++) 
     {
         set_particle(new_particles[i], i);
     }
@@ -402,7 +405,7 @@ void publish_particles()
     position.x = particles[best_idx].position[0];
     position.y = particles[best_idx].position[1];
     position.theta = particles[best_idx].theta;
-    ROS_INFO("Publishing position: (%f, %f) th: %f", position.x, position.y, position.theta);
+    ROS_DEBUG("Publishing position: (%f, %f) th: %f", position.x, position.y, position.theta);
     position_pub.publish(position);
 
     pose_pub.publish(particle_to_pose(best_idx));
@@ -453,6 +456,7 @@ int main(int argc, char **argv)
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
 
     ros::Rate loop_rate(30);
+    int it = 0;
     while(ros::ok()) {
         ros::spinOnce();
 
@@ -461,16 +465,19 @@ int main(int argc, char **argv)
             continue;
         }
 
-        ROS_DEBUG("evaluate_particles");
-        evaluate_particles();
+        if(it % 8 == 0) {
+            ROS_DEBUG("evaluate_particles");
+            evaluate_particles();
 
-        ROS_DEBUG("resample_particles");
-        resample_particles();
+            ROS_DEBUG("resample_particles");
+            resample_particles();
+        }
 
         ROS_DEBUG("publish_particles");
         publish_particles();
 
         loop_rate.sleep();
+        it++;
     }
 
     return 0;
