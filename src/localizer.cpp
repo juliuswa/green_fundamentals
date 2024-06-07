@@ -452,7 +452,7 @@ int main(int argc, char **argv)
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
-    pose_pub = n.advertise<geometry_msgs::Pose>("pose", 1);
+    pose_pub = n.advertise<geometry_msgs::Pose>("best_pose", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
 
     ros::Rate loop_rate(30);

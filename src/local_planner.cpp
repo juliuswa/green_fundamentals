@@ -42,10 +42,13 @@ struct Position {
 bool is_localized = false;
 int localization_points = 0;
 
+ros::Time last_sent_command;
+
 struct Target {
     float x, y, theta;
     bool should_rotate = false;
     bool must_be_reached = false;
+    bool sent = false;
 };
 
 Position my_position{0., 0., 0., 0, 0};
@@ -188,33 +191,7 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     }    
     else if (old_position.row != my_position.row || old_position.col != my_position.col)
     {
-        // check if new cell is reachable from old cell
-        Cell old_cell = cell_info[old_position.row][old_position.col];
-
-        if (abs(old_position.row - my_position.row) + abs(old_position.col - my_position.col) > 1)
-        {
-            localization_points = 0;
-        }
-        else if (old_position.row > my_position.row && old_cell.wall_left)
-        {
-            localization_points = 0;
-        }
-        else if (old_position.row < my_position.row && old_cell.wall_right)
-        {
-            localization_points = 0;
-        }
-        else if (old_position.col > my_position.col && old_cell.wall_down)
-        {
-            localization_points = 0;
-        }
-        else if (old_position.col < my_position.col && old_cell.wall_up)
-        {
-            localization_points = 0;
-        }
-        else {
-            localization_points += 1;
-        }
-
+        localization_points += 1;
         ROS_DEBUG("localization points = %d", localization_points);
     }
     
@@ -264,6 +241,7 @@ void set_target() {
     green_fundamentals::DriveTo drive_to_msg;
 
     Target current_target = target_list.front();
+    current_target.sent = true;
 
     drive_to_msg.request.x_current = my_position.x;
     drive_to_msg.request.y_current = my_position.y;
@@ -272,8 +250,6 @@ void set_target() {
     drive_to_msg.request.y_target = current_target.y;
     drive_to_msg.request.theta_target = current_target.theta;
     drive_to_msg.request.rotate = current_target.should_rotate;
-
-    ROS_DEBUG("Sending Target: pos:(%f, %f) th:%f", current_target.x, current_target.y, current_target.theta, current_target.should_rotate);
 
     if (!mover_drive_to_client.call(drive_to_msg))
     {
@@ -351,7 +327,7 @@ bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, g
 
     state = State::EXECUTE_PLAN;
     ROS_DEBUG("Added targets to target_list. Now we have %ld targets.", target_list.size());
-    ROS_INFO("State = EXECUTE_PLAN");
+
     res.success = true;
     return true;
 }
@@ -360,14 +336,15 @@ void execute_plan()
 {
     if (target_list.empty())  {
         state = State::IDLE;
-        ROS_INFO("Target list is empty");
-        ROS_INFO("State = IDLE");
         return;
     }
     else if (current_target_reached())
     {
         target_list.pop_front();
         ROS_INFO("Next Target reached.");
+    }
+    else if (!target_list[0].sent) {
+        set_target();
     }
 }
 
@@ -434,6 +411,13 @@ void localize()
         add_target_front(neighbor_cell.x, neighbor_cell.y, 0., false, false);
         set_target();
     }
+
+    if (current_target_reached()) 
+    {
+        ROS_DEBUG("Target reached.");
+
+        target_list.clear();
+    }
 }
 
 void align()
@@ -447,11 +431,8 @@ void align()
         set_target();
     }
     
-    if (current_target_reached())
-    {
-        state = State::IDLE;
-        target_list.clear();
-    }
+    state = State::IDLE;
+    target_list.clear();
 }
 
 void print_state()
@@ -516,6 +497,7 @@ int main(int argc, char **argv)
     ros::ServiceServer execute_plan_srv = n.advertiseService("execute_plan", set_execute_plan_callback);
     ROS_DEBUG("Advertising execute_plan service");
     
+    last_sent_command = ros::Time::now();
     state = State::IDLE;
     while(ros::ok()) {
         
