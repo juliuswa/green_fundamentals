@@ -79,7 +79,6 @@ ros::Subscriber map_sub;
 std::vector<std::vector<int8_t>> map_data;
 int map_height, map_width;
 float x_max, y_max; // m
-int grid_rows, grid_cols;
 
 // Encoder values
 float last_left = 0.;
@@ -505,8 +504,6 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
     map_received = true;
     map_sub.shutdown();
 
-    ros::param::get("grid_num_rows", grid_rows);
-    ros::param::get("grid_num_cols", grid_cols);
     ros::param::get("x_max", x_max);
     ros::param::get("y_max", y_max);
 }
