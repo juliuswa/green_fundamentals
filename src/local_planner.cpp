@@ -138,11 +138,11 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
             int center_x_pixel = col * (corner_pixels + wall_length_pixels) + corner_pixels + wall_length_pixels / 2;
 
             // add cell information in a Cell struct so that we can check when executing plan if we will run into a wall.
-            for (int i = 1; i <= wall_length_pixels; i++)
+            for (int i = wall_length_pixels/2 - 4; i <= wall_length_pixels/2 + 4; i++)
             {
-                cell.wall_right = map_data[std::min(center_x_pixel + i, map_width)][center_y_pixel] != 0 ? true : cell.wall_right;
+                cell.wall_right = map_data[std::min(center_x_pixel + i, map_width-1)][center_y_pixel] != 0 ? true : cell.wall_right;
                 cell.wall_left = map_data[std::max(center_x_pixel - i, 0)][center_y_pixel] != 0 ? true : cell.wall_left;
-                cell.wall_up = map_data[center_x_pixel][std::min(center_y_pixel + i, map_width)] != 0 ? true : cell.wall_up;
+                cell.wall_up = map_data[center_x_pixel][std::min(center_y_pixel + i, map_width-1)] != 0 ? true : cell.wall_up;
                 cell.wall_down = map_data[center_x_pixel][std::max(center_y_pixel - i, 0)] != 0 ? true : cell.wall_down;
             }
 
