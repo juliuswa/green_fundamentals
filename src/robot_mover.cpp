@@ -205,9 +205,7 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 
 void obstacle_callback(const green_fundamentals::Obstacle::ConstPtr& obst) 
 {
-    
     is_obstacle_in_front = obst->front;
-
 }
 
 bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fundamentals::DriveTo::Response &res)

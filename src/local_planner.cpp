@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "std_srvs/Empty.h"
 #include "nav_msgs/OccupancyGrid.h"
+#include <deque>
 
 #include "green_fundamentals/Position.h"
 #include "green_fundamentals/Pose.h"
@@ -33,11 +34,12 @@ struct Position {
 struct Target {
     float x, y, theta;
     bool should_rotate = false;
+    bool must_be_reached = false;
 };
 
 Position my_position{0., 0., 0., 0, 0};
 Target current_target{0., 0., 0.};
-std::vector<Target> target_list;
+std::deque<Target> target_list;
 
 // Map
 ros::Subscriber map_sub;
@@ -180,10 +182,16 @@ void set_target() {
     }
 }
 
-bool current_target_reached(float distance_threshold)
-{
-    bool distance_diff = fabs(my_position.x - current_target.x) < distance_threshold && fabs(my_position.y - current_target.y) < distance_threshold;
-    bool angle_diff = fabs(my_position.theta - current_target.theta) < 5.0 * M_PI/180;
+bool current_target_reached()
+{   
+    if (target_list.size() == 0) {
+        return true;
+    }
+
+    float pos_epsilon = target_list[0].must_be_reached ? POS_EPSILON : SOFT_EPSILON;
+
+    bool distance_diff = fabs(my_position.x - target_list[0].x) < pos_epsilon && fabs(my_position.y - target_list[0].y) < pos_epsilon;
+    bool angle_diff = fabs(my_position.theta - target_list[0].theta) < THETA_EPSILON;
 
     if (current_target.should_rotate) return distance_diff && angle_diff;
     
@@ -217,18 +225,20 @@ bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, g
             break;
         }
 
-        if (row > grid_rows || row < 0 || col > grid_cols || grid_cols) 
+        if (row > grid_rows || row < 0 || col > grid_cols || col < 0)
         {
             target_list.clear();
             res.success = false;
             state = State::IDLE;
             return false;
         }
+
         std::pair<float, float> center = cell_centers[row][col];
         new_target.x = center.first;
         new_target.y = center.second;
         target_list.push_back(new_target);
     }
+
     state = State::EXECUTE_PLAN;
     res.success = true;
     return true;
@@ -236,20 +246,17 @@ bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, g
 
 void execute_plan()
 {
-    bool is_last_target = target_list.empty();
-
-    if (is_last_target && current_target_reached(0.05))
+    if (current_target_reached())
     {
+        target_list.pop_front();
+    }
+
+    if (target_list.size() == 0)  {
         state = State::IDLE;
         return;
     }
-    else if (!is_last_target && current_target_reached(0.25))
-    {
-        current_target = target_list.front();
-        target_list.erase(target_list.begin());
-        set_target();
-        return;
-    }
+
+    
 }
 
 int main(int argc, char **argv)
@@ -317,7 +324,7 @@ int main(int argc, char **argv)
 
     set_target();
 
-    while (!current_target_reached(0.05))
+    while (!current_target_reached())
     {
         ros::spinOnce();
         loop_rate.sleep();
