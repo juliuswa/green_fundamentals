@@ -333,7 +333,6 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
         Normalize weights and compute w_slow and w_fast for adaptive sampling.
     */
     float avg_weight = total_weight / NUM_PARTICLES;
-    float N_effective = 0.;
     float best_weight = -1;
     int best_index = -1;
     if (total_weight > 0.)
@@ -341,7 +340,6 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
         for (int i = 0; i < NUM_PARTICLES; i++)
         {
             weights[i] /= total_weight;
-            N_effective += weights[i] * weights[i];
             if (weights[i] > best_weight) 
             {
                 best_index = i;
@@ -364,81 +362,76 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
             weights[i] = 1.0 / NUM_PARTICLES;
         }
     }
-    if (N_effective > 0) N_effective = 1.0/N_effective;
 
     /*
         Resample:
         Draw new particles from the current particles proportional to the weight.
         Only if effective sample size is big enough.
     */
-
-    if (N_effective > 0.5 * NUM_PARTICLES)
+    float cumulative_weights[NUM_PARTICLES + 1];
+    cumulative_weights[0] = 0.;
+    for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        float cumulative_weights[NUM_PARTICLES + 1];
-        cumulative_weights[0] = 0.;
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            cumulative_weights[i+1] = cumulative_weights[i] + weights[i];
-        }
+        cumulative_weights[i+1] = cumulative_weights[i] + weights[i];
+    }
 
-        Particle new_particles[NUM_PARTICLES];
-        for (int i = 0; i < NUM_PARTICLES; i++)
+    Particle new_particles[NUM_PARTICLES];
+    for (int i = 0; i < NUM_PARTICLES; i++)
+    {
+        if (uniform_dist(generator) < std::max(0., 1. - W_FAST / W_SLOW))
         {
-            if (uniform_dist(generator) < std::max(0., 1. - W_FAST / W_SLOW))
+            // Sample random particle
+            // TODO Make sure that the random particle kinda conforms to the measurement.
+            new_particles[i] = get_random_particle();
+        } 
+        else
+        {
+            // Draw from particles
+            float rand = uniform_dist(generator);
+            int particle_index;
+            for(particle_index = 0; particle_index < NUM_PARTICLES; particle_index++)
             {
-                // Sample random particle
-                // TODO Make sure that the random particle kinda conforms to the measurement.
-                new_particles[i] = get_random_particle();
-            } 
-            else
-            {
-                // Draw from particles
-                float rand = uniform_dist(generator);
-                int particle_index;
-                for(particle_index = 0; particle_index < NUM_PARTICLES; particle_index++)
-                {
-                    if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
-                }
-                new_particles[i] = particles[particle_index];
+                if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
             }
+            new_particles[i] = particles[particle_index];
         }
+    }
 
-        /*
-            Check if localization has converged.
-        */
-        float mean_x = 0.;
-        float mean_y = 0.;
-        for (int i = 0; i < NUM_PARTICLES; i++)
+    /*
+        Check if localization has converged.
+    */
+    float mean_x = 0.;
+    float mean_y = 0.;
+    for (int i = 0; i < NUM_PARTICLES; i++)
+    {
+        mean_x += new_particles[i].x;
+        mean_y += new_particles[i].y;
+    }
+    mean_x /= NUM_PARTICLES;
+    mean_y /= NUM_PARTICLES;
+    bool converged_temp = true;
+    for (int i = 0; i < NUM_PARTICLES; i++)
+    {
+        Particle particle = new_particles[i];
+        if (particle.x - mean_x > 0.1 || particle.y - mean_y > 0.1)
         {
-            mean_x += new_particles[i].x;
-            mean_y += new_particles[i].y;
+            converged_temp = false;
+            break;
         }
-        mean_x /= NUM_PARTICLES;
-        mean_y /= NUM_PARTICLES;
-        bool converged_temp = true;
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            Particle particle = new_particles[i];
-            if (particle.x - mean_x > 0.1 || particle.y - mean_y > 0.1)
-            {
-                converged_temp = false;
-                break;
-            }
-        }
-        converged = converged_temp;
+    }
+    converged = converged_temp;
 
-        /*
-            Publish particles.
-        */
-        publish_particles(particles[best_index]);
+    /*
+        Publish particles.
+    */
+    publish_particles(particles[best_index]);
 
-        /*
-            Copy particles
-        */
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            particles[i] = new_particles[i];
-        }
+    /*
+        Copy particles
+    */
+    for (int i = 0; i < NUM_PARTICLES; i++)
+    {
+        particles[i] = new_particles[i];
     }
 
     /*
