@@ -108,12 +108,6 @@ void drive_to()
 {
     if (!is_arrived()) 
     {
-        if (is_obstacle_front || is_obstacle_right || is_obstacle_left) {
-            state = State::IDLE;
-            idle();
-            return;
-        }
-
         Eigen::Vector2f pos_delta {target.x - my_position.x, target.y - my_position.y};
         Eigen::Vector2f robot_direction {cos(my_position.theta), sin(my_position.theta)};     
 
@@ -129,6 +123,19 @@ void drive_to()
         float linear_factor = - 2 * angle / (M_PI / 2) + 1;
 
         float factor = (exponential_factor + linear_factor) / 2;
+
+        if (is_obstacle_front) {
+            if (fabs(angle) < M_PI / 8) {
+                ROS_WARN("drive_to error. angle: %f", angle);
+                idle();      
+                state = State::IDLE;
+                ros::param::set("mover_drive_to_error", true);
+                return;
+            }
+            else {
+                factor = -1;
+            }
+        }
         
         float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
         speed = std::min(max_speed, speed);
@@ -174,6 +181,7 @@ void drive_to()
         wheel_commands.request.right = 0.;
         state = State::IDLE;
     }
+
     diff_drive_service.call(wheel_commands);
 }
 
@@ -219,9 +227,11 @@ bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fun
     target.y = req.y_target;
     target.theta = req.theta_target;
     
+    ROS_DEBUG("new target: (%f, %f)", req.x_target, req.y_target);
     should_rotate = req.rotate;
     
     state = State::DRIVE_TO;
+    ros::param::set("mover_drive_to_error", false);
     return true;
 }
 
@@ -241,6 +251,8 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "robot_mover");
     ros::NodeHandle n;
+
+    ros::param::set("mover_drive_to_error", false);
 
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
         ros::console::notifyLoggerLevelsChanged();

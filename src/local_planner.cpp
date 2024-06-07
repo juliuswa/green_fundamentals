@@ -11,7 +11,7 @@
 #include "green_fundamentals/ExecutePlan.h"
 #include "robot_constants.h"
 
-#define REASONABLE_DISTANCE 0.2
+#define REASONABLE_DISTANCE 0.4
 #define LOCALIZATION_POINTS_THRESHOLD 3
 
 enum State {
@@ -87,15 +87,21 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
 
     for (int row = 0; row < msg->rows.size(); row++)
     {
+        ROS_DEBUG("row %d", row);
         std::vector<Cell> column_cells;
 
         for (int col = 0; col < msg->rows[row].cells.size(); col++)
         {
+            ROS_DEBUG("col %d", col);
             Cell new_cell;
-            new_cell.x = (float)row * CELL_LENGTH + (CELL_LENGTH / 2);
+            new_cell.x = (float)col * CELL_LENGTH + (CELL_LENGTH / 2);
             new_cell.y = (float)row * CELL_LENGTH + (CELL_LENGTH / 2);
+            new_cell.wall_right = false;
+            new_cell.wall_up = false;
+            new_cell.wall_left = false;
+            new_cell.wall_down = false;
             
-            green_fundamentals::Cell current = msg->rows[msg->rows.size() - row].cells[col];
+            green_fundamentals::Cell current = msg->rows[msg->rows.size() - (row + 1)].cells[col];
             for (auto wall : current.walls) {
                 switch(wall) {
                     case 0:
@@ -112,6 +118,11 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
                        break; 
                 }
             }
+
+            ROS_DEBUG("Cell (%d, %d): center: (%f, %f), walls: (%d, %d, %d, %d)",
+                col, row, 
+                new_cell.x, new_cell.y,
+                new_cell.wall_right, new_cell.wall_up, new_cell.wall_left, new_cell.wall_down);
 
             column_cells.push_back(new_cell);
         }
@@ -167,12 +178,15 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     }
 
     // Is localized?
-    if (fabs(my_position.x - old_position.x) + fabs(my_position.y - old_position.y) < REASONABLE_DISTANCE) 
+    if (fabs(my_position.x - old_position.x) > REASONABLE_DISTANCE ||
+        fabs(my_position.y - old_position.y) > REASONABLE_DISTANCE) 
     {
+        ROS_INFO("Unreasonable movement");
+
         localization_points = 0;
-    }
-    
-    if (old_position.row != my_position.row || old_position.col != my_position.col)
+        target_list.clear();
+    }    
+    else if (old_position.row != my_position.row || old_position.col != my_position.col)
     {
         // check if new cell is reachable from old cell
         Cell old_cell = cell_info[old_position.row][old_position.col];
@@ -200,6 +214,8 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         else {
             localization_points += 1;
         }
+
+        ROS_DEBUG("localization points = %d", localization_points);
     }
     
     is_localized = localization_points > LOCALIZATION_POINTS_THRESHOLD;
@@ -256,6 +272,8 @@ void set_target() {
     drive_to_msg.request.y_target = current_target.y;
     drive_to_msg.request.theta_target = current_target.theta;
     drive_to_msg.request.rotate = current_target.should_rotate;
+
+    ROS_DEBUG("Sending Target: pos:(%f, %f) th:%f", current_target.x, current_target.y, current_target.theta, current_target.should_rotate);
 
     if (!mover_drive_to_client.call(drive_to_msg))
     {
@@ -362,10 +380,23 @@ void localize()
         return;
     }
 
+    bool mover_error;
+    ros::param::get("mover_drive_to_error", mover_error);
+    if (mover_error)
+    {
+        target_list.clear();
+    }
+
     // Go to neigboring cell
     if (target_list.empty())
     {
+        ROS_DEBUG("finding new neighbor cell ...");
+
         Cell current_cell = cell_info[my_position.row][my_position.col];
+
+        ROS_DEBUG("current cell: (%d, %d) walls:(%d, %d, %d, %d)", my_position.col, my_position.row, 
+            current_cell.wall_right, current_cell.wall_up, current_cell.wall_left, current_cell.wall_down);
+
         Cell neighbor_cell;
         bool found_neighbor = false;
 
@@ -400,7 +431,7 @@ void localize()
             }
         }
 
-        add_target_front(neighbor_cell.x, neighbor_cell.y, M_PI/2, false, false);
+        add_target_front(neighbor_cell.x, neighbor_cell.y, 0., false, false);
         set_target();
     }
 }
