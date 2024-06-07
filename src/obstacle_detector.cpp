@@ -36,24 +36,27 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& laser_scan)
     bool left = false;
     bool front = false;
     bool right = false;
+    bool far_front = false;
 
     for(const std::pair<float, float> point : laser_coords) 
     {
         float dist = std::sqrt(pow(point.first, 2) + pow(point.second, 2));
         if(dist < CASING_RADIUS) continue;
     
-        if(point.second > robot_side) {
+        if(point.second > robot_side) {  // left
             left = (dist < (CASING_RADIUS + allowed_distance / 2)) ? true : left;
-        } else if(point.second < -robot_side) {
+        } else if(point.second < -robot_side) {  // right
             right = (dist < (CASING_RADIUS + allowed_distance / 2)) ? true : right;
-        } else {
+        } else {  // front
             front = (dist < (CASING_RADIUS + allowed_distance)) ? true : front;
+            far_front = (dist < (CASING_RADIUS + 2 * allowed_distance)) ? true : far_front;
         }
     }
 
     msg.left = left;
     msg.front = front;
     msg.right = right;
+    msg.far_front = far_front;
     obstacle_pub.publish(msg);
 }
 
