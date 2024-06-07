@@ -7,6 +7,7 @@
 */
 
 #include <mutex>
+#include <random>
 
 #include "ros/ros.h"
 #include "std_srvs/Empty.h"
@@ -32,7 +33,9 @@ enum State {
 State state = State::IDLE;
 
 Position my_position{0., 0., 0.};
-bool is_obstacle_in_front = false;
+bool is_obstacle_front = false;
+bool is_obstacle_left = false;
+bool is_obstacle_right = false;
 Position target{0., 0., 0.};
 bool should_rotate = false;
 
@@ -47,10 +50,6 @@ const float min_speed = 3.0;
 const float slow_distance = 0.2;
 const float slow_angle = 1.5;
 
-float min_distance = -1;
-float min_distance_angle = 0;
-const float distance_threshold = 0.1;
-
 ros::ServiceClient diff_drive_service;
 create_fundamentals::DiffDrive wheel_commands;
 
@@ -62,22 +61,31 @@ bool is_arrived()
 void wander() 
 {
     float speed = max_speed/2;
-    if (min_distance < distance_threshold)
+    
+    if (is_obstacle_right)
     {
-        if (min_distance_angle < 0.)
-        {
-            // Turn left
-            wheel_commands.request.left = -speed;
-            wheel_commands.request.right = speed;
-        } 
-        else
-        {
-            // Turn right
-            wheel_commands.request.left = speed;
-            wheel_commands.request.right = -speed;
-        }
-        
+        // Turn left
+        wheel_commands.request.left = -speed;
+        wheel_commands.request.right = speed;
+    } 
+    else if (is_obstacle_left)
+    {
+        // Turn right
+        wheel_commands.request.left = speed;
+        wheel_commands.request.right = -speed;
     }
+    else if (is_obstacle_front) 
+    {
+        // Choose at random if right or left
+        std::random_device rand;
+        std::mt19937 gen(rand());
+        std::uniform_int_distribution<std::mt19937::result_type> dist(0, 1);
+        int random_value = dist(gen);        
+        int random_sign = (random_value == 0) ? -1 : 1;
+
+        wheel_commands.request.left = random_sign * speed;
+        wheel_commands.request.right = random_sign * -speed;
+    }  
     else 
     {
         wheel_commands.request.left = speed;
@@ -87,11 +95,19 @@ void wander()
     diff_drive_service.call(wheel_commands);
 }
 
+void idle() 
+{
+    wheel_commands.request.left = 0;
+    wheel_commands.request.right = 0;
+    
+    diff_drive_service.call(wheel_commands);
+}
+
 void drive_to()
 {
     if (!is_arrived()) 
     {
-        if (is_obstacle_in_front) {
+        if (is_obstacle_front || is_obstacle_right || is_obstacle_left) {
             state = State::IDLE;
             return;
         }
@@ -157,28 +173,6 @@ void drive_to()
     diff_drive_service.call(wheel_commands);
 }
 
-void laser_callback(const sensor_msgs::LaserScan::ConstPtr& laser_scan)
-{   
-    float min_distance_temp = 1.;
-    float min_angle_temp = 0.;
-    for(int i = 0; i < laser_scan->ranges.size(); i++) {
-        float distance = laser_scan->ranges[i];
-        
-        if (distance != distance || distance < 0.03) continue;  //NaN or too close
-
-        float angle = i * laser_scan->angle_increment + laser_scan->angle_min;
-
-        if (distance < min_distance_temp) 
-        {
-            min_distance_temp = distance;
-            min_angle_temp = angle;
-        }
-    }
-
-    min_distance = min_distance_temp;
-    min_distance_angle = min_angle_temp;
-}
-
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg) 
 {
     last_left = current_left;
@@ -205,7 +199,7 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 
 void obstacle_callback(const green_fundamentals::Obstacle::ConstPtr& obst) 
 {
-    is_obstacle_in_front = obst->front;
+    is_obstacle_front = obst->front;
     is_obstacle_right = obst->right;
     is_obstacle_left = obst->left;
 }
@@ -252,7 +246,7 @@ int main(int argc, char **argv)
 
     // Subscribers
     ros::Subscriber sensor_sub = n.subscribe("sensor_packet", 1, sensor_callback);
-    ros::Subscriber scan_sub = n.subscribe("scan_filtered", 1, laser_callback);
+    ros::Subscriber obstacle_sub = n.subscribe("obstacle", 1, obstacle_callback);
 
     // Services
     ros::ServiceServer drive_to_service = n.advertiseService("mover_set_drive_to", set_drive_to_callback);
@@ -267,7 +261,7 @@ int main(int argc, char **argv)
         {
         case State::IDLE:
             // do nothing
-            // TODO send to diffdrive 0 0
+            idle();
             break;
 
         case State::DRIVE_TO:
