@@ -13,7 +13,7 @@ const float CASING_RADIUS = 0.1675;  // diameter is 33.5 cm
 const float CELL_LENGTH = 0.8;
 
 const float POS_EPSILON = 0.05;
-const float SOFT_EPSILON = 0.25;
+const float SOFT_EPSILON = 0.30;
 const float THETA_EPSILON = 0.08;
 
 const int MAP_WIDTH = 3;

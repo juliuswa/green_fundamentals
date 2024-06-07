@@ -11,8 +11,8 @@
 #include "green_fundamentals/ExecutePlan.h"
 #include "robot_constants.h"
 
-#define REASONABLE_DISTANCE 0.4
-#define LOCALIZATION_POINTS_THRESHOLD 3
+#define REASONABLE_DISTANCE 0.5
+#define LOCALIZATION_POINTS_THRESHOLD 5
 
 enum State {
     INIT,
@@ -415,7 +415,6 @@ void localize()
     if (current_target_reached()) 
     {
         ROS_DEBUG("Target reached.");
-
         target_list.clear();
     }
 }

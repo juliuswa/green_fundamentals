@@ -256,7 +256,7 @@ int calculate_sample_size() {
         }            
     }
 
-    return filled_bin_count * PARTICLES_PER_BIN;
+    return std::max(1, filled_bin_count) * PARTICLES_PER_BIN;
 }
 
 void reset_bins() {
@@ -270,8 +270,8 @@ void resample_particles()
     float max_weight = particles[get_max_particle_idx()].weight;
 
     std::uniform_real_distribution<float> uni_dist(0., 1.);
-    std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS / 4);
-    std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 4);
+    std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS / 8);
+    std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 8);
 
     int new_sample_size = calculate_sample_size();
     int num_random_particles = std::max(0, (int)floor(MAX_NUM_RANDOM_PARTICLES * (1 - (max_weight / RELIABLE_WEIGHT))));
@@ -465,7 +465,7 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if(it % 8 == 0) {
+        if(it % 4 == 0) {
             ROS_DEBUG("evaluate_particles");
             evaluate_particles();
 
