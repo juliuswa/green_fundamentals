@@ -45,8 +45,8 @@ const float SIGMA_HIT = 0.1;
 const float LAMBDA_SHORT = 0.1;
 
 // Only update when robot moved enough
-const float DISTANCE_THRESHOLD = 0.05;
-const float THETA_THRESHOLD = 10. * M_PI/180.0;
+const float DISTANCE_THRESHOLD = 0.02;
+const float THETA_THRESHOLD = 5. * M_PI/180.0;
 
 // Adapted MCL Algorithm
 const float ALPHA_FAST = 0.1;
@@ -297,7 +297,11 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
     bool update = enough_movement || !first_localization_done;
 
-    if (!update) return;
+    if (!update) 
+    {
+        ROS_DEBUG("Not enough movement.");
+        return;
+    }
     // Only Update when the movement was big enough.
 
     float weights[NUM_PARTICLES];
