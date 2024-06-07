@@ -15,6 +15,7 @@
 #include "geometry_msgs/PoseArray.h"
 #include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
+#include "localizer.h"
 
 #define SUBSAMPLE_LASERS 32
 #define PARTICLES_PER_BIN 100
@@ -22,6 +23,7 @@
 #define RAY_STEP_SIZE 0.01
 
 #define NUM_BINS 200
+#define FILLED_BIN_THRESHOLD 5
 
 #define RESAMPLE_STD_POS 0.02
 #define RESAMPLE_STD_THETA 0.02
@@ -58,11 +60,12 @@ bool map_received = false;
 std::vector<std::vector<int8_t>> map_data;
 int map_height, map_width;
 
-// Localization parameters
 float x_min = 0.0; // m
-float x_max = CELL_LENGTH * 3.0;
+float x_max = CELL_LENGTH * (float) MAP_WIDTH;
 float y_min = 0.0;
-float y_max = CELL_LENGTH * 3.0;
+float y_max = CELL_LENGTH * (float) MAP_HEIGHT;
+
+// Sensor
 
 float last_left = 0.;
 float last_right = 0.;
@@ -72,10 +75,7 @@ float current_right = 0.;
 
 bool is_first_encoder_measurement = true;
 
-// Relative motion since the last time particles were updated
-float dx = 0.;
-float dy = 0.;
-float dtheta = 0.;
+// Laser
 
 std::vector<double> laser_ranges;
 float laser_angle_min;
@@ -83,7 +83,11 @@ float laser_angle_increment;
 
 bool laser_received = false;
 
+// Random
+
 std::default_random_engine generator;
+
+// Particles
 
 Particle particles[PARTICLES_PER_BIN * NUM_BINS];
 Particle new_particles[PARTICLES_PER_BIN * NUM_BINS];
@@ -95,6 +99,8 @@ int bins[NUM_BINS];
 int bin_division = floor(std::sqrt(NUM_BINS));
 float bin_x = (x_max - x_min) / bin_division;
 float bin_y = (y_max - y_min) / bin_division;
+
+// Publishers
 
 ros::Publisher pose_pub, posearray_pub, position_pub;
 
@@ -112,31 +118,32 @@ int get_bin_for_position(int i) {
     return std::min((int)(floor(particles[i].position[0] / bin_x) + bin_division * floor(particles[i].position[1] / bin_y)), NUM_BINS - 1);
 }
 
-void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
-{    
-    map_height = msg->info.height;
-    map_width = msg->info.width;
-
-    // Resize the map_data to match the map dimensions
-    map_data.resize(map_height);
-    for (int i = 0; i < map_height; ++i) {
-        map_data[i].resize(map_width);
-    }
-
-    // Fill the 2D array with the occupancy data
-    for (int y = 0; y < map_height; ++y) {
-        for (int x = 0; x < map_width; ++x) {
-            // Calculate the index in the 1D data array
-            int index = x + y * map_width;
-            map_data[y][x] = msg->data[index];
-        }
-    }
-
-    ROS_INFO("Map received");
-    map_received = true;
-    map_sub.shutdown();
+void set_particle(Particle particle, int index) {
+    particles[index] = particle;
+    int bin = get_bin_for_position(index);
+    bins[bin] += 1;
 }
 
+Particle get_random_particle() 
+{
+    std::uniform_real_distribution<float> uni_dist(0., 1.);
+
+    float x = uni_dist(generator) * (x_max - x_min);
+    float y = uni_dist(generator) * (y_max - y_min);
+
+    float theta = uni_dist(generator) * (2 * M_PI);
+    Eigen::Vector2f pos{x, y};
+    Particle particle{pos, theta, 0.};
+    return particle;
+}
+
+void init_particles()
+{
+    for (int i = 0; i < sample_size; i++)
+    {
+        set_particle(get_random_particle(), i);        
+    }
+}
 
 void update_particles()
 {
@@ -161,6 +168,176 @@ void update_particles()
     }
 }
 
+void evaluate_particle(int p)
+{
+    float total_delta = 0.;
+
+    float laser_x = particles[p].position[0] + LASER_OFFSET * std::cos(particles[p].theta);
+    float laser_y = particles[p].position[1] + LASER_OFFSET * std::sin(particles[p].theta);
+
+    for (int i = 0; i < SUBSAMPLE_LASERS; i++)
+    {
+        int index = i * laser_ranges.size() / SUBSAMPLE_LASERS;
+
+        float real_distance = laser_ranges[index];
+
+        if (real_distance != real_distance)
+        {
+            real_distance = 1.0;
+        }
+        else if (real_distance < RAY_STEP_SIZE)
+        {
+            real_distance = RAY_STEP_SIZE;
+        }
+
+        // Get laser angle
+        float angle = laser_angle_min + laser_angle_increment * index;
+        float ray_angle = particles[p].theta + angle;
+
+        float r = RAY_STEP_SIZE;
+
+        float ray_x = laser_x;
+        float ray_y = laser_y;
+
+        // ROS_DEBUG("ray casting");
+        while (r < 1.0)
+        {
+            ray_x = laser_x + r * std::cos(ray_angle);
+            ray_y = laser_y + r * std::sin(ray_angle);
+
+            if (ray_x > x_max || ray_x < x_min || ray_y > y_max || ray_y < y_min)
+                break;
+
+            std::pair<int, int> grid_index = metric_to_grid_index(ray_x, ray_y);
+
+            if (map_data[grid_index.first][grid_index.second] != 0)
+                break;
+
+            r += RAY_STEP_SIZE;
+        }
+
+        total_delta += fabs(r - real_distance);
+    }
+
+    particles[p].weight = std::exp(-total_delta);
+}
+
+void evaluate_particles() 
+{
+    for (int p = 0; p < sample_size; p++)
+    {
+        // ROS_DEBUG("particle %d: x=%f, y=%f, th=%f", p, particles[p].position[0], particles[p].position[1], particles[p].theta);
+
+        evaluate_particle(p);
+    }
+}
+
+int get_max_particle_idx() {
+    float max_weight = 0.;
+    int index = -1;
+
+    for (int i = 0; i < sample_size; i++)
+    {
+        if (particles[i].weight > max_weight)
+        {
+            max_weight = particles[i].weight;
+            index = i;
+        }
+    }
+
+    return index;
+}
+
+int calculate_sample_size() {
+    int filled_bin_count = 0;
+
+    for (int i = 0; i < NUM_BINS; i++) {
+        if (bins[i] > FILLED_BIN_THRESHOLD) {
+            filled_bin_count += 1;
+        }            
+    }
+
+    return filled_bin_count * PARTICLES_PER_BIN;
+}
+
+void reset_bins() {
+    for (int i = 0; i < NUM_BINS; i++) {
+        bins[i] = 0;
+    }
+}
+
+void resample_particles()
+{
+    float max_weight = particles[get_max_particle_idx()].weight;
+    ROS_INFO("max weight: %f", max_weight);
+
+    std::uniform_real_distribution<float> uni_dist(0., 1.);
+    std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS / 4);
+    std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 4);
+
+    int new_sample_size = calculate_sample_size();
+    ROS_DEBUG("new sample size: %d", new_sample_size);
+
+    ROS_DEBUG("resampling... ");
+    int index = uni_dist(generator) * last_sample_size;    
+    double beta = 0.0;    
+    
+    for (int i = 0; i < new_sample_size - NUM_RANDOM_PARTICLES; ++i)
+    {
+        beta += uni_dist(generator) * 2 * max_weight;
+
+        while (beta > particles[index].weight)
+        {
+            beta -= particles[index].weight;
+            index = (index + 1) % last_sample_size;
+        }
+
+        new_particles[i] = particles[index];
+        new_particles[i].position[0] += normal_dist_pos(generator);
+        new_particles[i].position[1] += normal_dist_pos(generator);
+        new_particles[i].theta += normal_dist_theta(generator);
+    }
+
+    for (int i = new_sample_size - NUM_RANDOM_PARTICLES; i < new_sample_size; ++i)
+    {
+        new_particles[i] = get_random_particle();
+    }
+
+    ROS_DEBUG("copying... ");
+  
+    reset_bins();
+    for (int i = 0; i < sample_size; i++) 
+    {
+        set_particle(new_particles[i], i);
+    }
+    
+    sample_size = new_sample_size;
+}
+
+void map_callback(const nav_msgs::OccupancyGrid::ConstPtr &msg)
+{    
+    map_height = msg->info.height;
+    map_width = msg->info.width;
+
+    // Resize the map_data to match the map dimensions
+    map_data.resize(map_height);
+    for (int i = 0; i < map_height; ++i) {
+        map_data[i].resize(map_width);
+    }
+
+    // Fill the 2D array with the occupancy data
+    for (int y = 0; y < map_height; ++y) {
+        for (int x = 0; x < map_width; ++x) {
+            // Calculate the index in the 1D data array
+            int index = x + y * map_width;
+            map_data[y][x] = msg->data[index];
+        }
+    }
+
+    ROS_INFO("Map received");
+    map_received = true;
+    map_sub.shutdown();
+}
 
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 {    
@@ -199,154 +376,6 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     laser_received = true;
 }
 
-Particle get_random_particle() 
-{
-    std::uniform_real_distribution<float> uni_dist(0., 1.);
-
-    float x = uni_dist(generator) * (x_max - x_min);
-    float y = uni_dist(generator) * (y_max - y_min);
-
-    float theta = uni_dist(generator) * (2 * M_PI);
-    Eigen::Vector2f pos{x, y};
-    Particle particle{pos, theta, 0.};
-    return particle;
-}
-
-void init_particles()
-{
-    for (int i = 0; i < sample_size; i++)
-    {
-        particles[i] = get_random_particle();
-        int bin = get_bin_for_position(i);
-        bins[bin] += 1;
-    }
-}
-
-void evaluate_particles() 
-{
-    for (int p = 0; p < sample_size; p++)
-    {
-        ROS_DEBUG("particle %d: x=%f, y=%f, th=%f", p, particles[p].position[0], particles[p].position[1], particles[p].theta);
-        
-        float total_delta = 0.;
-
-        float laser_x =  particles[p].position[0] + 0.13 * std::cos(particles[p].theta);
-        float laser_y =  particles[p].position[1] + 0.13 * std::sin(particles[p].theta);
-
-        for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
-        {
-            // ROS_DEBUG("laser: %d", i);
-
-            int index = i * laser_ranges.size() / SUBSAMPLE_LASERS;
-            
-            float real_distance = laser_ranges[index];
-            
-            if (real_distance != real_distance) {
-                real_distance = 1.0;
-            }            
-            else if (real_distance < RAY_STEP_SIZE) {
-                real_distance = RAY_STEP_SIZE;
-            }
-
-            // Get laser angle
-            float angle = laser_angle_min + laser_angle_increment * index;
-            float ray_angle = particles[p].theta + angle;
-
-            float r = RAY_STEP_SIZE;
-            
-            float ray_x = laser_x;
-            float ray_y = laser_y;
-
-            // ROS_DEBUG("ray casting");
-            while (r < 1.0) 
-            {
-                ray_x = laser_x + r * std::cos(ray_angle);
-                ray_y = laser_y + r * std::sin(ray_angle);
-
-                if (ray_x > x_max || ray_x < x_min || ray_y > y_max || ray_y < y_min) break;
-
-                std::pair<int, int> grid_index = metric_to_grid_index(ray_x, ray_y);
-
-                if (map_data[grid_index.first][grid_index.second] != 0) break;
-
-                r += RAY_STEP_SIZE;
-            }
-
-            total_delta += fabs(r - real_distance);            
-        }
-
-        particles[p].weight = std::exp(-total_delta);
-    }
-}
-
-void resample_particles()
-{
-    float max_weight  = 0.0;
-    for(int i = 0; i < sample_size; i++) {
-        if (particles[i].weight > max_weight) {
-            max_weight = particles[i].weight;
-        }
-    }
-    
-    ROS_INFO("max weight: %f", max_weight);
-
-    std::default_random_engine generator;
-    std::uniform_real_distribution<float> uni_dist(0., 1.);
-
-    int index = uni_dist(generator) * last_sample_size;
-    std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS / 4);
-    std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 4);
-    
-    double beta = 0.0;
-    
-    ROS_DEBUG("resampling... ");
-    
-    for (int i = 0; i < sample_size - NUM_RANDOM_PARTICLES; ++i)
-    {
-        beta += uni_dist(generator) * 2 * max_weight;
-
-        while (beta > particles[index].weight)
-        {
-            beta -= particles[index].weight;
-            index = (index + 1) % last_sample_size;
-        }
-
-        new_particles[i] = particles[index];
-        new_particles[i].position[0] += normal_dist_pos(generator);
-        new_particles[i].position[1] += normal_dist_pos(generator);
-        new_particles[i].theta += normal_dist_theta(generator);
-    }
-
-    for (int i = sample_size - NUM_RANDOM_PARTICLES; i < sample_size; ++i)
-    {
-        new_particles[i] = get_random_particle();
-    }
-
-    ROS_DEBUG("copying... ");
-
-    for (int i = 0; i < NUM_BINS; i++) {
-        bins[i] = 0;
-    }
-
-    for (int i = 0; i < sample_size; i++) 
-    {
-        particles[i] = new_particles[i];
-        int bin = get_bin_for_position(i);
-        bins[bin] += 1;
-    }
-    
-    last_sample_size = sample_size;
-    sample_size = 0;
-
-    for (int i = 0; i < NUM_BINS; i++) {
-        if (bins[i] > 5) {
-            sample_size += PARTICLES_PER_BIN;
-        }            
-    }
-
-    ROS_INFO("sample size: %d", sample_size);
-}
-
 geometry_msgs::Pose particle_to_pose(int particle_index)
 {
     geometry_msgs::Pose pose;
@@ -367,32 +396,16 @@ geometry_msgs::Pose particle_to_pose(int particle_index)
 
 void publish_particles()
 {
-    // Find best particle
-    float max_weight = 0.;
-    int index = -1;
-
-    for (int i = 0; i < sample_size; i++)
-    {
-        if (particles[i].weight > max_weight)
-        {
-            max_weight = particles[i].weight;
-            index = i;
-        }
-    }
-
-    ROS_INFO("Publishing position: (%f, %f) th: %f, weight: %f",
-        particles[index].position[0], 
-        particles[index].position[1],
-        particles[index].theta, 
-        max_weight);
+    int best_idx = get_max_particle_idx();
 
     green_fundamentals::Position position;
-    position.x = particles[index].position[0];
-    position.y = particles[index].position[1];
-    position.theta = particles[index].theta;
+    position.x = particles[best_idx].position[0];
+    position.y = particles[best_idx].position[1];
+    position.theta = particles[best_idx].theta;
+    ROS_INFO("Publishing position: (%f, %f) th: %f", position.x, position.y, position.theta);
     position_pub.publish(position);
 
-    pose_pub.publish(particle_to_pose(index));
+    pose_pub.publish(particle_to_pose(best_idx));
 
     geometry_msgs::PoseArray pose_array;
     pose_array.header.frame_id = "map";
@@ -440,7 +453,6 @@ int main(int argc, char **argv)
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
 
     ros::Rate loop_rate(30);
-    int it = 0;
     while(ros::ok()) {
         ros::spinOnce();
 
@@ -449,19 +461,16 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (it % 4 == 0) {
-            ROS_DEBUG("evaluate_particles");
-            evaluate_particles();
+        ROS_DEBUG("evaluate_particles");
+        evaluate_particles();
 
-            ROS_DEBUG("resample_particles");
-            resample_particles();
-        }
+        ROS_DEBUG("resample_particles");
+        resample_particles();
 
         ROS_DEBUG("publish_particles");
         publish_particles();
 
         loop_rate.sleep();
-        it++;
     }
 
     return 0;
