@@ -206,6 +206,8 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 void obstacle_callback(const green_fundamentals::Obstacle::ConstPtr& obst) 
 {
     is_obstacle_in_front = obst->front;
+    is_obstacle_right = obst->right;
+    is_obstacle_left = obst->left;
 }
 
 bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fundamentals::DriveTo::Response &res)
@@ -265,6 +267,7 @@ int main(int argc, char **argv)
         {
         case State::IDLE:
             // do nothing
+            // TODO send to diffdrive 0 0
             break;
 
         case State::DRIVE_TO:

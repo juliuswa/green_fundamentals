@@ -7,6 +7,7 @@
 #include "green_fundamentals/Pose.h"
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/ExecutePlan.h"
+#include "robot_constants.h"
 
 enum State {
     INIT,
