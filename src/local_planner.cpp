@@ -9,14 +9,20 @@
 #include "green_fundamentals/ExecutePlan.h"
 #include "robot_constants.h"
 
+#define REASONABLE_DISTANCE 0.2
+#define LOCALIZATION_POINTS_THRESHOLD 3
+
 enum State {
     INIT,
     LOCALIZE,
+    ALIGN,
     IDLE,
     EXECUTE_PLAN
 };
 
 State state = State::INIT;
+
+State last_state = state;
 
 enum Orientation {
     LEFT,
@@ -29,8 +35,10 @@ struct Position {
     float x, y, theta;
     int row, col;
     Orientation orientation = Orientation::RIGHT;
-    bool converged = false;
 };
+
+bool is_localized = false;
+int localization_points = 0;
 
 struct Target {
     float x, y, theta;
@@ -39,6 +47,8 @@ struct Target {
 };
 
 Position my_position{0., 0., 0., 0, 0};
+Position old_position{0., 0., 0., 0, 0};
+bool is_first_position = true;
 std::deque<Target> target_list;
 
 // Map
@@ -147,11 +157,30 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 }
 
 void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
-{
+{   
+    if (is_first_position)
+    {
+        old_position.x = msg->x;
+        old_position.y = msg->y;
+        old_position.theta = msg->theta;
+        old_position.row = grid_rows - floor(my_position.y / wall_length);
+        old_position.col = floor(my_position.x / wall_length);
+        is_first_position = false;
+    }
+    else
+    {
+        old_position.x = my_position.x;
+        old_position.y = my_position.y;
+        old_position.theta = my_position.theta;
+        old_position.row = my_position.row;
+        old_position.col = my_position.col;
+        //old_position.orientation = my_position.orientation;
+    }
+
     my_position.x = msg->x;
     my_position.y = msg->y;
     my_position.theta = msg->theta;
-    my_position.converged = msg->converged;
+    //my_position.converged = msg->converged;
     my_position.row = grid_rows - floor(my_position.y / wall_length);
     my_position.col = floor(my_position.x / wall_length);
 
@@ -172,8 +201,46 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         my_position.orientation = Orientation::DOWN;
     }
 
-    if (my_position.converged)
+    // Is localized?
+    if (fabs(my_position.x - old_position.x) + fabs(my_position.y - old_position.y) < REASONABLE_DISTANCE) 
     {
+        localization_points = 0;
+    }
+    
+    if (old_position.row != my_position.row || old_position.col != my_position.col)
+    {
+        // check if new cell is reachable from old cell
+        Cell old_cell = cell_centers[old_position.row][old_position.col];
+
+        if (abs(old_position.row - my_position.row) + abs(old_position.col - my_position.col) > 1)
+        {
+            localization_points = 0;
+        }
+        else if (old_position.row > my_position.row && old_cell.wall_left)
+        {
+            localization_points = 0;
+        }
+        else if (old_position.row < my_position.row && old_cell.wall_right)
+        {
+            localization_points = 0;
+        }
+        else if (old_position.col > my_position.col && old_cell.wall_down)
+        {
+            localization_points = 0;
+        }
+        else if (old_position.col < my_position.col && old_cell.wall_up)
+        {
+            localization_points = 0;
+        }
+        else {
+            localization_points += 1;
+        }
+    }
+    
+    is_localized = localization_points > LOCALIZATION_POINTS_THRESHOLD;
+
+    if (is_localized)
+    {   
         green_fundamentals::Pose pose;
 
         pose.row = my_position.row;
@@ -195,6 +262,9 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         }
 
         pose_pub.publish(pose);
+    }
+    else {
+        state = State::LOCALIZE;
     }
 }
 
@@ -318,6 +388,98 @@ void execute_plan()
     }
 }
 
+void localize()
+{   
+    if (is_localized)
+    {
+        state = State::ALIGN;
+        target_list.clear();
+        return;
+    }
+
+    // Go to neigboring cell
+    if (target_list.empty())
+    {
+        Cell current_cell = cell_centers[my_position.row][my_position.col];
+        Cell neighbor_cell;
+        bool found_neighbor = false;
+
+        while (!found_neighbor) {
+            int rand_wall = rand() % 4;
+            switch (rand_wall)
+            {
+                case 0:
+                    if (!current_cell.wall_right)  {
+                        neighbor_cell = cell_centers[my_position.row][my_position.col + 1];
+                        found_neighbor = true;
+                    }
+                    break;
+                case 1:
+                    if (!current_cell.wall_up)  {
+                        neighbor_cell = cell_centers[my_position.row + 1][my_position.col];
+                        found_neighbor = true;
+                    }
+                    break;
+                case 2:
+                    if (!current_cell.wall_left)  {
+                        neighbor_cell = cell_centers[my_position.row][my_position.col - 1];
+                        found_neighbor = true;
+                    }
+                    break;
+                case 3:
+                    if (!current_cell.wall_down)  {
+                        neighbor_cell = cell_centers[my_position.row - 1][my_position.col];
+                        found_neighbor = true;
+                    }
+                    break;
+            }
+        }
+
+        add_target_front(neighbor_cell.x, neighbor_cell.y, M_PI/2, false, false);
+        set_target();
+    }
+}
+
+void align()
+{
+    if (target_list.empty())
+    {
+        std::pair<float, float> target = get_current_cell_center(); // x, y
+        ROS_DEBUG("Current cell is (%d, %d)", my_position.row, my_position.col);
+        ROS_DEBUG("Cell Center is (%d, %d)", target.first, target.second);
+        add_target_front(target.first, target.second, M_PI/2, true, true);
+        set_target();
+    }
+    
+    if (current_target_reached())
+    {
+        state = State::IDLE;
+        target_list.clear();
+    }
+}
+
+void print_state()
+{
+    switch (state)
+    {
+        case State::IDLE:
+            ROS_INFO("State = IDLE");
+            break;
+        
+        case State::LOCALIZE:
+            ROS_INFO("State = LOCALIZE");
+            break;
+
+        case State::ALIGN:
+            ROS_INFO("State = ALIGN");
+            break;
+
+        case State::EXECUTE_PLAN:
+            ROS_INFO("State = EXECUTE_PLAN");
+            break;
+    }
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "local_planner");
@@ -329,7 +491,6 @@ int main(int argc, char **argv)
         ros::console::notifyLoggerLevelsChanged();
     }
 
-    ROS_INFO("State = INIT");
     ROS_DEBUG("Waiting for Occupancy Map...");
     map_sub = n.subscribe("map", 1, map_callback);
     while (!map_received)
@@ -337,83 +498,53 @@ int main(int argc, char **argv)
         ros::spinOnce();
         loop_rate.sleep();
     }
-
     ROS_DEBUG("Occupancy Map received. Starting localization phase...");
-    state = State::LOCALIZE;
-    ROS_INFO("State = LOCALIZE");
 
     // Subscribers
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
-
     // Publishers
     pose_pub = n.advertise<green_fundamentals::Pose>("pose", 1);
-
-    ROS_DEBUG("Started Subscribers and Publishers");
-    ROS_DEBUG("Waiting for services...");
-
-    bool localizer_available = ros::service::waitForService("localizer_start_localize", ros::Duration(10.0));
-    bool mover_available = ros::service::waitForService("mover_set_idle", ros::Duration(10.0));
+    /*bool localizer_available = ros::service::waitForService("localizer_start_localize", ros::Duration(10.0));
+    //bool mover_available = ros::service::waitForService("mover_set_idle", ros::Duration(10.0));
     if (!localizer_available || !mover_available)
     {
         ROS_ERROR("A service is not available");
         return 1;
     }
-
     // Services
-    start_localize_client = n.serviceClient<std_srvs::Empty>("localizer_start_localize");
+    //start_localize_client = n.serviceClient<std_srvs::Empty>("localizer_start_localize");*/
     mover_set_idle_client = n.serviceClient<std_srvs::Empty>("mover_set_idle");
     mover_set_wander_client = n.serviceClient<std_srvs::Empty>("mover_set_wander");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
-
-    ROS_DEBUG("Service clients created");
-
-    std_srvs::Empty empty_srv;
-    start_localize_client.call(empty_srv);
-    mover_set_wander_client.call(empty_srv);
-
-    ROS_DEBUG("Calling start_localize and mover_set_wander");
-
-    ROS_DEBUG("Waiting for localizer to converge...");
-    while (!my_position.converged)
-    {
-        ros::spinOnce();
-        loop_rate.sleep();
-    }
-
-    // We converged, now align
-    ROS_DEBUG("Localizer converged. Now set align target");
-    std::pair<float, float> target = get_current_cell_center(); // x, y
-    ROS_DEBUG("Current cell is (%d, %d)", my_position.row, my_position.col);
-    ROS_DEBUG("Cell Center is (%d, %d)", target.first, target.second);
-
-    add_target_front(target.first, target.second, M_PI/2, true, true);
-    set_target();
-
-    ROS_DEBUG("Waiting for robot to align...");
-    while (!current_target_reached())
-    {
-        ros::spinOnce();
-        loop_rate.sleep();
-    }
-
-    ROS_DEBUG("Robot reached cell center.");
-    state = State::IDLE;
-    ROS_INFO("State = IDLE");
+    
     ros::ServiceServer execute_plan_srv = n.advertiseService("execute_plan", set_execute_plan_callback);
     ROS_DEBUG("Advertising execute_plan service");
+    
+    state = State::IDLE;
     while(ros::ok()) {
+        
+        if (last_state != state) print_state();
+        last_state = state; 
 
         switch (state)
         {
-        case State::IDLE:
-            // do nothing
-            break;
+            case State::IDLE:
+                // do nothing
+                break;
+            
+            case State::LOCALIZE:
+                localize();
+                break;
 
-        case State::EXECUTE_PLAN:
-            execute_plan();
-            break;
+            case State::ALIGN:
+                align();
+                break;
+
+            case State::EXECUTE_PLAN:
+                execute_plan();
+                break;
         }
-
+        
         ros::spinOnce();
         loop_rate.sleep();
     }
