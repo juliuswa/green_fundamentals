@@ -37,6 +37,7 @@ bool is_obstacle_front = false;
 bool is_obstacle_left = false;
 bool is_obstacle_right = false;
 bool is_obstacle_far_front = false;
+
 Position target{0., 0., 0.};
 bool should_rotate = false;
 
@@ -104,82 +105,93 @@ void idle()
     diff_drive_service.call(wheel_commands);
 }
 
+Position calculate_target() {
+
+}
+
 void drive_to()
 {
-    if (!is_arrived()) 
+    if (is_arrived()) 
     {
-        Eigen::Vector2f pos_delta {target.x - my_position.x, target.y - my_position.y};
-        Eigen::Vector2f robot_direction {cos(my_position.theta), sin(my_position.theta)};     
+        if (should_rotate) 
+        {
+            float total_angle = target.theta - my_position.theta;
 
-        float angle = acos((pos_delta[0] * robot_direction[0] + pos_delta[1] * robot_direction[1]) / pos_delta.norm());
+            float speed = max_speed * (abs(total_angle) / slow_angle); // slows down when closer than "slow_angle"
+            speed = std::min(max_speed, speed);
+            speed = std::max(min_speed, speed);   
 
-        angle = std::min((float)(M_PI / 2.0), angle); // so it's between 0° and 90°
-
-        float cross_product_z = pos_delta[0] * robot_direction[1] - pos_delta[1] * robot_direction[0];    
-
-        int direction = cross_product_z < 0 ? 1 : -1;
-
-        float exponential_factor = 2 * std::exp(-angle) - 1;
-        float linear_factor = - 2 * angle / (M_PI / 2) + 1;
-
-        float factor = (exponential_factor + linear_factor) / 2;
-
-        if (is_obstacle_front) {
-            if (fabs(angle) < M_PI / 8) {
-                ROS_WARN("drive_to error. angle: %f", angle);
-                idle();      
-                state = State::IDLE;
-                ros::param::set("mover_drive_to_error", true);
-                return;
+            if (total_angle > THETA_EPSILON) {
+                wheel_commands.request.left = -speed;
+                wheel_commands.request.right = speed;
+            }
+            else if (total_angle < -THETA_EPSILON) {
+                wheel_commands.request.left = speed;
+                wheel_commands.request.right = -speed;
             }
             else {
-                factor = -1;
+                wheel_commands.request.left = 0.;
+                wheel_commands.request.right = 0.;
             }
-        }
-        
-        float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
-        speed = std::min(max_speed, speed);
-        speed = std::max(min_speed, speed);     
 
-        if(is_obstacle_far_front) speed /= 2;
-        
-        if (direction < 0) 
-        {
-            wheel_commands.request.left = speed;
-            wheel_commands.request.right = factor * speed;
-        }
+            diff_drive_service.call(wheel_commands);
+            return;
+        } 
         else 
         {
-            wheel_commands.request.left = factor * speed;
-            wheel_commands.request.right = speed;
-        }
-    }
-    else if (should_rotate) 
-    {
-        float total_angle = target.theta - my_position.theta;
-
-        float speed = max_speed * (abs(total_angle) / slow_angle); // slows down when closer than "slow_angle"
-        speed = std::min(max_speed, speed);
-        speed = std::max(min_speed, speed);   
-
-        if (total_angle > THETA_EPSILON) {
-            wheel_commands.request.left = -speed;
-            wheel_commands.request.right = speed;
-        }
-        else if (total_angle < -THETA_EPSILON) {
-            wheel_commands.request.left = speed;
-            wheel_commands.request.right = -speed;
-        }
-        else {
             wheel_commands.request.left = 0.;
             wheel_commands.request.right = 0.;
+            state = State::IDLE;
+
+            diff_drive_service.call(wheel_commands);
+            return;
         }
-    } 
+    }
+
+    Eigen::Vector2f pos_delta {target.x - my_position.x, target.y - my_position.y};
+    Eigen::Vector2f robot_direction {cos(my_position.theta), sin(my_position.theta)};     
+
+    float angle = acos((pos_delta[0] * robot_direction[0] + pos_delta[1] * robot_direction[1]) / pos_delta.norm());
+
+    angle = std::min((float)(M_PI / 2.0), angle); // so it's between 0° and 90°
+
+    float cross_product_z = pos_delta[0] * robot_direction[1] - pos_delta[1] * robot_direction[0];    
+
+    int direction = cross_product_z < 0 ? 1 : -1;
+
+    float exponential_factor = 2 * std::exp(-angle) - 1;
+    float linear_factor = - 2 * angle / (M_PI / 2) + 1;
+
+    float factor = (exponential_factor + linear_factor) / 2;
+
+    if (is_obstacle_front) {
+        if (fabs(angle) < M_PI / 8) {
+            ROS_WARN("drive_to error. angle: %f", angle);
+            idle();      
+            state = State::IDLE;
+            ros::param::set("mover_drive_to_error", true);
+            return;
+        }
+        else {
+            factor = -1;
+        }
+    }
+    
+    float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
+    speed = std::min(max_speed, speed);
+    speed = std::max(min_speed, speed);     
+
+    if(is_obstacle_far_front) speed /= 2;
+    
+    if (direction < 0) 
+    {
+        wheel_commands.request.left = speed;
+        wheel_commands.request.right = factor * speed;
+    }
     else 
     {
-        wheel_commands.request.left = 0.;
-        wheel_commands.request.right = 0.;
-        state = State::IDLE;
+        wheel_commands.request.left = factor * speed;
+        wheel_commands.request.right = speed;
     }
 
     diff_drive_service.call(wheel_commands);
@@ -222,7 +234,7 @@ bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fun
     my_position.x = req.x_current;
     my_position.y = req.y_current;
     my_position.theta = req.theta_current;
-
+    
     target.x = req.x_target;
     target.y = req.y_target;
     target.theta = req.theta_target;
