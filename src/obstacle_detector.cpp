@@ -8,7 +8,7 @@ ros::Publisher obstacle_pub;
 
 const float theta_offset = - 2.37; 
 const float x_offset = 0.13;
-float robot_side = 0.08;  // determines at what y coordinate we are counting points to being on the side of the robot
+float robot_side = CASING_RADIUS;  // determines at what y coordinate we are counting points to being on the side of the robot
 float allowed_distance = 0.1;  // how close to the wall we are allowed to go
 
 std::vector<std::pair<float, float>> laser_coords;

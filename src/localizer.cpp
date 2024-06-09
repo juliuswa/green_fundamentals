@@ -19,15 +19,15 @@
 #define SUBSAMPLE_LASERS 16
 #define RAY_STEP_SIZE 0.01
 
-#define PARTICLES_PER_BIN 100
-#define NUM_BINS 200
+#define PARTICLES_PER_BIN 512
+#define NUM_BINS 16
 #define FILLED_BIN_THRESHOLD 5
 
-#define MAX_NUM_RANDOM_PARTICLES 50
+#define MAX_NUM_RANDOM_PARTICLES 32
 #define RELIABLE_WEIGHT 0.1
 
-#define RESAMPLE_STD_POS 0.05
-#define RESAMPLE_STD_THETA 0.05
+#define RESAMPLE_STD_POS 0.04
+#define RESAMPLE_STD_THETA 0.08
 
 struct Particle {
     Eigen::Vector2f position;

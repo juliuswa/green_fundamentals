@@ -8,6 +8,7 @@
 
 #include <mutex>
 #include <random>
+#include <chrono>
 
 #include "ros/ros.h"
 #include "std_srvs/Empty.h"
@@ -19,6 +20,10 @@
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/Obstacle.h"
 #include "robot_constants.h"
+
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
 
 struct Position {
     float x, y, theta;
@@ -47,10 +52,10 @@ float current_left = 0.0;
 float current_right = 0.0;
 bool is_first_encoder_measurement = true;
 
-const float max_speed = 14.0;
+const float max_speed = 15.0;
 const float min_speed = 3.0;
 const float slow_distance = 0.2;
-const float slow_angle = 1.5;
+const float slow_angle = 2.;
 
 ros::ServiceClient diff_drive_service;
 create_fundamentals::DiffDrive wheel_commands;
@@ -115,7 +120,7 @@ void drive_to()
     {
         if (should_rotate) 
         {
-            float total_angle = target.theta - my_position.theta;
+            float total_angle = fmod(target.theta - my_position.theta, 2 * M_PI);
 
             float speed = max_speed * (abs(total_angle) / slow_angle); // slows down when closer than "slow_angle"
             speed = std::min(max_speed, speed);
@@ -132,6 +137,7 @@ void drive_to()
             else {
                 wheel_commands.request.left = 0.;
                 wheel_commands.request.right = 0.;
+                state = State::IDLE;
             }
 
             diff_drive_service.call(wheel_commands);
@@ -164,24 +170,19 @@ void drive_to()
 
     float factor = (exponential_factor + linear_factor) / 2;
 
-    if (is_obstacle_front) {
-        if (fabs(angle) < M_PI / 8) {
-            ROS_WARN("drive_to error. angle: %f", angle);
-            idle();      
-            state = State::IDLE;
-            ros::param::set("mover_drive_to_error", true);
-            return;
-        }
-        else {
-            factor = -1;
-        }
+    if (is_obstacle_front) { 
+        factor = -1;
     }
     
     float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
     speed = std::min(max_speed, speed);
     speed = std::max(min_speed, speed);     
 
-    if(is_obstacle_far_front) speed /= 2;
+    if(is_obstacle_far_front) 
+    {
+        ROS_WARN("obstacle far front", angle);
+        speed /= 2;
+    }
     
     if (direction < 0) 
     {
@@ -224,7 +225,7 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 void obstacle_callback(const green_fundamentals::Obstacle::ConstPtr& obst) 
 {
     is_obstacle_front = obst->front;
-    is_obstacle_far_front = obst->front;
+    is_obstacle_far_front = obst->far_front;
     is_obstacle_right = obst->right;
     is_obstacle_left = obst->left;
 }
@@ -283,28 +284,28 @@ int main(int argc, char **argv)
     ros::ServiceServer wander_service = n.advertiseService("mover_set_wander", set_wander_callback);
 
     ROS_INFO("Ready to drive.");    
-    ros::Rate r(15);
+    ros::Rate r(30);
     while(ros::ok()) {
-
         switch (state)
         {
-        case State::IDLE:
-            // do nothing
-            idle();
-            break;
+            case State::IDLE:
+                // do nothing
+                idle();
+                break;
 
-        case State::DRIVE_TO:
-            drive_to();
-            break;
+            case State::DRIVE_TO:
+                drive_to();
+                break;
 
-        case State::WANDER:
-            wander();
-            break;
+            case State::WANDER:
+                wander();
+                break;
         }
 
         ros::spinOnce();
         r.sleep();
     }
+
 
     return 0;
 }

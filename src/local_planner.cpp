@@ -41,6 +41,7 @@ struct Position {
 };
 
 bool is_localized = false;
+bool visited_cells[MAP_WIDTH * MAP_HEIGHT];
 int localization_points = 0;
 
 ros::Time last_sent_command;
@@ -73,6 +74,11 @@ ros::Publisher pose_pub;
 // Clients
 ros::ServiceClient start_localize_client, mover_set_idle_client, mover_set_wander_client, mover_drive_to_client, play_song;
 
+void reset_visited_cells() {
+    for (int i = 0; i < sizeof(visited_cells) / sizeof(bool); i++) {
+        visited_cells[i] = false;
+    }
+}
 void add_target_front(float x, float y, float theta, bool should_rotate, bool must_be_reached)
 {
     Target target{x, y, theta, should_rotate, must_be_reached};
@@ -98,8 +104,101 @@ void play_song_not_localized()
 {
     create_fundamentals::PlaySong srv;
 
-    srv.request.number = 2;
+    srv.request.number = 1;
     play_song.call(srv);
+}
+
+std::vector<std::pair<int, int>> get_neighbor_path(int col, int row, std::vector<std::pair<int, int>> current_path) {
+    ROS_DEBUG("get_neighbor_path current path length: %ld", current_path.size());
+    std::pair<int, int> neighbor_cell {col, row};            
+    std::vector<std::pair<int, int>> neighbor_path = current_path;
+
+    neighbor_path.push_back(neighbor_cell);
+
+    return neighbor_path;
+}
+
+void drive_to_cell(int col, int row) {
+    std::deque<std::vector<std::pair<int, int>>> bfs_deque;
+    int num_cells = cell_info.size() * cell_info[0].size();
+    bool checked[num_cells];
+
+    for (int i = 0; i < num_cells; i++) {
+        checked[i] = false;
+    }
+
+    std::vector<std::pair<int, int>> first_path;
+    std::pair<int, int> first_cell {my_position.col, my_position.row};
+    first_path.push_back(first_cell);
+    bfs_deque.push_back(first_path);
+
+    std::vector<std::pair<int, int>> final_cell_path;
+
+    ROS_DEBUG("searching path to: (%d, %d)", col, row);
+
+    while (bfs_deque.size() != 0) {
+        std::vector<std::pair<int, int>> current_path = bfs_deque.front();        
+        bfs_deque.pop_front();
+
+        std::pair<int, int> current_cell = current_path.back();
+
+        ROS_DEBUG("current_cell: (%d, %d)", current_cell.first, current_cell.second);
+
+        if (checked[current_cell.first + current_cell.second * MAP_WIDTH]) {
+            continue;
+        }
+        
+        checked[current_cell.first + current_cell.second * MAP_WIDTH] = true;
+
+        if (current_cell.first == col && current_cell.second == row) {
+            ROS_INFO("found path");
+
+            for (int i = 0; i < current_path.size(); i ++) {
+                ROS_INFO("(%d, %d)", current_path[i].first,  current_path[i].second);
+            }
+
+            final_cell_path = current_path;
+
+            bfs_deque.clear();
+            continue;
+        }
+
+        int cell_x = current_cell.first;
+        int cell_y = current_cell.second;
+
+        if (cell_info[cell_y][cell_x].wall_right == false) {            
+            ROS_DEBUG("neighbor right");
+            bfs_deque.push_back(get_neighbor_path(cell_x + 1, cell_y, current_path));
+        }
+        if (cell_info[cell_y][cell_x].wall_up == false) {            
+            ROS_DEBUG("neighbor up");
+            bfs_deque.push_back(get_neighbor_path(cell_x, cell_y + 1, current_path));
+        }
+        if (cell_info[cell_y][cell_x].wall_left == false) {   
+            ROS_DEBUG("neighbor left");         
+            bfs_deque.push_back(get_neighbor_path(cell_x - 1, cell_y, current_path));
+        }
+        if (cell_info[cell_y][cell_x].wall_down == false) {    
+            ROS_DEBUG("neighbor down");        
+            bfs_deque.push_back(get_neighbor_path(cell_x, cell_y - 1, current_path));
+        }
+    }
+
+    ROS_DEBUG("found path of length %ld", final_cell_path.size());
+
+    for (int i = 0; i < final_cell_path.size(); i++) {
+        Cell cell = cell_info[final_cell_path[i].second][final_cell_path[i].first];
+        Target target;
+        target.x = cell.x;
+        target.y = cell.y;
+        target.theta = 0.0;
+        target.should_rotate = false;
+        target.must_be_reached = i == final_cell_path.size() - 1;
+
+        ROS_DEBUG("adding target: (%f, %f), mbr %d", target.x, target.y, target.must_be_reached);
+
+        target_list.push_back(target);
+    }
 }
 
 void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
@@ -111,12 +210,10 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
 
     for (int row = 0; row < msg->rows.size(); row++)
     {
-        ROS_DEBUG("row %d", row);
         std::vector<Cell> column_cells;
 
         for (int col = 0; col < msg->rows[row].cells.size(); col++)
         {
-            ROS_DEBUG("col %d", col);
             Cell new_cell;
             new_cell.x = (float)col * CELL_LENGTH + (CELL_LENGTH / 2);
             new_cell.y = (float)row * CELL_LENGTH + (CELL_LENGTH / 2);
@@ -162,21 +259,19 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 {   
     if (is_first_position)
     {
-        old_position.x = msg->x;
-        old_position.y = msg->y;
-        old_position.theta = msg->theta;
-        old_position.row = floor(my_position.y / CELL_LENGTH);
-        old_position.col = floor(my_position.x / CELL_LENGTH);
+        my_position.x = msg->x;
+        my_position.y = msg->y;
+        my_position.theta = msg->theta;
+        my_position.row = floor(my_position.y / CELL_LENGTH);
+        my_position.col = floor(my_position.x / CELL_LENGTH);
         is_first_position = false;
     }
-    else
-    {
-        old_position.x = my_position.x;
-        old_position.y = my_position.y;
-        old_position.theta = my_position.theta;
-        old_position.row = my_position.row;
-        old_position.col = my_position.col;
-    }
+     
+    old_position.x = my_position.x;
+    old_position.y = my_position.y;
+    old_position.theta = my_position.theta;
+    old_position.row = my_position.row;
+    old_position.col = my_position.col;
 
     my_position.x = msg->x;
     my_position.y = msg->y;
@@ -206,14 +301,15 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         fabs(my_position.y - old_position.y) > REASONABLE_DISTANCE) 
     {
         ROS_INFO("Unreasonable movement");
-
+        reset_visited_cells();
         localization_points = 0;
         target_list.clear();
     }    
-    else if (old_position.row != my_position.row || old_position.col != my_position.col)
+    else if (!visited_cells[my_position.col + my_position.row * MAP_WIDTH])
     {
+        visited_cells[my_position.col + my_position.row * MAP_WIDTH] = true;
         localization_points += 1;
-        ROS_DEBUG("localization points = %d", localization_points);
+        ROS_DEBUG("new visited cell: (%d, %d), points = %d", my_position.col, my_position.row, localization_points);
     }
     
     bool was_localized_before = is_localized;
@@ -386,68 +482,39 @@ void localize()
         return;
     }
 
-    bool mover_error;
-    ros::param::get("mover_drive_to_error", mover_error);
-    if (mover_error)
-    {
-        target_list.clear();
-    }
-
-    // Go to neigboring cell
-    // In the next assignment we can just switch the random movement with movement that is directed towards the gold.
-    // If our position switches we can just readjust our plan towards the gold.
-    if (target_list.empty())
-    {
-        ROS_DEBUG("finding new neighbor cell ...");
-
-        Cell current_cell = cell_info[my_position.row][my_position.col];
-
-        ROS_DEBUG("current cell: (%d, %d) walls:(%d, %d, %d, %d)", my_position.col, my_position.row, 
-            current_cell.wall_right, current_cell.wall_up, current_cell.wall_left, current_cell.wall_down);
-
-        Cell neighbor_cell;
-        bool found_neighbor = false;
-
-        while (!found_neighbor) {
-            int rand_wall = rand() % 4;
-            switch (rand_wall)
-            {
-                case 0:
-                    if (!current_cell.wall_right)  {
-                        neighbor_cell = cell_info[my_position.row][my_position.col + 1];
-                        found_neighbor = true;
-                    }
-                    break;
-                case 1:
-                    if (!current_cell.wall_up)  {
-                        neighbor_cell = cell_info[my_position.row + 1][my_position.col];
-                        found_neighbor = true;
-                    }
-                    break;
-                case 2:
-                    if (!current_cell.wall_left)  {
-                        neighbor_cell = cell_info[my_position.row][my_position.col - 1];
-                        found_neighbor = true;
-                    }
-                    break;
-                case 3:
-                    if (!current_cell.wall_down)  {
-                        neighbor_cell = cell_info[my_position.row - 1][my_position.col];
-                        found_neighbor = true;
-                    }
-                    break;
-            }
-        }
-
-        add_target_front(neighbor_cell.x, neighbor_cell.y, 0., false, false);
-        set_target();
-    }
-
     if (current_target_reached()) 
     {
-        ROS_DEBUG("Target reached.");
-        target_list.clear();
+        ROS_DEBUG("Target reached, %ld targets remaining.",  target_list.size());
+
+        if (!target_list.empty())
+        {
+            target_list.pop_front();    
+        }
     }
+
+    if (!target_list.empty())
+    {
+        set_target();        
+    }
+    else {
+        ROS_DEBUG("finding new unvisited cell ...");
+
+        Cell unvisited_cell;
+        bool found_unvisied_cell = false;
+
+        while (!found_unvisied_cell) {
+            int rand_cell = rand() % (MAP_WIDTH * MAP_HEIGHT);
+            if (!visited_cells[rand_cell]) {
+                int x = rand_cell % MAP_WIDTH;
+                int y = floor(rand_cell / MAP_HEIGHT);
+                
+                ROS_DEBUG("new unvisited cell: (%d, %d)", x, y);
+
+                drive_to_cell(x, y);
+                found_unvisied_cell = true;
+            }
+        }
+    }  
 }
 
 void align()
@@ -531,9 +598,14 @@ int main(int argc, char **argv)
     last_sent_command = ros::Time::now();
     state = State::IDLE;
     while(ros::ok()) {
+        ros::spinOnce();
         
         if (last_state != state) print_state();
         last_state = state; 
+
+        if (is_first_position) continue;
+
+        // ROS_DEBUG("current pos: (%f, %f), th: %f", my_position.x, my_position.y, my_position.theta);
 
         switch (state)
         {
@@ -554,7 +626,6 @@ int main(int argc, char **argv)
                 break;
         }
         
-        ros::spinOnce();
         loop_rate.sleep();
     }
 
