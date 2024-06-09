@@ -9,6 +9,7 @@
 #include "green_fundamentals/Pose.h"
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/ExecutePlan.h"
+#include "create_fundamentals/PlaySong.h"
 #include "robot_constants.h"
 
 #define REASONABLE_DISTANCE 0.5
@@ -61,7 +62,7 @@ struct Cell {
     float x, y;
     bool wall_left, wall_up, wall_right, wall_down;
 };
-
+int grid_rows, grid_cols;
 ros::Subscriber map_sub;
 bool map_received = false;
 std::vector<std::vector<Cell>> cell_info;
@@ -70,7 +71,7 @@ std::vector<std::vector<Cell>> cell_info;
 ros::Publisher pose_pub;
 
 // Clients
-ros::ServiceClient start_localize_client, mover_set_idle_client, mover_set_wander_client, mover_drive_to_client;
+ros::ServiceClient start_localize_client, mover_set_idle_client, mover_set_wander_client, mover_drive_to_client, play_song;
 
 void add_target_front(float x, float y, float theta, bool should_rotate, bool must_be_reached)
 {
@@ -84,9 +85,29 @@ void add_target_back(float x, float y, float theta, bool should_rotate, bool mus
     target_list.push_back(target);
 }
 
+// TODO check if number is correct
+void play_song_localized()
+{
+    create_fundamentals::PlaySong srv;
+
+    srv.request.number = 1;
+    play_song.call(srv);
+}
+
+void play_song_not_localized()
+{
+    create_fundamentals::PlaySong srv;
+
+    srv.request.number = 2;
+    play_song.call(srv);
+}
+
 void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
 {   
     ROS_DEBUG("Inside map_callback...");
+
+    grid_rows = msg->rows.size();
+    grid_cols = msg->rows[0].cells.size();
 
     for (int row = 0; row < msg->rows.size(); row++)
     {
@@ -195,13 +216,14 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         ROS_DEBUG("localization points = %d", localization_points);
     }
     
+    bool was_localized_before = is_localized;
     is_localized = localization_points > LOCALIZATION_POINTS_THRESHOLD;
 
     if (is_localized)
     {   
         green_fundamentals::Pose pose;
 
-        pose.row = my_position.row;
+        pose.row = grid_rows - 1 - my_position.row; // TODO check
         pose.column = my_position.col;
         switch (my_position.orientation)
         {
@@ -223,6 +245,11 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     }
     else {
         state = State::LOCALIZE;
+        // TODO check
+        if (was_localized_before)
+        {
+            play_song_not_localized();
+        }
     }
 }
 
@@ -354,6 +381,8 @@ void localize()
     {
         state = State::ALIGN;
         target_list.clear();
+        // TODO check
+        play_song_localized();
         return;
     }
 
@@ -365,6 +394,8 @@ void localize()
     }
 
     // Go to neigboring cell
+    // In the next assignment we can just switch the random movement with movement that is directed towards the gold.
+    // If our position switches we can just readjust our plan towards the gold.
     if (target_list.empty())
     {
         ROS_DEBUG("finding new neighbor cell ...");
@@ -492,6 +523,7 @@ int main(int argc, char **argv)
     mover_set_idle_client = n.serviceClient<std_srvs::Empty>("mover_set_idle");
     mover_set_wander_client = n.serviceClient<std_srvs::Empty>("mover_set_wander");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
+    play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
     
     ros::ServiceServer execute_plan_srv = n.advertiseService("execute_plan", set_execute_plan_callback);
     ROS_DEBUG("Advertising execute_plan service");
