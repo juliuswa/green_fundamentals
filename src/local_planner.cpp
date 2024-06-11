@@ -23,10 +23,7 @@ enum State {
     IDLE,
     EXECUTE_PLAN
 };
-
 State state = State::INIT;
-
-State last_state = state;
 
 enum Orientation {
     LEFT,
@@ -40,12 +37,11 @@ struct Position {
     int row, col;
     Orientation orientation = Orientation::RIGHT;
 };
-
+Position my_position{0., 0., 0., 0, 0};
+bool is_first_position = true;
 bool is_localized = false;
 bool visited_cells[MAP_WIDTH * MAP_HEIGHT];
 int localization_points = 0;
-
-ros::Time last_sent_command;
 
 struct Target {
     float x, y, theta;
@@ -53,10 +49,6 @@ struct Target {
     bool must_be_reached = false;
     bool sent = false;
 };
-
-Position my_position{0., 0., 0., 0, 0};
-Position old_position{0., 0., 0., 0, 0};
-bool is_first_position = true;
 std::deque<Target> target_list;
 
 // Map
@@ -65,15 +57,12 @@ struct Cell {
     bool wall_left, wall_up, wall_right, wall_down;
 };
 int grid_rows, grid_cols;
-ros::Subscriber map_sub;
 bool map_received = false;
 std::vector<std::vector<Cell>> cell_info;
 
-// Publishers
+// ROS Stuff
 ros::Publisher pose_pub;
-
-// Clients
-ros::ServiceClient start_localize_client, mover_set_idle_client, mover_set_wander_client, mover_drive_to_client, store_song, play_song;
+ros::ServiceClient mover_drive_to_client, play_song;
 
 void reset_visited_cells() {
     for (int i = 0; i < sizeof(visited_cells) / sizeof(bool); i++) {
@@ -217,11 +206,10 @@ void drive_to_cell(int col, int row) {
 
 void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
 {   
-    ROS_DEBUG("Inside map_callback...");
-
     grid_rows = msg->rows.size();
     grid_cols = msg->rows[0].cells.size();
 
+    // Initialize the Cells
     for (int row = 0; row < msg->rows.size(); row++)
     {
         std::vector<Cell> column_cells;
@@ -254,38 +242,33 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
                 }
             }
 
-            ROS_DEBUG("Cell (%d, %d): center: (%f, %f), walls: (%d, %d, %d, %d)",
-                col, row, 
-                new_cell.x, new_cell.y,
-                new_cell.wall_right, new_cell.wall_up, new_cell.wall_left, new_cell.wall_down);
-
             column_cells.push_back(new_cell);
         }
 
         cell_info.push_back(column_cells);
     }
 
+    // Pre-Calculate the shortest paths for each cell pair using BFS = Low Level Plans
+
+    // Calculate the best gold sequence using brute-force = High Level Plan
+
     map_received = true;
-    map_sub.shutdown();
 }
 
 void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 {   
+    float old_x, old_y;
     if (is_first_position)
     {
-        my_position.x = msg->x;
-        my_position.y = msg->y;
-        my_position.theta = msg->theta;
-        my_position.row = floor(my_position.y / CELL_LENGTH);
-        my_position.col = floor(my_position.x / CELL_LENGTH);
+        old_x = msg->x;
+        old_y = msg->y;
         is_first_position = false;
     }
-     
-    old_position.x = my_position.x;
-    old_position.y = my_position.y;
-    old_position.theta = my_position.theta;
-    old_position.row = my_position.row;
-    old_position.col = my_position.col;
+    else 
+    {
+        old_x = my_position.x;
+        old_y = my_position.y;
+    }
 
     my_position.x = msg->x;
     my_position.y = msg->y;
@@ -311,8 +294,8 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     }
 
     // Is localized?
-    if (fabs(my_position.x - old_position.x) > REASONABLE_DISTANCE ||
-        fabs(my_position.y - old_position.y) > REASONABLE_DISTANCE) 
+    if (fabs(my_position.x - old_x) > REASONABLE_DISTANCE ||
+        fabs(my_position.y - old_y) > REASONABLE_DISTANCE) 
     {
         ROS_INFO("Unreasonable movement");
         reset_visited_cells();
@@ -574,54 +557,44 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "local_planner");
     ros::NodeHandle n;
     ros::Rate loop_rate(15);
-
-    ROS_INFO("Starting node.");
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
         ros::console::notifyLoggerLevelsChanged();
     }
 
-    ROS_DEBUG("Waiting for Occupancy Map...");
-    map_sub = n.subscribe("grid_map", 1, map_callback);
+    ROS_INFO("Initializing...");
+    play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
+
+    ROS_INFO("Waiting for Map...");
+    ros::Subscriber map_sub = n.subscribe("grid_map", 1, map_callback);
     while (!map_received)
     {
-        ros::spinOnce();
         loop_rate.sleep();
+        ros::spinOnce();
     }
-    ROS_DEBUG("Map received and processed.");
+    map_sub.shutdown();
+    ROS_INFO("Map received and processed.");
 
-    // Subscribers
-    ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
-    // Publishers
-    pose_pub = n.advertise<green_fundamentals::Pose>("pose", 1);
-    /*bool localizer_available = ros::service::waitForService("localizer_start_localize", ros::Duration(10.0));
-    //bool mover_available = ros::service::waitForService("mover_set_idle", ros::Duration(10.0));
-    if (!localizer_available || !mover_available)
+    ROS_INFO("Waiting for Position...");
+    ros::Subscriber loc_sub = n.subscribe("position", 1, localization_callback);
+    while (is_first_position)
     {
-        ROS_ERROR("A service is not available");
-        return 1;
+        loop_rate.sleep();
+        ros::spinOnce();
     }
-    // Services
-    //start_localize_client = n.serviceClient<std_srvs::Empty>("localizer_start_localize");*/
-    mover_set_idle_client = n.serviceClient<std_srvs::Empty>("mover_set_idle");
-    mover_set_wander_client = n.serviceClient<std_srvs::Empty>("mover_set_wander");
+    ROS_INFO("Position received.");
+
+    pose_pub = n.advertise<green_fundamentals::Pose>("pose", 1);
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
-    store_song = n.serviceClient<create_fundamentals::StoreSong>("store_song");
-    play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
-    
     ros::ServiceServer execute_plan_srv = n.advertiseService("execute_plan", set_execute_plan_callback);
-    ROS_DEBUG("Advertising execute_plan service");
+    ROS_INFO("Ready.");
     
-    last_sent_command = ros::Time::now();
     state = State::IDLE;
+    State last_state = state;
     while(ros::ok()) {
         ros::spinOnce();
         
         if (last_state != state) print_state();
         last_state = state; 
-
-        if (is_first_position) continue;
-
-        // ROS_DEBUG("current pos: (%f, %f), th: %f", my_position.x, my_position.y, my_position.theta);
 
         switch (state)
         {
