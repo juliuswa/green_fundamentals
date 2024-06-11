@@ -593,8 +593,8 @@ int main(int argc, char **argv)
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
     // Publishers
     pose_pub = n.advertise<green_fundamentals::Pose>("pose", 1);
-    /*bool localizer_available = ros::service::waitForService("localizer_start_localize", ros::Duration(10.0));
-    //bool mover_available = ros::service::waitForService("mover_set_idle", ros::Duration(10.0));
+    /*bool localzer_available = ros::service::waitForService("localizer_start_localize", ros::Duration(10.0));
+    //bool mover_available = ros::service::waitForService("miover_set_idle", ros::Duration(10.0));
     if (!localizer_available || !mover_available)
     {
         ROS_ERROR("A service is not available");
