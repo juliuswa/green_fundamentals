@@ -6,16 +6,16 @@ from create_fundamentals.srv import *
 
 # define services from driver
 node = rospy.init_node('example')
-print('Waiting for create driver ...')
+print('ca')
 rospy.wait_for_service('store_song')
 store_song = rospy.ServiceProxy('store_song', StoreSong)
 rospy.wait_for_service('play_song')
 play_song = rospy.ServiceProxy('play_song', PlaySong)
-print('Create driver is ready!')
+print('Create driver is ready!') 
 
 # define silence
 r = 30
- 
+
 # map note names in the lilypad notation to irobot commands
 c4 = 60
 cis4 = des4 = 61

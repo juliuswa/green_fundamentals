@@ -10,6 +10,7 @@
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/ExecutePlan.h"
 #include "create_fundamentals/PlaySong.h"
+#include "create_fundamentals/StoreSong.h"
 #include "robot_constants.h"
 
 #define REASONABLE_DISTANCE 0.5
@@ -72,7 +73,7 @@ std::vector<std::vector<Cell>> cell_info;
 ros::Publisher pose_pub;
 
 // Clients
-ros::ServiceClient start_localize_client, mover_set_idle_client, mover_set_wander_client, mover_drive_to_client, play_song;
+ros::ServiceClient start_localize_client, mover_set_idle_client, mover_set_wander_client, mover_drive_to_client, store_song, play_song;
 
 void reset_visited_cells() {
     for (int i = 0; i < sizeof(visited_cells) / sizeof(bool); i++) {
@@ -89,6 +90,19 @@ void add_target_back(float x, float y, float theta, bool should_rotate, bool mus
 {
     Target target{x, y, theta, should_rotate, must_be_reached};
     target_list.push_back(target);
+}
+
+void play_note(int i) {
+    create_fundamentals::StoreSong store_srv;
+    store_srv.request.number = 0;
+    store_srv.request.song = {60,40};
+
+    if(play_song.call(store_srv))
+    {
+        create_fundamentals::PlaySong play_srv;
+        play_srv.request.number = 0;
+        play_song.call(play_srv);
+    };
 }
 
 // TODO check if number is correct
@@ -309,6 +323,7 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     {
         visited_cells[my_position.col + my_position.row * MAP_WIDTH] = true;
         localization_points += 1;
+        play_note(0);
         ROS_DEBUG("new visited cell: (%d, %d), points = %d", my_position.col, my_position.row, localization_points);
     }
     
@@ -572,7 +587,7 @@ int main(int argc, char **argv)
         ros::spinOnce();
         loop_rate.sleep();
     }
-    ROS_DEBUG("Occupancy Map received. Starting localization phase...");
+    ROS_DEBUG("Map received and processed.");
 
     // Subscribers
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
@@ -590,6 +605,7 @@ int main(int argc, char **argv)
     mover_set_idle_client = n.serviceClient<std_srvs::Empty>("mover_set_idle");
     mover_set_wander_client = n.serviceClient<std_srvs::Empty>("mover_set_wander");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
+    store_song = n.serviceClient<create_fundamentals::StoreSong>("store_song");
     play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
     
     ros::ServiceServer execute_plan_srv = n.advertiseService("execute_plan", set_execute_plan_callback);
