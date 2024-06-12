@@ -1,11 +1,13 @@
 #include "ros/ros.h"
 #include <queue>
+#include <deque>
 #include <unordered_map>
 #include <algorithm>
 #include <csignal>
 
 #include "green_fundamentals/Grid.h"
 #include "green_fundamentals/GetGlobalPlan.h"
+#include "green_fundamentals/GetShortestPath.h"
 #include "robot_constants.h"
 
 using Grid_Coords = std::pair<int, int>;
@@ -13,14 +15,14 @@ using KeyType = std::pair<Grid_Coords, Grid_Coords>;
 
 struct pair_hash_int {
     std::size_t operator()(const Grid_Coords& p) const {
-        return std::hash<int>()(p.first) ^ std::hash<int>()(p.second);
+        return p.first * 32 + p.second;
     }
 };
 
 // Hash function for the key type
 struct key_hash {
     std::size_t operator()(const KeyType& k) const {
-        return pair_hash_int()(k.first) ^ pair_hash_int()(k.second);
+        return pair_hash_int()(k.first) * 64 + pair_hash_int()(k.second);
     }
 };
 
@@ -61,36 +63,37 @@ std::vector<Grid_Coords> get_neighbors(const Cell& cell) {
     return neighbors;
 }
 
-std::vector<Grid_Coords> get_shortest_path(const Cell& start, const Cell& end) 
+std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_Coords end) 
 {   
     std::vector<std::vector<bool>> visited(grid_rows, std::vector<bool>(grid_cols, false));
     std::unordered_map<Grid_Coords, Grid_Coords, pair_hash_int> parent;
-    parent[{start.row, start.col}] = {-1, -1};
+    parent[{start.first, start.second}] = {-1, -1};
 
-    std::queue<Grid_Coords> q;
+    std::deque<Grid_Coords> q;
 
-    q.push({start.row, start.col});
-    visited[start.row][start.col] = true;
+    q.push_back({start.first, start.second});
+    visited[start.first][start.second] = true;
 
     while (!q.empty()) {
         auto [currentRow, currentCol] = q.front();
-        q.pop();
+        visited[currentRow][currentCol] = true;
+        q.pop_front();
 
-        if (currentRow == end.row && currentCol == end.col) {
+        if (currentRow == end.first && currentCol == end.second) {
             std::vector<Grid_Coords> path;
-            for (Grid_Coords at = {end.row, end.col}; at.first != -1; at = parent[at]) {
+            for (Grid_Coords at = {end.first, end.second}; at.first != -1; at = parent[at]) {
                 path.push_back(at);
             }
             std::reverse(path.begin(), path.end());
             return path;
         }
         
-        for (const auto& neighbor : get_neighbors(cell_grid[currentRow][currentCol])) {
+        std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[currentRow][currentCol]);
+        for (const auto& neighbor : neighbors) {
             int newRow = neighbor.first;
             int newCol = neighbor.second;
             if (!visited[newRow][newCol]) {
-                q.push({newRow, newCol});
-                visited[newRow][newCol] = true;
+                q.push_back({newRow, newCol});
                 parent[{newRow, newCol}] = {currentRow, currentCol};
             }
         }
@@ -107,6 +110,20 @@ void compute_gold_permutations()
     } while (std::next_permutation(golds.begin(), golds.end()));
 }
 
+void print_plan(std::vector<Grid_Coords> plan, int score, Grid_Coords best_endpoint, Grid_Coords current_position)
+{
+    std::cout << "Plan with Cost: " << score << ": ";
+    std::cout << "Start (" << current_position.first << "," << current_position.second << ")";
+    for (Grid_Coords coord : plan)
+    {
+        std::cout << "(" << coord.first << "," << coord.second << ") -> ";
+    }
+
+    std::cout << "End (" << best_endpoint.first << "," << best_endpoint.second << ")";
+
+    std::cout << std::endl;
+}
+
 std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
 {
     int best_cost = 100000;
@@ -115,7 +132,6 @@ std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
     for (std::vector<Grid_Coords> path : gold_permutations)
     {
         // Compute cost of path + current_to_first_gold + last_gold_to_shortest_pickup
-        //[{{start.row, start.col}, {end.row, end.col}}]
         int cost = shortest_paths_precomputed[{{current_cell.row, current_cell.col}, path.front()}].size();
 
         for (int i = 0; i < path.size() - 1; i++)
@@ -140,6 +156,7 @@ std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
         {
             best_cost = cost;
             best_path = path;
+            print_plan(path, cost, best_endpoint, {current_cell.row, current_cell.col});
         }
     }
 
@@ -168,7 +185,7 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
             new_cell.wall_left = false;
             new_cell.wall_down = false;
             
-            green_fundamentals::Cell current = msg->rows[msg->rows.size() - (row + 1)].cells[col];
+            green_fundamentals::Cell current = msg->rows[row].cells[col];
             for (auto wall : current.walls) 
             {
                 switch(wall) {
@@ -213,16 +230,15 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
     {
         for (int col1 = 0; col1 < grid_cols; ++col1) 
         {
-            for (int row2 = row1; row2 < grid_rows; ++row2)
+            for (int row2 = 0; row2 < grid_rows; ++row2)
             {
-                for (int col2 = (row2 == row1 ? col1 + 1 : 0); col2 < grid_cols; ++col2)
+                for (int col2 = 0; col2 < grid_cols; ++col2)
                 {
-                    const Cell& start = cell_grid[row1][col1];
-                    const Cell& end = cell_grid[row2][col2];
-                    std::vector<Grid_Coords> path = get_shortest_path(start, end);
-                    shortest_paths_precomputed[{{start.row, start.col}, {end.row, end.col}}] = path;
-                    std::reverse(path.begin(), path.end()); // For the reverse path
-                    shortest_paths_precomputed[{{end.row, end.col}, {start.row, start.col}}] = path;
+                    if (row1 == row2 && col1 == col2) continue;
+                    std::vector<Grid_Coords> path = get_shortest_path({row1, col1}, {row2, col2});
+                    shortest_paths_precomputed[{{row1, col1}, {row2, col2}}] = path;
+                    //std::reverse(path.begin(), path.end()); // For the reverse path
+                    //shortest_paths_precomputed[{{end.row, end.col}, {start.row, start.col}}] = path;
                 }
             }
         }
@@ -232,12 +248,11 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
     map_sub.shutdown();
 }
 
-bool get_global_plan(green_fundamentals::GetGlobalPlan::Request  &req, green_fundamentals::GetGlobalPlan::Response &res)
+bool global_plan_callback(green_fundamentals::GetGlobalPlan::Request  &req, green_fundamentals::GetGlobalPlan::Response &res)
 {
     Cell current_cell = cell_grid[req.current_cell.row][req.current_cell.column];
     std::vector<Grid_Coords> best_plan = get_best_plan(current_cell);
 
-    std::cout << "Best plan ist:" << " ";
     res.global_plan.clear();
     for (Grid_Coords coord : best_plan)
     {
@@ -245,9 +260,23 @@ bool get_global_plan(green_fundamentals::GetGlobalPlan::Request  &req, green_fun
         pose.row = coord.first;
         pose.column = coord.second;
         res.global_plan.push_back(pose);
-        std::cout << "(" << coord.first << "," << coord.second << ") ";
     }
-    std::cout << std::endl;
+    
+    return true;
+}
+
+bool shortest_path_callback(green_fundamentals::GetShortestPath::Request  &req, green_fundamentals::GetShortestPath::Response &res)
+{
+    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{req.start.row, req.start.column}, {req.end.row, req.end.column}}];
+
+    res.path.clear();
+    for (Grid_Coords coord : path)
+    {
+        green_fundamentals::Pose pose;
+        pose.row = coord.first;
+        pose.column = coord.second;
+        res.path.push_back(pose);
+    }
     
     return true;
 }
@@ -273,7 +302,8 @@ int main(int argc, char **argv)
     }
     ROS_INFO("Map received and processed.");
 
-    ros::ServiceServer execute_plan_srv = n.advertiseService("get_global_plan", get_global_plan);
+    ros::ServiceServer global_plan_srv = n.advertiseService("get_global_plan", global_plan_callback);
+    ros::ServiceServer shortest_path_srv = n.advertiseService("get_shortest_path", shortest_path_callback);
 
     ros::spin();
 }

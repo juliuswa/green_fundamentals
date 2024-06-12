@@ -34,6 +34,7 @@ add_service_files(
   DriveTo.srv
   ExecutePlan.srv
   GetGlobalPlan.srv
+  GetShortestPath.srv
 )
 
 generate_messages(
