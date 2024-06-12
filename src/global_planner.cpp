@@ -2,6 +2,7 @@
 #include <queue>
 #include <unordered_map>
 #include <algorithm>
+#include <csignal>
 
 #include "green_fundamentals/Grid.h"
 #include "green_fundamentals/GetGlobalPlan.h"
@@ -251,8 +252,14 @@ bool get_global_plan(green_fundamentals::GetGlobalPlan::Request  &req, green_fun
     return true;
 }
 
+void shutdown(int signum) 
+{
+    ros::shutdown();
+}
+
 int main(int argc, char **argv)
 {
+    signal(SIGINT, shutdown);
     ros::init(argc, argv, "global_planner");
     ros::NodeHandle n;
     ros::Rate loop_rate(15);

@@ -15,7 +15,7 @@ filename = os.path.join(rospack.get_path("green_fundamentals"), "map.txt")
 with open(filename, 'r') as f:
     exec("map_layout = {}".format(f.read()))
 
-filename = os.path.join(rospack.get_path("green_fundamentals"), "golds.txt")
+filename = os.path.join(rospack.get_path("green_fundamentals"), "gold.txt")
 with open(filename, 'r') as f:
     exec("gold_poses = {}".format(f.read()))
 
@@ -40,13 +40,13 @@ for row_layout in map_layout:
 for gold in gold_poses:
     pose = Pose()
     pose.row = gold[0]
-    pose.col = gold[1]
+    pose.column = gold[1]
     grid.golds.append(pose)
 
 for pickup in pickup_poses:
     pose = Pose()
     pose.row = pickup[0]
-    pose.col = pickup[1]
+    pose.column = pickup[1]
     grid.pickups.append(pose)
 
 while not rospy.is_shutdown():
