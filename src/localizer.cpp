@@ -29,6 +29,8 @@
 #define RESAMPLE_STD_POS 0.04
 #define RESAMPLE_STD_THETA 0.08
 
+#define EVALUATION_CHANCE 0.25
+
 struct Particle {
     Eigen::Vector2f position;
     float theta;
@@ -225,9 +227,11 @@ void evaluate_particles()
 {
     for (int p = 0; p < sample_size; p++)
     {
-        // ROS_DEBUG("particle %d: x=%f, y=%f, th=%f", p, particles[p].position[0], particles[p].position[1], particles[p].theta);
-
-        evaluate_particle(p);
+        std::normal_distribution<float> normal_dist(0, 1);
+        
+        if (normal_dist(generator) < EVALUATION_CHANCE) {
+            evaluate_particle(p);
+        }            
     }
 }
 
@@ -465,13 +469,11 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if(it % 4 == 0) {
-            ROS_DEBUG("evaluate_particles");
-            evaluate_particles();
+        ROS_DEBUG("evaluate_particles");
+        evaluate_particles();
 
-            ROS_DEBUG("resample_particles");
-            resample_particles();
-        }
+        ROS_DEBUG("resample_particles");
+        resample_particles();
 
         ROS_DEBUG("publish_particles");
         publish_particles();
