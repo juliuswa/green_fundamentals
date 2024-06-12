@@ -404,10 +404,12 @@ bool current_target_reached()
     Target current_target = target_list.front();
 
     float pos_epsilon = current_target.must_be_reached ? POS_EPSILON : SOFT_EPSILON;
-
-    bool distance_diff = fabs(my_position.x - current_target.x) < pos_epsilon && fabs(my_position.y - current_target.y) < pos_epsilon;
+    float distance = std::sqrt(std::pow(my_position.x - current_target.x, 2) + std::pow(my_position.y - current_target.y, 2));
+    ROS_DEBUG("dist: %f, eps %f", distance, pos_epsilon);
+    
+    bool distance_diff = distance < pos_epsilon;
     bool angle_diff = fabs(my_position.theta - current_target.theta) < THETA_EPSILON;
-
+    
     if (current_target.should_rotate) return distance_diff && angle_diff;
     
     return distance_diff;
@@ -459,7 +461,7 @@ bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, g
         Cell center = cell_info[row][col];
         new_target.x = center.x;
         new_target.y = center.y;
-        new_target.must_be_reached = i == req.plan.size()-1 ? true : false;
+        new_target.must_be_reached = i == req.plan.size()-1;
         target_list.push_back(new_target);
     }
 
@@ -480,6 +482,7 @@ void execute_plan()
     {
         target_list.pop_front();
         ROS_INFO("Next Target reached.");
+        set_target();
     }
     else if (!target_list[0].sent) {
         set_target();
@@ -573,7 +576,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "local_planner");
     ros::NodeHandle n;
-    ros::Rate loop_rate(15);
+    ros::Rate loop_rate(30);
 
     ROS_INFO("Starting node.");
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
