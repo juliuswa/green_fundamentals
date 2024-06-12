@@ -15,6 +15,14 @@ filename = os.path.join(rospack.get_path("green_fundamentals"), "map.txt")
 with open(filename, 'r') as f:
     exec("map_layout = {}".format(f.read()))
 
+filename = os.path.join(rospack.get_path("green_fundamentals"), "golds.txt")
+with open(filename, 'r') as f:
+    exec("gold_poses = {}".format(f.read()))
+
+filename = os.path.join(rospack.get_path("green_fundamentals"), "pickup.txt")
+with open(filename, 'r') as f:
+    exec("pickup_poses = {}".format(f.read()))
+
 print("publishing map: {}".format(map_layout))
 
 node = rospy.init_node('example_map_publisher')
@@ -28,6 +36,18 @@ for row_layout in map_layout:
         cell.walls = cell_layout
         row.cells.append(cell)
     grid.rows.append(row)
+
+for gold in gold_poses:
+    pose = Pose()
+    pose.row = gold[0]
+    pose.col = gold[1]
+    grid.golds.append(pose)
+
+for pickup in pickup_poses:
+    pose = Pose()
+    pose.row = pickup[0]
+    pose.col = pickup[1]
+    grid.pickups.append(pose)
 
 while not rospy.is_shutdown():
     pub.publish(grid)

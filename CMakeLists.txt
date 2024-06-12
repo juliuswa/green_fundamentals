@@ -33,6 +33,7 @@ add_service_files(
   FILES
   DriveTo.srv
   ExecutePlan.srv
+  GetGlobalPlan.srv
 )
 
 generate_messages(
@@ -58,10 +59,6 @@ add_dependencies(map_generator create_fundamentals_generate_messages_cpp ${catki
 add_executable(localizer src/localizer.cpp)
 target_link_libraries(localizer ${catkin_LIBRARIES})
 add_dependencies(localizer create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
-
-# add_executable(localizer2 src/localizer2.cpp)
-# target_link_libraries(localizer2 ${catkin_LIBRARIES})
-# add_dependencies(localizer2 create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
 add_executable(robot_mover src/robot_mover.cpp)
 target_link_libraries(robot_mover ${catkin_LIBRARIES})

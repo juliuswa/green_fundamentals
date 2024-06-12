@@ -4,12 +4,18 @@
 #include <algorithm>
 
 #include "green_fundamentals/Grid.h"
+#include "green_fundamentals/GetGlobalPlan.h"
 #include "robot_constants.h"
 
 struct Cell {
     float x, y;
     int row, col;
     bool wall_left, wall_up, wall_right, wall_down;
+
+    friend std::ostream& operator<<(std::ostream& os, const Cell& cell) {
+        os << "(" << cell.row << ", " << cell.col << ")";
+        return os;
+    }
 };
 std::vector<std::vector<Cell>> cell_grid;
 
@@ -176,7 +182,7 @@ precompute_shortest_paths(const std::vector<Cell>& cells)
     return shortestPaths;
 }
 
-std::vector<Cell> get_global_plan(const Cell& current_cell, const std::vector<Cell> golds, const std::vector<Cell> pickups)
+std::vector<Cell> get_global_plan(const Cell& current_cell, const std::vector<Cell>& golds, const std::vector<Cell>& pickups)
 {
     std::vector<Cell> all_cells = {current_cell};
     all_cells.insert(all_cells.end(), golds.begin(), golds.end());
@@ -221,20 +227,25 @@ std::vector<Cell> get_global_plan(const Cell& current_cell, const std::vector<Ce
     return best_path;
 }
 
+bool get_global_plan(green_fundamentals::GetGlobalPlan::Request  &req, green_fundamentals::GetGlobalPlan::Response &res)
+{
+    
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "global_planner");
     ros::NodeHandle n;
     ros::Rate loop_rate(15);
 
-    ROS_DEBUG("Waiting for Grid Map...");
+    ROS_INFO("Waiting for Grid Map...");
     map_sub = n.subscribe("grid_map", 1, map_callback);
     while (!map_received)
     {
         ros::spinOnce();
         loop_rate.sleep();
     }
-    ROS_DEBUG("Map received and processed.");
+    ROS_INFO("Map received and processed.");
 
-    ros::ServiceServer execute_plan_srv = n.advertiseService("execute_plan", set_execute_plan_callback);
+    ros::ServiceServer execute_plan_srv = n.advertiseService("get_global_plan", get_global_plan);
 }
