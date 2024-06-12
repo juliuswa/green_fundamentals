@@ -8,8 +8,4 @@
 
     <node pkg="green_fundamentals" type="robot_mover" name="robot_mover" output="screen" />
 
-    <node pkg="green_fundamentals" type="localizer" name="localizer" output="screen" />
-
-    <node pkg="green_fundamentals" type="local_planner" name="local_planner" output="screen" />
-    
 </launch>

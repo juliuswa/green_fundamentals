@@ -156,7 +156,7 @@ void drive_to_cell(int col, int row) {
 
         std::pair<int, int> current_cell = current_path.back();
 
-        ROS_DEBUG("current_cell: (%d, %d)", current_cell.first, current_cell.second);
+        //ROS_DEBUG("current_cell: (%d, %d)", current_cell.first, current_cell.second);
 
         if (checked[current_cell.first + current_cell.second * MAP_WIDTH]) {
             continue;
@@ -165,7 +165,7 @@ void drive_to_cell(int col, int row) {
         checked[current_cell.first + current_cell.second * MAP_WIDTH] = true;
 
         if (current_cell.first == col && current_cell.second == row) {
-            ROS_INFO("found path");
+            //ROS_INFO("found path");
 
             for (int i = 0; i < current_path.size(); i ++) {
                 ROS_INFO("(%d, %d)", current_path[i].first,  current_path[i].second);
@@ -181,24 +181,37 @@ void drive_to_cell(int col, int row) {
         int cell_y = current_cell.second;
 
         if (cell_info[cell_y][cell_x].wall_right == false) {            
-            ROS_DEBUG("neighbor right");
+            //ROS_DEBUG("neighbor right");
             bfs_deque.push_back(get_neighbor_path(cell_x + 1, cell_y, current_path));
         }
         if (cell_info[cell_y][cell_x].wall_up == false) {            
-            ROS_DEBUG("neighbor up");
+            //ROS_DEBUG("neighbor up");
             bfs_deque.push_back(get_neighbor_path(cell_x, cell_y + 1, current_path));
         }
         if (cell_info[cell_y][cell_x].wall_left == false) {   
-            ROS_DEBUG("neighbor left");         
+            //ROS_DEBUG("neighbor left");         
             bfs_deque.push_back(get_neighbor_path(cell_x - 1, cell_y, current_path));
         }
         if (cell_info[cell_y][cell_x].wall_down == false) {    
-            ROS_DEBUG("neighbor down");        
+            //ROS_DEBUG("neighbor down");        
             bfs_deque.push_back(get_neighbor_path(cell_x, cell_y - 1, current_path));
         }
     }
 
     ROS_DEBUG("found path of length %ld", final_cell_path.size());
+
+    if(final_cell_path.size() == 0) {
+        Target target;
+        target.x = my_position.x;
+        target.y = my_position.y;
+        target.theta = my_position.theta + M_PI;
+        target.should_rotate = true;
+        target.must_be_reached = true;
+
+        ROS_DEBUG("adding target: (%f, %f), theta: %f mbr %d", target.x, target.y, target.theta, target.must_be_reached);
+
+        target_list.push_back(target);
+    }
 
     for (int i = 0; i < final_cell_path.size(); i++) {
         Cell cell = cell_info[final_cell_path[i].second][final_cell_path[i].first];
