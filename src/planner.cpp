@@ -356,7 +356,7 @@ std::vector<std::pair<int, int>> get_neighbor_path(int col, int row, std::vector
 
 void drive_to_cell(int col, int row) {
     std::deque<std::vector<std::pair<int, int>>> bfs_deque;
-    int num_cells = cell_info.size() * cell_info[0].size();
+    int num_cells = cell_grid.size() * cell_grid[0].size();
     bool checked[num_cells];
 
     for (int i = 0; i < num_cells; i++) {
@@ -402,19 +402,19 @@ void drive_to_cell(int col, int row) {
         int cell_x = current_cell.first;
         int cell_y = current_cell.second;
 
-        if (cell_info[cell_y][cell_x].wall_right == false) {            
+        if (cell_grid[cell_y][cell_x].wall_right == false) {            
             ROS_DEBUG("neighbor right");
             bfs_deque.push_back(get_neighbor_path(cell_x + 1, cell_y, current_path));
         }
-        if (cell_info[cell_y][cell_x].wall_up == false) {            
+        if (cell_grid[cell_y][cell_x].wall_up == false) {            
             ROS_DEBUG("neighbor up");
             bfs_deque.push_back(get_neighbor_path(cell_x, cell_y + 1, current_path));
         }
-        if (cell_info[cell_y][cell_x].wall_left == false) {   
+        if (cell_grid[cell_y][cell_x].wall_left == false) {   
             ROS_DEBUG("neighbor left");         
             bfs_deque.push_back(get_neighbor_path(cell_x - 1, cell_y, current_path));
         }
-        if (cell_info[cell_y][cell_x].wall_down == false) {    
+        if (cell_grid[cell_y][cell_x].wall_down == false) {    
             ROS_DEBUG("neighbor down");        
             bfs_deque.push_back(get_neighbor_path(cell_x, cell_y - 1, current_path));
         }
@@ -423,7 +423,7 @@ void drive_to_cell(int col, int row) {
     ROS_DEBUG("found path of length %ld", final_cell_path.size());
 
     for (int i = 0; i < final_cell_path.size(); i++) {
-        Cell cell = cell_info[final_cell_path[i].second][final_cell_path[i].first];
+        Cell cell = cell_grid[final_cell_path[i].second][final_cell_path[i].first];
         Target target;
         target.x = cell.x;
         target.y = cell.y;
@@ -437,60 +437,6 @@ void drive_to_cell(int col, int row) {
     }
 }
 
-void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
-{   
-    ROS_DEBUG("Inside map_callback...");
-
-    grid_rows = msg->rows.size();
-    grid_cols = msg->rows[0].cells.size();
-
-    for (int row = 0; row < msg->rows.size(); row++)
-    {
-        std::vector<Cell> column_cells;
-
-        for (int col = 0; col < msg->rows[row].cells.size(); col++)
-        {
-            Cell new_cell;
-            new_cell.x = (float)col * CELL_LENGTH + (CELL_LENGTH / 2);
-            new_cell.y = (float)row * CELL_LENGTH + (CELL_LENGTH / 2);
-            new_cell.wall_right = false;
-            new_cell.wall_up = false;
-            new_cell.wall_left = false;
-            new_cell.wall_down = false;
-            
-            green_fundamentals::Cell current = msg->rows[msg->rows.size() - (row + 1)].cells[col];
-            for (auto wall : current.walls) {
-                switch(wall) {
-                    case 0:
-                       new_cell.wall_right = true;
-                       break;
-                    case 1:
-                       new_cell.wall_up = true;
-                       break; 
-                    case 2:
-                       new_cell.wall_left = true;
-                       break; 
-                    case 3:
-                       new_cell.wall_down = true;
-                       break; 
-                }
-            }
-
-            ROS_DEBUG("Cell (%d, %d): center: (%f, %f), walls: (%d, %d, %d, %d)",
-                col, row, 
-                new_cell.x, new_cell.y,
-                new_cell.wall_right, new_cell.wall_up, new_cell.wall_left, new_cell.wall_down);
-
-            column_cells.push_back(new_cell);
-        }
-
-        cell_info.push_back(column_cells);
-    }
-
-    map_received = true;
-    map_sub.shutdown();
-}
-
 void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 {   
     if (is_first_position)
@@ -502,12 +448,11 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         my_position.col = floor(my_position.x / CELL_LENGTH);
         is_first_position = false;
     }
+
+    float old_x, old_y;
      
-    old_position.x = my_position.x;
-    old_position.y = my_position.y;
-    old_position.theta = my_position.theta;
-    old_position.row = my_position.row;
-    old_position.col = my_position.col;
+    old_x = my_position.x;
+    old_y = my_position.y;
 
     my_position.x = msg->x;
     my_position.y = msg->y;
@@ -533,8 +478,8 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     }
 
     // Is localized?
-    if (fabs(my_position.x - old_position.x) > REASONABLE_DISTANCE ||
-        fabs(my_position.y - old_position.y) > REASONABLE_DISTANCE) 
+    if (fabs(my_position.x - old_x) > REASONABLE_DISTANCE ||
+        fabs(my_position.y - old_y) > REASONABLE_DISTANCE) 
     {
         ROS_INFO("Unreasonable movement");
         reset_visited_cells();
@@ -545,38 +490,14 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     {
         visited_cells[my_position.col + my_position.row * MAP_WIDTH] = true;
         localization_points += 1;
-        play_note(0);
         ROS_DEBUG("new visited cell: (%d, %d), points = %d", my_position.col, my_position.row, localization_points);
     }
     
     bool was_localized_before = is_localized;
     is_localized = localization_points > LOCALIZATION_POINTS_THRESHOLD;
 
-    if (is_localized)
+    if (!is_localized)
     {   
-        green_fundamentals::Pose pose;
-
-        pose.row = grid_rows - 1 - my_position.row; // TODO check
-        pose.column = my_position.col;
-        switch (my_position.orientation)
-        {
-        case Orientation::UP:
-            pose.orientation = green_fundamentals::Pose::UP;
-            break;
-        case Orientation::DOWN:
-            pose.orientation = green_fundamentals::Pose::DOWN;
-            break;
-        case Orientation::LEFT:
-            pose.orientation = green_fundamentals::Pose::LEFT;
-            break;
-        case Orientation::RIGHT:
-            pose.orientation = green_fundamentals::Pose::RIGHT;
-            break;
-        }
-
-        pose_pub.publish(pose);
-    }
-    else {
         state = State::LOCALIZE;
         // TODO check
         if (was_localized_before)
@@ -588,7 +509,7 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 
 std::pair<float, float> get_current_cell_center()
 {
-    Cell cell = cell_info[my_position.row][my_position.col];
+    Cell cell = cell_grid[my_position.row][my_position.col];
     return {cell.x, cell.y};
 }
 
@@ -625,17 +546,23 @@ bool current_target_reached()
 
     Target current_target = target_list.front();
 
-    float pos_epsilon = current_target.must_be_reached ? POS_EPSILON : SOFT_EPSILON;
+    float epsilon = current_target.must_be_reached ? POS_EPSILON : SOFT_EPSILON;
     float distance = std::sqrt(std::pow(my_position.x - current_target.x, 2) + std::pow(my_position.y - current_target.y, 2));
-    ROS_DEBUG("dist: %f, eps %f", distance, pos_epsilon);
+    ROS_DEBUG("dist: %f, eps %f", distance, epsilon);
     
-    bool distance_diff = distance < pos_epsilon;
+    bool distance_diff = distance < epsilon;
     bool angle_diff = fabs(my_position.theta - current_target.theta) < THETA_EPSILON;
     
-    if (current_target.should_rotate) return distance_diff && angle_diff;
+    if (current_target.must_be_reached && current_target.should_rotate) return distance_diff && angle_diff;
     
     return distance_diff;
 }
+
+void add_targets_for_goal(Grid_Coords goal)
+{
+    
+}
+
 
 bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, green_fundamentals::ExecutePlan::Response &res)
 {
@@ -653,24 +580,24 @@ bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, g
         switch (req.plan[i])
         {
         case  0: // RIGHT
-            move_possible = !cell_info[row][col].wall_right;
+            move_possible = !cell_grid[row][col].wall_right;
             col++;
             break;
         case  1: // UP
-            move_possible = !cell_info[row][col].wall_up;
+            move_possible = !cell_grid[row][col].wall_up;
             row++;
             break;
         case  2: // LEFT
-            move_possible = !cell_info[row][col].wall_left;
+            move_possible = !cell_grid[row][col].wall_left;
             col--;
             break;
         case  3: // DOWN
-            move_possible = !cell_info[row][col].wall_down;
+            move_possible = !cell_grid[row][col].wall_down;
             row--;
             break;
         }
 
-        if (!move_possible || row > cell_info.size() || row < 0 || col > cell_info[0].size() || col < 0)
+        if (!move_possible || row > cell_grid.size() || row < 0 || col > cell_grid[0].size() || col < 0)
         {
             target_list.clear();
             res.success = false;
@@ -680,7 +607,7 @@ bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, g
             return false;
         }
 
-        Cell center = cell_info[row][col];
+        Cell center = cell_grid[row][col];
         new_target.x = center.x;
         new_target.y = center.y;
         new_target.must_be_reached = i == req.plan.size()-1;
