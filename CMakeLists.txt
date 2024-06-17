@@ -69,10 +69,6 @@ add_executable(obstacle_detector src/obstacle_detector.cpp)
 target_link_libraries(obstacle_detector ${catkin_LIBRARIES})
 add_dependencies(obstacle_detector create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
-add_executable(local_planner src/local_planner.cpp)
-target_link_libraries(local_planner ${catkin_LIBRARIES})
-add_dependencies(local_planner create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
-
-add_executable(global_planner src/global_planner.cpp)
-target_link_libraries(global_planner ${catkin_LIBRARIES})
-add_dependencies(global_planner create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+add_executable(planner src/planner.cpp)
+target_link_libraries(planner ${catkin_LIBRARIES})
+add_dependencies(planner create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
