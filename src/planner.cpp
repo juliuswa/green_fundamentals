@@ -171,7 +171,6 @@ std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
             std::vector<Grid_Coords> temp = path;
             temp.push_back(best_endpoint);
             best_path = temp;
-            print_plan(path, cost, best_endpoint, {current_cell.row, current_cell.col});
         }
     }
 
@@ -344,115 +343,36 @@ void play_song_not_localized()
     play_song.call(srv);
 }
 
-std::vector<std::pair<int, int>> get_neighbor_path(int col, int row, std::vector<std::pair<int, int>> current_path) {
-    ROS_DEBUG("get_neighbor_path current path length: %ld", current_path.size());
-    std::pair<int, int> neighbor_cell {col, row};            
-    std::vector<std::pair<int, int>> neighbor_path = current_path;
+bool drive_to_cell(int col, int row) {
+    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{my_position.row, my_position.col}, {row, col}}];
 
-    neighbor_path.push_back(neighbor_cell);
-
-    return neighbor_path;
-}
-
-void drive_to_cell(int col, int row) {
-    std::deque<std::vector<std::pair<int, int>>> bfs_deque;
-    int num_cells = cell_grid.size() * cell_grid[0].size();
-    bool checked[num_cells];
-
-    for (int i = 0; i < num_cells; i++) {
-        checked[i] = false;
-    }
-
-    std::vector<std::pair<int, int>> first_path;
-    std::pair<int, int> first_cell {my_position.col, my_position.row};
-    first_path.push_back(first_cell);
-    bfs_deque.push_back(first_path);
-
-    std::vector<std::pair<int, int>> final_cell_path;
-
-    ROS_DEBUG("searching path to: (%d, %d)", col, row);
-
-    while (bfs_deque.size() != 0) {
-        std::vector<std::pair<int, int>> current_path = bfs_deque.front();        
-        bfs_deque.pop_front();
-
-        std::pair<int, int> current_cell = current_path.back();
-
-        ROS_DEBUG("current_cell: (%d, %d)", current_cell.first, current_cell.second);
-
-        if (checked[current_cell.first + current_cell.second * MAP_WIDTH]) {
+    for (int i = 0; i < path.size(); i++) {
+        Cell cell = cell_grid[path[i].first][path[i].second];
+        if (cell.row != path[i].first && cell.col != path[i].second)
+        {
+            ROS_INFO("ERROR in drive_to_cell with cell conversion from first to row and second to col.");
             continue;
         }
-        
-        checked[current_cell.first + current_cell.second * MAP_WIDTH] = true;
-
-        if (current_cell.first == col && current_cell.second == row) {
-            ROS_INFO("found path");
-
-            for (int i = 0; i < current_path.size(); i ++) {
-                ROS_INFO("(%d, %d)", current_path[i].first,  current_path[i].second);
-            }
-
-            final_cell_path = current_path;
-
-            bfs_deque.clear();
-            continue;
-        }
-
-        int cell_x = current_cell.first;
-        int cell_y = current_cell.second;
-
-        if (cell_grid[cell_y][cell_x].wall_right == false) {            
-            ROS_DEBUG("neighbor right");
-            bfs_deque.push_back(get_neighbor_path(cell_x + 1, cell_y, current_path));
-        }
-        if (cell_grid[cell_y][cell_x].wall_up == false) {            
-            ROS_DEBUG("neighbor up");
-            bfs_deque.push_back(get_neighbor_path(cell_x, cell_y + 1, current_path));
-        }
-        if (cell_grid[cell_y][cell_x].wall_left == false) {   
-            ROS_DEBUG("neighbor left");         
-            bfs_deque.push_back(get_neighbor_path(cell_x - 1, cell_y, current_path));
-        }
-        if (cell_grid[cell_y][cell_x].wall_down == false) {    
-            ROS_DEBUG("neighbor down");        
-            bfs_deque.push_back(get_neighbor_path(cell_x, cell_y - 1, current_path));
-        }
+        add_target_back(cell.x, cell.y, 0.0, false, i == path.size() - 1);
     }
 
-    ROS_DEBUG("found path of length %ld", final_cell_path.size());
-
-    for (int i = 0; i < final_cell_path.size(); i++) {
-        Cell cell = cell_grid[final_cell_path[i].second][final_cell_path[i].first];
-        Target target;
-        target.x = cell.x;
-        target.y = cell.y;
-        target.theta = 0.0;
-        target.should_rotate = false;
-        target.must_be_reached = i == final_cell_path.size() - 1;
-
-        ROS_DEBUG("adding target: (%f, %f), mbr %d", target.x, target.y, target.must_be_reached);
-
-        target_list.push_back(target);
-    }
+    return !path.empty();
 }
 
 void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 {   
+    float old_x, old_y;
     if (is_first_position)
     {
-        my_position.x = msg->x;
-        my_position.y = msg->y;
-        my_position.theta = msg->theta;
-        my_position.row = floor(my_position.y / CELL_LENGTH);
-        my_position.col = floor(my_position.x / CELL_LENGTH);
+        old_x = msg->x;
+        old_y = msg->y;
         is_first_position = false;
     }
-
-    float old_x, old_y;
-     
-    old_x = my_position.x;
-    old_y = my_position.y;
+    else 
+    {
+        old_x = my_position.x;
+        old_y = my_position.y;
+    }
 
     my_position.x = msg->x;
     my_position.y = msg->y;
@@ -507,12 +427,6 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     }
 }
 
-std::pair<float, float> get_current_cell_center()
-{
-    Cell cell = cell_grid[my_position.row][my_position.col];
-    return {cell.x, cell.y};
-}
-
 void set_target() {
     if (target_list.empty()) {
         ROS_DEBUG("Cannot set target, because target_list is empty");
@@ -558,12 +472,6 @@ bool current_target_reached()
     return distance_diff;
 }
 
-void add_targets_for_goal(Grid_Coords goal)
-{
-    
-}
-
-
 bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, green_fundamentals::ExecutePlan::Response &res)
 {
     target_list.clear();
@@ -573,8 +481,6 @@ bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, g
 
     for (int i = 0; i < req.plan.size(); i++)
     {
-        Target new_target;
-
         bool move_possible = true;
 
         switch (req.plan[i])
@@ -608,10 +514,7 @@ bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, g
         }
 
         Cell center = cell_grid[row][col];
-        new_target.x = center.x;
-        new_target.y = center.y;
-        new_target.must_be_reached = i == req.plan.size()-1;
-        target_list.push_back(new_target);
+        add_target_back(center.x, center.y, 0.0, false, i == req.plan.size()-1);
     }
 
     state = State::EXECUTE_PLAN;
@@ -686,10 +589,8 @@ void localize()
 
 void align()
 {
-    std::pair<float, float> target = get_current_cell_center(); // x, y
-    ROS_DEBUG("Current cell is (%d, %d)", my_position.row, my_position.col);
-    ROS_DEBUG("Cell Center is (%f, %f)", target.first, target.second);
-    add_target_front(target.first, target.second, M_PI/2, true, true);
+    Cell cell = cell_grid[my_position.row][my_position.col];
+    add_target_front(cell.x, cell.y, M_PI/2, true, true);
     set_target();
     
     state = State::IDLE;
