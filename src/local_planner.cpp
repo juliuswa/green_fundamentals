@@ -2,6 +2,9 @@
 #include "std_srvs/Empty.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include <deque>
+#include <unordered_map>
+#include <algorithm>
+#include <csignal>
 
 #include "green_fundamentals/Position.h"
 #include "green_fundamentals/Grid.h"
@@ -16,64 +19,296 @@
 #define REASONABLE_DISTANCE 0.5
 #define LOCALIZATION_POINTS_THRESHOLD 5
 
+using Grid_Coords = std::pair<int, int>;
+using KeyType = std::pair<Grid_Coords, Grid_Coords>;
+
+/*
+############################################################################
+GLOBAL STUFF
+############################################################################
+*/
+
+// ROS
+ros::ServiceClient mover_drive_to_client, play_song;
+
+// Map
+struct Cell {
+    float x, y;
+    int row, col;
+    bool wall_left, wall_up, wall_right, wall_down;
+};
+int grid_rows, grid_cols;
+ros::Subscriber map_sub;
+bool map_received = false;
+std::vector<std::vector<Cell>> cell_grid;
+std::vector<Grid_Coords> golds;
+std::vector<Grid_Coords> pickups;
+std::vector<std::vector<Grid_Coords>> gold_permutations;
+std::unordered_map<KeyType, std::vector<Grid_Coords>, key_hash> shortest_paths_precomputed;
+
+/*
+############################################################################
+GLOBAL PLANNER
+############################################################################
+*/
+
+struct pair_hash_int {
+    std::size_t operator()(const Grid_Coords& p) const {
+        return p.first * 32 + p.second;
+    }
+};
+
+// Hash function for the key type
+struct key_hash {
+    std::size_t operator()(const KeyType& k) const {
+        return pair_hash_int()(k.first) * 64 + pair_hash_int()(k.second);
+    }
+};
+
+// BFS Search
+std::vector<Grid_Coords> get_neighbors(const Cell& cell) {
+    std::vector<Grid_Coords> neighbors;
+    int row = cell.row;
+    int col = cell.col;
+
+    if (!cell.wall_up && row < grid_rows - 1) {
+        neighbors.push_back({row + 1, col});
+    }
+    if (!cell.wall_down && row > 0) {
+        neighbors.push_back({row - 1, col});
+    }
+    if (!cell.wall_left && col > 0) {
+        neighbors.push_back({row, col - 1});
+    }
+    if (!cell.wall_right && col < grid_cols - 1) {
+        neighbors.push_back({row, col + 1});
+    }
+
+    return neighbors;
+}
+
+std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_Coords end) 
+{   
+    std::vector<std::vector<bool>> visited(grid_rows, std::vector<bool>(grid_cols, false));
+    std::unordered_map<Grid_Coords, Grid_Coords, pair_hash_int> parent;
+    parent[{start.first, start.second}] = {-1, -1};
+
+    std::deque<Grid_Coords> q;
+
+    q.push_back({start.first, start.second});
+    visited[start.first][start.second] = true;
+
+    //ROS_INFO("Starting Node is (%d, %d)", start.first, start.second);
+
+    while (!q.empty()) {
+        auto [currentRow, currentCol] = q.front();
+        visited[currentRow][currentCol] = true;
+        q.pop_front();
+
+        if (currentRow == end.first && currentCol == end.second) {
+            std::vector<Grid_Coords> path;
+            for (Grid_Coords at = {end.first, end.second}; at.first != -1; at = parent[at]) {
+                path.push_back(at);
+            }
+            std::reverse(path.begin(), path.end());
+            return path;
+        }
+        
+        std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[currentRow][currentCol]);
+        //ROS_INFO("%d Neighbors for cell (%d, %d)", neighbors.size(), currentRow, currentCol);
+        for (const auto& neighbor : neighbors) {
+            int newRow = neighbor.first;
+            int newCol = neighbor.second;
+            if (!visited[newRow][newCol]) {
+                q.push_back({newRow, newCol});
+                parent[{newRow, newCol}] = {currentRow, currentCol};
+            }
+        }
+    }
+
+    return {};
+}
+
+void compute_gold_permutations()
+{
+    gold_permutations.clear();
+    do {
+        gold_permutations.push_back(golds);
+    } while (std::next_permutation(golds.begin(), golds.end()));
+}
+
+std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
+{
+    int best_cost = 100000;
+    std::vector<Grid_Coords> best_path;
+
+    for (std::vector<Grid_Coords> path : gold_permutations)
+    {
+        // Compute cost of path + current_to_first_gold + last_gold_to_shortest_pickup
+        int cost = shortest_paths_precomputed[{{current_cell.row, current_cell.col}, path.front()}].size();
+
+        for (int i = 0; i < path.size() - 1; i++)
+        {
+            cost += shortest_paths_precomputed[{path[i], path[i+1]}].size();
+        }
+        
+        Grid_Coords best_endpoint;
+        int best_endpoint_cost = 100000;
+        for (Grid_Coords pickup : pickups)
+        {   
+            int endpoint_cost = shortest_paths_precomputed[{path.back(), pickup}].size();
+            if (endpoint_cost < best_endpoint_cost)
+            {
+                best_endpoint = pickup;
+                best_endpoint_cost = endpoint_cost;
+            }
+        }
+        cost += best_endpoint_cost;
+
+        if (cost < best_cost)
+        {
+            best_cost = cost;
+            std::vector<Grid_Coords> temp = path;
+            temp.push_back(best_endpoint);
+            best_path = temp;
+            print_plan(path, cost, best_endpoint, {current_cell.row, current_cell.col});
+        }
+    }
+
+    return best_path;
+}
+
+void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
+{   
+    // ROWS
+    grid_rows = msg->rows.size();
+    grid_cols = msg->rows[0].cells.size();
+
+    cell_grid.resize(grid_rows);
+
+    for (int row = 0; row < msg->rows.size(); row++)
+    {
+        std::vector<Cell> column_cells;
+
+        for (int col = 0; col < msg->rows[row].cells.size(); col++)
+        {
+            Cell new_cell;
+            new_cell.x = (float)col * CELL_LENGTH + (CELL_LENGTH / 2);
+            new_cell.y = (float)(grid_rows - row - 1) * CELL_LENGTH + (CELL_LENGTH / 2);
+            new_cell.row = (grid_rows - row - 1);
+            new_cell.col = col;
+            new_cell.wall_right = false;
+            new_cell.wall_up = false;
+            new_cell.wall_left = false;
+            new_cell.wall_down = false;
+            
+            green_fundamentals::Cell current = msg->rows[row].cells[col];
+            for (auto wall : current.walls) 
+            {
+                switch(wall) {
+                    case 0:
+                       new_cell.wall_right = true;
+                       break;
+                    case 1:
+                       new_cell.wall_up = true;
+                       break; 
+                    case 2:
+                       new_cell.wall_left = true;
+                       break; 
+                    case 3:
+                       new_cell.wall_down = true;
+                       break; 
+                }
+            }
+
+            column_cells.push_back(new_cell);
+        }
+
+        cell_grid[grid_rows - row - 1] = column_cells;
+    }
+
+    // GOLDS
+    for (int i = 0; i < msg->golds.size(); i++)
+    {
+        golds.push_back({grid_rows - msg->golds[i].row - 1, msg->golds[i].column});
+    }
+
+    // Precompute gold permutations
+    compute_gold_permutations();
+
+    // PICKUPS
+    for (int i = 0; i < msg->pickups.size(); i++)
+    {
+        pickups.push_back({grid_rows -  msg->pickups[i].row - 1, msg->pickups[i].column});
+    }
+
+    // Precompute shortest paths between all cells
+    for (int row1 = 0; row1 < grid_rows; ++row1) 
+    {
+        for (int col1 = 0; col1 < grid_cols; ++col1) 
+        {
+            for (int row2 = 0; row2 < grid_rows; ++row2)
+            {
+                for (int col2 = 0; col2 < grid_cols; ++col2)
+                {
+                    if (row1 == row2 && col1 == col2) continue;
+                    std::vector<Grid_Coords> path = get_shortest_path({row1, col1}, {row2, col2});
+                    shortest_paths_precomputed[{{row1, col1}, {row2, col2}}] = path;
+                    //std::reverse(path.begin(), path.end()); // For the reverse path
+                    //shortest_paths_precomputed[{{end.row, end.col}, {start.row, start.col}}] = path;
+                }
+            }
+        }
+    }
+
+    map_received = true;
+    map_sub.shutdown();
+}
+
+/*
+############################################################################
+LOCAL PLANNER
+############################################################################
+*/
+
+// STATE
 enum State {
     INIT,
     LOCALIZE,
     ALIGN,
     IDLE,
-    EXECUTE_PLAN
+    EXECUTE_PLAN,
+    MOVE_TO_GOAL,
+    TEMPLE_RUN_SIMULATION
 };
-
 State state = State::INIT;
 
-State last_state = state;
-
+// LOCALIZATION
 enum Orientation {
     LEFT,
     RIGHT,
     UP,
     DOWN
 };
-
 struct Position {
     float x, y, theta;
     int row, col;
     Orientation orientation = Orientation::RIGHT;
 };
-
+Position my_position{0., 0., 0., 0, 0};
+bool is_first_position = true;
 bool is_localized = false;
 bool visited_cells[MAP_WIDTH * MAP_HEIGHT];
 int localization_points = 0;
 
-ros::Time last_sent_command;
-
+// DRIVING
 struct Target {
     float x, y, theta;
     bool should_rotate = false;
     bool must_be_reached = false;
     bool sent = false;
 };
-
-Position my_position{0., 0., 0., 0, 0};
-Position old_position{0., 0., 0., 0, 0};
-bool is_first_position = true;
 std::deque<Target> target_list;
-
-// Map
-struct Cell {
-    float x, y;
-    bool wall_left, wall_up, wall_right, wall_down;
-};
-int grid_rows, grid_cols;
-ros::Subscriber map_sub;
-bool map_received = false;
-std::vector<std::vector<Cell>> cell_info;
-
-// Publishers
-ros::Publisher pose_pub;
-
-// Clients
-ros::ServiceClient start_localize_client, mover_set_idle_client, mover_set_wander_client, mover_drive_to_client, store_song, play_song;
 
 void reset_visited_cells() {
     for (int i = 0; i < sizeof(visited_cells) / sizeof(bool); i++) {
@@ -90,19 +325,6 @@ void add_target_back(float x, float y, float theta, bool should_rotate, bool mus
 {
     Target target{x, y, theta, should_rotate, must_be_reached};
     target_list.push_back(target);
-}
-
-void play_note(int i) {
-    create_fundamentals::StoreSong store_srv;
-    store_srv.request.number = 0;
-    store_srv.request.song = {60,40};
-
-    if(play_song.call(store_srv))
-    {
-        create_fundamentals::PlaySong play_srv;
-        play_srv.request.number = 0;
-        play_song.call(play_srv);
-    };
 }
 
 // TODO check if number is correct
@@ -537,14 +759,11 @@ void localize()
 
 void align()
 {
-    if (target_list.empty())
-    {
-        std::pair<float, float> target = get_current_cell_center(); // x, y
-        ROS_DEBUG("Current cell is (%d, %d)", my_position.row, my_position.col);
-        ROS_DEBUG("Cell Center is (%f, %f)", target.first, target.second);
-        add_target_front(target.first, target.second, M_PI/2, true, true);
-        set_target();
-    }
+    std::pair<float, float> target = get_current_cell_center(); // x, y
+    ROS_DEBUG("Current cell is (%d, %d)", my_position.row, my_position.col);
+    ROS_DEBUG("Cell Center is (%f, %f)", target.first, target.second);
+    add_target_front(target.first, target.second, M_PI/2, true, true);
+    set_target();
     
     state = State::IDLE;
     target_list.clear();
@@ -572,11 +791,18 @@ void print_state()
     }
 }
 
+void shutdown(int signum) 
+{
+    ros::shutdown();
+}
+
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "local_planner");
+    ros::init(argc, argv, "planner");
     ros::NodeHandle n;
     ros::Rate loop_rate(30);
+
+    signal(SIGINT, shutdown);
 
     ROS_INFO("Starting node.");
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
@@ -592,30 +818,14 @@ int main(int argc, char **argv)
     }
     ROS_DEBUG("Map received and processed.");
 
-    // Subscribers
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
-    // Publishers
-    pose_pub = n.advertise<green_fundamentals::Pose>("pose", 1);
-    /*bool localizer_available = ros::service::waitForService("localizer_start_localize", ros::Duration(10.0));
-    //bool mover_available = ros::service::waitForService("mover_set_idle", ros::Duration(10.0));
-    if (!localizer_available || !mover_available)
-    {
-        ROS_ERROR("A service is not available");
-        return 1;
-    }
-    // Services
-    //start_localize_client = n.serviceClient<std_srvs::Empty>("localizer_start_localize");*/
-    mover_set_idle_client = n.serviceClient<std_srvs::Empty>("mover_set_idle");
-    mover_set_wander_client = n.serviceClient<std_srvs::Empty>("mover_set_wander");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
-    store_song = n.serviceClient<create_fundamentals::StoreSong>("store_song");
     play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
     
-    ros::ServiceServer execute_plan_srv = n.advertiseService("execute_plan", set_execute_plan_callback);
-    ROS_DEBUG("Advertising execute_plan service");
+    ros::ServiceServer assignment_srv = n.advertiseService("move_to_position", set_execute_plan_callback);
     
-    last_sent_command = ros::Time::now();
     state = State::IDLE;
+    State last_state = state;
     while(ros::ok()) {
         ros::spinOnce();
         
@@ -623,8 +833,6 @@ int main(int argc, char **argv)
         last_state = state; 
 
         if (is_first_position) continue;
-
-        // ROS_DEBUG("current pos: (%f, %f), th: %f", my_position.x, my_position.y, my_position.theta);
 
         switch (state)
         {
@@ -642,6 +850,14 @@ int main(int argc, char **argv)
 
             case State::EXECUTE_PLAN:
                 execute_plan();
+                break;
+            
+            case State::MOVE_TO_GOAL:
+                move_to_goal();
+                break;
+            
+            case State::TEMPLE_RUN_SIMULATION:
+                temple_run();
                 break;
         }
         
