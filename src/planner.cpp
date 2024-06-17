@@ -12,6 +12,7 @@
 #include "green_fundamentals/Pose.h"
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/ExecutePlan.h"
+#include "green_fundamentals/MoveToPosition.h"
 #include "create_fundamentals/PlaySong.h"
 #include "create_fundamentals/StoreSong.h"
 #include "robot_constants.h"
@@ -277,7 +278,7 @@ enum State {
     ALIGN,
     IDLE,
     EXECUTE_PLAN,
-    MOVE_TO_GOAL,
+    MOVE_TO_POSITION,
     TEMPLE_RUN_SIMULATION
 };
 State state = State::INIT;
@@ -541,6 +542,32 @@ void execute_plan()
     }
 }
 
+bool move_to_position_callback(green_fundamentals::ExecutePlan::Request  &req, green_fundamentals::ExecutePlan::Response &res) {
+    res.success = drive_to_cell(req.row, req.cell);
+
+    state = State::MOVE_TO_POSITION;
+    ROS_DEBUG("Added targets to target_list. Now we have %ld targets.", target_list.size());
+
+    return res.success;
+}
+
+void move_to_position()
+{
+    if (target_list.empty())  {
+        state = State::IDLE;
+        return;
+    }
+    else if (current_target_reached())
+    {
+        target_list.pop_front();
+        ROS_INFO("Next Target reached.");
+        set_target();
+    }
+    else if (!target_list[0].sent) {
+        set_target();
+    }
+}
+
 void localize()
 {   
     if (is_localized)
@@ -616,6 +643,10 @@ void print_state()
         case State::EXECUTE_PLAN:
             ROS_INFO("State = EXECUTE_PLAN");
             break;
+
+        case State::MOVE_TO_POSITION:
+            ROS_INFO("State = MOVE_TO_POSITION");
+            break;
     }
 }
 
@@ -650,8 +681,8 @@ int main(int argc, char **argv)
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
     
-    ros::ServiceServer assignment_srv = n.advertiseService("move_to_position", set_execute_plan_callback);
-    
+    ros::ServiceServer move_to_position_srv = n.advertiseService("move_to_position", move_to_position_callback);
+
     state = State::IDLE;
     State last_state = state;
     while(ros::ok()) {
@@ -686,6 +717,10 @@ int main(int argc, char **argv)
             
             case State::TEMPLE_RUN_SIMULATION:
                 temple_run();
+                break;
+
+            case State::MOVE_TO_POSITION:
+                move_to_position();
                 break;
         }
         

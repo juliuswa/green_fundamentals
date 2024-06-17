@@ -35,6 +35,7 @@ add_service_files(
   ExecutePlan.srv
   GetGlobalPlan.srv
   GetShortestPath.srv
+  MoveToPosition.srv
 )
 
 generate_messages(
