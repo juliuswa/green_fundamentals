@@ -47,16 +47,16 @@ std::vector<Grid_Coords> get_neighbors(const Cell& cell) {
     int row = cell.row;
     int col = cell.col;
 
-    if (!cell.wall_up && row > 0) {
-        neighbors.push_back({row - 1, col});
-    }
-    if (!cell.wall_down && row < cell_grid.size() - 1) {
+    if (!cell.wall_up && row < grid_rows - 1) {
         neighbors.push_back({row + 1, col});
+    }
+    if (!cell.wall_down && row > 0) {
+        neighbors.push_back({row - 1, col});
     }
     if (!cell.wall_left && col > 0) {
         neighbors.push_back({row, col - 1});
     }
-    if (!cell.wall_right && col < cell_grid[0].size() - 1) {
+    if (!cell.wall_right && col < grid_cols - 1) {
         neighbors.push_back({row, col + 1});
     }
 
@@ -74,6 +74,8 @@ std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_C
     q.push_back({start.first, start.second});
     visited[start.first][start.second] = true;
 
+    //ROS_INFO("Starting Node is (%d, %d)", start.first, start.second);
+
     while (!q.empty()) {
         auto [currentRow, currentCol] = q.front();
         visited[currentRow][currentCol] = true;
@@ -89,6 +91,7 @@ std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_C
         }
         
         std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[currentRow][currentCol]);
+        //ROS_INFO("%d Neighbors for cell (%d, %d)", neighbors.size(), currentRow, currentCol);
         for (const auto& neighbor : neighbors) {
             int newRow = neighbor.first;
             int newCol = neighbor.second;
@@ -155,7 +158,9 @@ std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
         if (cost < best_cost)
         {
             best_cost = cost;
-            best_path = path;
+            std::vector<Grid_Coords> temp = path;
+            temp.push_back(best_endpoint);
+            best_path = temp;
             print_plan(path, cost, best_endpoint, {current_cell.row, current_cell.col});
         }
     }
@@ -169,6 +174,8 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
     grid_rows = msg->rows.size();
     grid_cols = msg->rows[0].cells.size();
 
+    cell_grid.resize(grid_rows);
+
     for (int row = 0; row < msg->rows.size(); row++)
     {
         std::vector<Cell> column_cells;
@@ -177,8 +184,8 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
         {
             Cell new_cell;
             new_cell.x = (float)col * CELL_LENGTH + (CELL_LENGTH / 2);
-            new_cell.y = (float)row * CELL_LENGTH + (CELL_LENGTH / 2);
-            new_cell.row = row;
+            new_cell.y = (float)(grid_rows - row - 1) * CELL_LENGTH + (CELL_LENGTH / 2);
+            new_cell.row = (grid_rows - row - 1);
             new_cell.col = col;
             new_cell.wall_right = false;
             new_cell.wall_up = false;
@@ -207,13 +214,13 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
             column_cells.push_back(new_cell);
         }
 
-        cell_grid.push_back(column_cells);
+        cell_grid[grid_rows - row - 1] = column_cells;
     }
 
     // GOLDS
     for (int i = 0; i < msg->golds.size(); i++)
     {
-        golds.push_back({msg->golds[i].row, msg->golds[i].column});
+        golds.push_back({grid_rows - msg->golds[i].row - 1, msg->golds[i].column});
     }
 
     // Precompute gold permutations
@@ -222,7 +229,7 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
     // PICKUPS
     for (int i = 0; i < msg->pickups.size(); i++)
     {
-        pickups.push_back({msg->pickups[i].row, msg->pickups[i].column});
+        pickups.push_back({grid_rows -  msg->pickups[i].row - 1, msg->pickups[i].column});
     }
 
     // Precompute shortest paths between all cells
