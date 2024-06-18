@@ -32,9 +32,6 @@ add_message_files(
 add_service_files(
   FILES
   DriveTo.srv
-  ExecutePlan.srv
-  GetGlobalPlan.srv
-  GetShortestPath.srv
   MoveToPosition.srv
 )
 

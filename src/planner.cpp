@@ -5,34 +5,60 @@
 #include <unordered_map>
 #include <algorithm>
 #include <csignal>
+#include <vector>
 
 #include "green_fundamentals/Position.h"
 #include "green_fundamentals/Grid.h"
 #include "green_fundamentals/Cell.h"
 #include "green_fundamentals/Pose.h"
 #include "green_fundamentals/DriveTo.h"
-#include "green_fundamentals/ExecutePlan.h"
 #include "green_fundamentals/MoveToPosition.h"
 #include "create_fundamentals/PlaySong.h"
-#include "create_fundamentals/StoreSong.h"
 #include "robot_constants.h"
 
 #define REASONABLE_DISTANCE 0.5
-#define LOCALIZATION_POINTS_THRESHOLD 5
+#define LOCALIZATION_POINTS_THRESHOLD 3
 
 using Grid_Coords = std::pair<int, int>;
 using KeyType = std::pair<Grid_Coords, Grid_Coords>;
+
+struct pair_hash_int {
+    std::size_t operator()(const Grid_Coords& p) const {
+        return p.first * 32 + p.second;
+    }
+};
+
+struct key_hash {
+    std::size_t operator()(const KeyType& k) const {
+        return pair_hash_int()(k.first) * 64 + pair_hash_int()(k.second);
+    }
+};
 
 /*
 ############################################################################
 GLOBAL STUFF
 ############################################################################
 */
-
-// ROS
 ros::ServiceClient mover_drive_to_client, play_song;
-
-// Map
+/*
+###################################
+STATE
+###################################
+*/
+enum State {
+    INIT,
+    LOCALIZE,
+    ALIGN,
+    IDLE,
+    EXECUTE_PLAN,
+    NEXT_GOAL
+};
+State state = State::INIT;
+/*
+###################################
+MAP
+###################################
+*/
 struct Cell {
     float x, y;
     int row, col;
@@ -46,28 +72,128 @@ std::vector<Grid_Coords> golds;
 std::vector<Grid_Coords> pickups;
 std::vector<std::vector<Grid_Coords>> gold_permutations;
 std::unordered_map<KeyType, std::vector<Grid_Coords>, key_hash> shortest_paths_precomputed;
+std::vector<std::vector<bool>> visited_cells;
+void reset_visited_cells() {
+    for (int row = 0; row < visited_cells.size(); row++) {
+        for (int col = 0; col < visited_cells[row].size(); col++)
+        {
+            visited_cells[row][col] = false;
+        }
+    }
+}
+/*
+###################################
+GOALS
+###################################
+*/
+std::deque<Grid_Coords> global_plan;
+void add_goal_front(int row, int col)
+{
+    global_plan.push_back({row, col});
+}
+void add_goal_back(int row, int col)
+{
+    global_plan.push_front({row, col});
+}
+/*
+###################################
+POSITION
+###################################
+*/
+enum Orientation {
+    LEFT,
+    RIGHT,
+    UP,
+    DOWN
+};
+struct Position {
+    float x, y, theta;
+    int row, col;
+    Orientation orientation = Orientation::RIGHT;
+};
+Position my_position{0., 0., 0., 0, 0};
+bool is_first_position = true;
+bool is_localized = false;
+int localization_points = 0;
+/*
+###################################
+TARGETS
+###################################
+*/
+struct Target {
+    float x, y, theta;
+    bool should_rotate = false;
+    bool must_be_reached = false;
+    bool sent = false;
+};
+std::deque<Target> local_plan;
+void add_target_front(float x, float y, float theta, bool should_rotate, bool must_be_reached)
+{
+    Target target{x, y, theta, should_rotate, must_be_reached, false};
+    local_plan.push_front(target);
+}
+void add_target_back(float x, float y, float theta, bool should_rotate, bool must_be_reached)
+{
+    Target target{x, y, theta, should_rotate, must_be_reached, false};
+    local_plan.push_back(target);
+}
+/*
+###################################
+UTILITY FUNCTIONS
+###################################
+*/
+void play_song_localized()
+{
+    create_fundamentals::PlaySong srv;
 
+    srv.request.number = 1;
+    play_song.call(srv);
+}
+
+void play_song_not_localized()
+{
+    create_fundamentals::PlaySong srv;
+
+    srv.request.number = 1;
+    play_song.call(srv);
+}
+
+void shutdown(int signum) 
+{
+    ros::shutdown();
+}
+
+void print_state()
+{
+    switch (state)
+    {
+        case State::IDLE:
+            ROS_INFO("State = IDLE");
+            break;
+        
+        case State::LOCALIZE:
+            ROS_INFO("State = LOCALIZE");
+            break;
+
+        case State::ALIGN:
+            ROS_INFO("State = ALIGN");
+            break;
+
+        case State::EXECUTE_PLAN:
+            ROS_INFO("State = EXECUTE_PLAN");
+            break;
+        
+        default:
+            ROS_INFO("State not knows.");
+    }
+}
 /*
 ############################################################################
-GLOBAL PLANNER
+BFS SEARCH
 ############################################################################
 */
-
-struct pair_hash_int {
-    std::size_t operator()(const Grid_Coords& p) const {
-        return p.first * 32 + p.second;
-    }
-};
-
-// Hash function for the key type
-struct key_hash {
-    std::size_t operator()(const KeyType& k) const {
-        return pair_hash_int()(k.first) * 64 + pair_hash_int()(k.second);
-    }
-};
-
-// BFS Search
-std::vector<Grid_Coords> get_neighbors(const Cell& cell) {
+std::vector<Grid_Coords> get_neighbors(const Cell& cell) 
+{
     std::vector<Grid_Coords> neighbors;
     int row = cell.row;
     int col = cell.col;
@@ -129,7 +255,11 @@ std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_C
 
     return {};
 }
-
+/*
+############################################################################
+COMPUTE GLOBAL PLAN
+############################################################################
+*/
 void compute_gold_permutations()
 {
     gold_permutations.clear();
@@ -261,105 +391,18 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
         }
     }
 
+    // VISITED CELLS
+    std::vector<std::vector<bool>> visited(grid_rows, std::vector<bool>(grid_cols, false));
+    visited_cells = visited;
+
     map_received = true;
     map_sub.shutdown();
 }
-
 /*
 ############################################################################
-LOCAL PLANNER
+LOCALIZATION
 ############################################################################
 */
-
-// STATE
-enum State {
-    INIT,
-    LOCALIZE,
-    ALIGN,
-    IDLE,
-    EXECUTE_PLAN,
-    MOVE_TO_POSITION,
-    TEMPLE_RUN_SIMULATION
-};
-State state = State::INIT;
-
-// LOCALIZATION
-enum Orientation {
-    LEFT,
-    RIGHT,
-    UP,
-    DOWN
-};
-struct Position {
-    float x, y, theta;
-    int row, col;
-    Orientation orientation = Orientation::RIGHT;
-};
-Position my_position{0., 0., 0., 0, 0};
-bool is_first_position = true;
-bool is_localized = false;
-bool visited_cells[MAP_WIDTH * MAP_HEIGHT];
-int localization_points = 0;
-
-// DRIVING
-struct Target {
-    float x, y, theta;
-    bool should_rotate = false;
-    bool must_be_reached = false;
-    bool sent = false;
-};
-std::deque<Target> target_list;
-
-void reset_visited_cells() {
-    for (int i = 0; i < sizeof(visited_cells) / sizeof(bool); i++) {
-        visited_cells[i] = false;
-    }
-}
-void add_target_front(float x, float y, float theta, bool should_rotate, bool must_be_reached)
-{
-    Target target{x, y, theta, should_rotate, must_be_reached};
-    target_list.push_front(target);
-}
-
-void add_target_back(float x, float y, float theta, bool should_rotate, bool must_be_reached)
-{
-    Target target{x, y, theta, should_rotate, must_be_reached};
-    target_list.push_back(target);
-}
-
-// TODO check if number is correct
-void play_song_localized()
-{
-    create_fundamentals::PlaySong srv;
-
-    srv.request.number = 1;
-    play_song.call(srv);
-}
-
-void play_song_not_localized()
-{
-    create_fundamentals::PlaySong srv;
-
-    srv.request.number = 1;
-    play_song.call(srv);
-}
-
-bool drive_to_cell(int col, int row) {
-    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{my_position.row, my_position.col}, {row, col}}];
-
-    for (int i = 0; i < path.size(); i++) {
-        Cell cell = cell_grid[path[i].first][path[i].second];
-        if (cell.row != path[i].first && cell.col != path[i].second)
-        {
-            ROS_INFO("ERROR in drive_to_cell with cell conversion from first to row and second to col.");
-            continue;
-        }
-        add_target_back(cell.x, cell.y, 0.0, false, i == path.size() - 1);
-    }
-
-    return !path.empty();
-}
-
 void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 {   
     float old_x, old_y;
@@ -405,13 +448,12 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         ROS_INFO("Unreasonable movement");
         reset_visited_cells();
         localization_points = 0;
-        target_list.clear();
+        local_plan.clear();
     }    
-    else if (!visited_cells[my_position.col + my_position.row * MAP_WIDTH])
+    else if (!visited_cells[my_position.row][my_position.row])
     {
-        visited_cells[my_position.col + my_position.row * MAP_WIDTH] = true;
+        visited_cells[my_position.row][my_position.row] = true;
         localization_points += 1;
-        ROS_DEBUG("new visited cell: (%d, %d), points = %d", my_position.col, my_position.row, localization_points);
     }
     
     bool was_localized_before = is_localized;
@@ -427,18 +469,46 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         }
     }
 }
+/*
+############################################################################
+ROBOT MOVER
+############################################################################
+*/
+bool set_local_plan_to_next_goal() 
+{
 
-void set_target() {
-    if (target_list.empty()) {
-        ROS_DEBUG("Cannot set target, because target_list is empty");
+    const Grid_Coords next_goal = global_plan.front();
+
+    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{my_position.row, my_position.col}, next_goal}];
+
+    if (path.empty()) return false;
+
+    local_plan.clear();
+
+    for (int i = 0; i < path.size(); i++) {
+        const Cell cell = cell_grid[path[i].first][path[i].second];
+        if (cell.row != path[i].first && cell.col != path[i].second)
+        {
+            ROS_INFO("ERROR in drive_to_cell with cell conversion from first to row and second to col.");
+            continue;
+        }
+        add_target_back(cell.x, cell.y, 0.0, false, i == path.size() - 1);
+    }
+
+    return true;
+}
+
+void send_next_target_to_mover() 
+{
+    if (local_plan.empty()) {
+        ROS_DEBUG("Cannot set target, because local_plan is empty");
         return;
     }
 
     green_fundamentals::DriveTo drive_to_msg;
 
-    Target current_target = target_list.front();
-    current_target.sent = true;
-
+    Target current_target = local_plan.front();
+    
     drive_to_msg.request.x_current = my_position.x;
     drive_to_msg.request.y_current = my_position.y;
     drive_to_msg.request.theta_current = my_position.theta;
@@ -451,15 +521,16 @@ void set_target() {
     {
         ROS_DEBUG("failed to call driver_service");
     }
+    current_target.sent = true;
 }
 
 bool current_target_reached()
 {   
-    if (target_list.empty()) {
+    if (local_plan.empty()) {
         return true;
     }
 
-    Target current_target = target_list.front();
+    Target current_target = local_plan.front();
 
     float epsilon = current_target.must_be_reached ? POS_EPSILON : SOFT_EPSILON;
     float distance = std::sqrt(std::pow(my_position.x - current_target.x, 2) + std::pow(my_position.y - current_target.y, 2));
@@ -472,99 +543,65 @@ bool current_target_reached()
     
     return distance_diff;
 }
+/*
+############################################################################
+STATE FUNCTIONS
+############################################################################
+*/
 
-bool set_execute_plan_callback(green_fundamentals::ExecutePlan::Request  &req, green_fundamentals::ExecutePlan::Response &res)
+bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req, green_fundamentals::MoveToPosition::Response &res)
 {
-    target_list.clear();
+    global_plan.clear();
+    add_goal_front(req.row, req.column);
+    
+    bool success = set_local_plan_to_next_goal();
 
-    int row = my_position.row;
-    int col = my_position.col;
-
-    for (int i = 0; i < req.plan.size(); i++)
+    if (success)
     {
-        bool move_possible = true;
-
-        switch (req.plan[i])
-        {
-        case  0: // RIGHT
-            move_possible = !cell_grid[row][col].wall_right;
-            col++;
-            break;
-        case  1: // UP
-            move_possible = !cell_grid[row][col].wall_up;
-            row++;
-            break;
-        case  2: // LEFT
-            move_possible = !cell_grid[row][col].wall_left;
-            col--;
-            break;
-        case  3: // DOWN
-            move_possible = !cell_grid[row][col].wall_down;
-            row--;
-            break;
-        }
-
-        if (!move_possible || row > cell_grid.size() || row < 0 || col > cell_grid[0].size() || col < 0)
-        {
-            target_list.clear();
-            res.success = false;
-            state = State::IDLE;
-            ROS_DEBUG("Plan cannot be fulfilled, because we would move out of the maze or into a wall.");
-            ROS_INFO("State = IDLE");
-            return false;
-        }
-
-        Cell center = cell_grid[row][col];
-        add_target_back(center.x, center.y, 0.0, false, i == req.plan.size()-1);
+        state = State::EXECUTE_PLAN;
+        ROS_DEBUG("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
     }
-
-    state = State::EXECUTE_PLAN;
-    ROS_DEBUG("Added targets to target_list. Now we have %ld targets.", target_list.size());
-
-    res.success = true;
-    return true;
+    
+    res.success = success;
+    return success;
 }
 
-void execute_plan()
+void execute_local_plan()
 {
-    if (target_list.empty())  {
-        state = State::IDLE;
+    if (local_plan.empty())  {
+        state = State::NEXT_GOAL;
         return;
     }
-    else if (current_target_reached())
-    {
-        target_list.pop_front();
-        ROS_INFO("Next Target reached.");
-        set_target();
-    }
-    else if (!target_list[0].sent) {
-        set_target();
-    }
-}
 
-bool move_to_position_callback(green_fundamentals::ExecutePlan::Request  &req, green_fundamentals::ExecutePlan::Response &res) {
-    res.success = drive_to_cell(req.row, req.cell);
-
-    state = State::MOVE_TO_POSITION;
-    ROS_DEBUG("Added targets to target_list. Now we have %ld targets.", target_list.size());
-
-    return res.success;
-}
-
-void move_to_position()
-{
-    if (target_list.empty())  {
-        state = State::IDLE;
+    if (!local_plan.front().sent) {
+        send_next_target_to_mover();
         return;
     }
-    else if (current_target_reached())
+    
+    if (current_target_reached())
     {
-        target_list.pop_front();
-        ROS_INFO("Next Target reached.");
-        set_target();
+        local_plan.pop_front();
+        send_next_target_to_mover();
+        return;
     }
-    else if (!target_list[0].sent) {
-        set_target();
+}
+
+void get_next_goal()
+{
+    if (global_plan.size() > 1)
+    {
+        global_plan.pop_front();
+        set_local_plan_to_next_goal();
+        state = State::EXECUTE_PLAN;
+    }
+    else if (global_plan.size() == 1)
+    {
+        global_plan.pop_front();
+        state = State::IDLE;
+    }
+    else 
+    {
+        state = State::IDLE;
     }
 }
 
@@ -573,7 +610,7 @@ void localize()
     if (is_localized)
     {
         state = State::ALIGN;
-        target_list.clear();
+        local_plan.clear();
         // TODO check
         play_song_localized();
         return;
@@ -581,34 +618,31 @@ void localize()
 
     if (current_target_reached()) 
     {
-        ROS_DEBUG("Target reached, %ld targets remaining.",  target_list.size());
+        ROS_DEBUG("Target reached, %ld targets remaining.",  local_plan.size());
 
-        if (!target_list.empty())
+        if (!local_plan.empty())
         {
-            target_list.pop_front();    
+            local_plan.pop_front();    
         }
     }
 
-    if (!target_list.empty())
+    if (!local_plan.empty())
     {
-        set_target();        
+        send_next_target_to_mover();        
     }
     else {
         ROS_DEBUG("finding new unvisited cell ...");
 
         Cell unvisited_cell;
-        bool found_unvisied_cell = false;
+        bool found_unvisited_cell = false;
 
-        while (!found_unvisied_cell) {
-            int rand_cell = rand() % (MAP_WIDTH * MAP_HEIGHT);
-            if (!visited_cells[rand_cell]) {
-                int x = rand_cell % MAP_WIDTH;
-                int y = floor(rand_cell / MAP_HEIGHT);
-                
-                ROS_DEBUG("new unvisited cell: (%d, %d)", x, y);
-
-                drive_to_cell(x, y);
-                found_unvisied_cell = true;
+        while (!found_unvisited_cell) {
+            int rand_row = rand() % grid_rows;
+            int rand_col = rand() % grid_cols;
+            if (!visited_cells[rand_row][rand_col]) {
+                global_plan.clear();
+                add_goal_front(rand_row, rand_col);
+                found_unvisited_cell = set_local_plan_to_next_goal();
             }
         }
     }  
@@ -616,45 +650,19 @@ void localize()
 
 void align()
 {
-    Cell cell = cell_grid[my_position.row][my_position.col];
+    const Cell cell = cell_grid[my_position.row][my_position.col];
     add_target_front(cell.x, cell.y, M_PI/2, true, true);
-    set_target();
+    send_next_target_to_mover();
     
     state = State::IDLE;
-    target_list.clear();
+    local_plan.clear();
 }
 
-void print_state()
-{
-    switch (state)
-    {
-        case State::IDLE:
-            ROS_INFO("State = IDLE");
-            break;
-        
-        case State::LOCALIZE:
-            ROS_INFO("State = LOCALIZE");
-            break;
-
-        case State::ALIGN:
-            ROS_INFO("State = ALIGN");
-            break;
-
-        case State::EXECUTE_PLAN:
-            ROS_INFO("State = EXECUTE_PLAN");
-            break;
-
-        case State::MOVE_TO_POSITION:
-            ROS_INFO("State = MOVE_TO_POSITION");
-            break;
-    }
-}
-
-void shutdown(int signum) 
-{
-    ros::shutdown();
-}
-
+/*
+###################################
+MAIN LOOP
+###################################
+*/
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "planner");
@@ -681,8 +689,8 @@ int main(int argc, char **argv)
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
     
-    ros::ServiceServer move_to_position_srv = n.advertiseService("move_to_position", move_to_position_callback);
-
+    ros::ServiceServer assignment_srv = n.advertiseService("move_to_position", move_to_position_callback);
+    
     state = State::IDLE;
     State last_state = state;
     while(ros::ok()) {
@@ -708,20 +716,15 @@ int main(int argc, char **argv)
                 break;
 
             case State::EXECUTE_PLAN:
-                execute_plan();
+                execute_local_plan();
                 break;
             
-            case State::MOVE_TO_GOAL:
-                move_to_goal();
-                break;
-            
-            case State::TEMPLE_RUN_SIMULATION:
-                temple_run();
+            case State::NEXT_GOAL:
+                get_next_goal();
                 break;
 
-            case State::MOVE_TO_POSITION:
-                move_to_position();
-                break;
+            default:
+                ROS_INFO("State not knows.");
         }
         
         loop_rate.sleep();
