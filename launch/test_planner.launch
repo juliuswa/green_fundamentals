@@ -4,7 +4,7 @@
 
     <node pkg="green_fundamentals" type="map_generator" name="map_generator" output="screen" />
 
-    <node pkg="green_fundamentals" type="obstacle_detector" name="obstacle_detector" output="screen" />
+    <node pkg="green_fundamentals" type="obstacle_detector" name="obstacle_detector" />
 
     <node pkg="green_fundamentals" type="robot_mover" name="robot_mover" output="screen" />
 
