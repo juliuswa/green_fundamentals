@@ -17,6 +17,6 @@ const float SOFT_EPSILON = 0.30;
 const float THETA_EPSILON = 0.08;
 
 const int MAP_WIDTH = 6;
-const int MAP_HEIGHT = 3;
+const int MAP_HEIGHT = 6;
 
 #endif // CONSTANTS_H

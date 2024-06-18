@@ -161,6 +161,7 @@ void play_song_not_localized()
 void shutdown(int signum) 
 {
     ros::shutdown();
+    exit(0);
 }
 
 void print_state()
@@ -678,7 +679,12 @@ int main(int argc, char **argv)
     {
         ros::spinOnce();
         loop_rate.sleep();
-    }
+    }me=$(hostname -I | cut -f1 -d' ')
+master=192.168.0.7
+echo "setting $master as ROS MASTER for me ($me)"
+export ROS_MASTER_URI=http://$master:11311
+export ROS_IP=$me
+
     ROS_INFO("Map received and processed.");
 
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);

@@ -1,7 +1,0 @@
-<launch>
-
-    <node pkg="green_fundamentals" type="publish_map.py" name="publish_map" output="screen" />
-
-    <node pkg="green_fundamentals" type="global_planner" name="global_planner" output="screen" />
-    
-</launch>

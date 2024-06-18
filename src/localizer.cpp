@@ -4,6 +4,7 @@
 #include <random>
 #include "Eigen/Dense"
 #include <tf2/LinearMath/Quaternion.h>
+#include <chrono>
 
 #include "robot_constants.h"
 
@@ -16,20 +17,18 @@
 #include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
 
-#define SUBSAMPLE_LASERS 16
+#define SUBSAMPLE_LASERS 24
 #define RAY_STEP_SIZE 0.01
 
-#define PARTICLES_PER_BIN 512
-#define NUM_BINS 16
-#define FILLED_BIN_THRESHOLD 5
+#define PARTICLES_PER_BIN 128
+#define NUM_BINS 1296
+#define FILLED_BIN_THRESHOLD 8
 
-#define MAX_NUM_RANDOM_PARTICLES 32
-#define RELIABLE_WEIGHT 0.1
+#define RANDOM_PARTICLE_PART 0.1
+#define RELIABLE_WEIGHT 0.02
 
 #define RESAMPLE_STD_POS 0.04
 #define RESAMPLE_STD_THETA 0.08
-
-#define EVALUATION_CHANCE 0.25
 
 struct Particle {
     Eigen::Vector2f position;
@@ -94,7 +93,7 @@ std::default_random_engine generator;
 
 Particle particles[PARTICLES_PER_BIN * NUM_BINS];
 
-int sample_size = PARTICLES_PER_BIN * NUM_BINS;
+int sample_size = PARTICLES_PER_BIN;
 
 int bins[NUM_BINS];
 int bin_division = floor(std::sqrt(NUM_BINS));
@@ -104,16 +103,6 @@ float bin_y = (y_max - y_min) / bin_division;
 // Publishers
 
 ros::Publisher pose_pub, posearray_pub, position_pub;
-
-std::pair<int, int> metric_to_grid_index(float x, float y) 
-{
-    int gx = floor(x * 100);
-    int gy = floor(y * 100);
-    int row = std::min(std::max(gy, 0), map_height -1);
-    int col = std::min(std::max(gx, 0), map_width -1);
-
-    return {row, col};
-}
 
 int get_bin_for_position(int i) {
     return std::min((int)(floor(particles[i].position[0] / bin_x) + bin_division * floor(particles[i].position[1] / bin_y)), NUM_BINS - 1);
@@ -171,6 +160,9 @@ void update_particles()
 
 void evaluate_particle(int p)
 {
+    int max_width_idx = map_width -1;
+    int max_height_idx = map_height -1;
+
     float total_delta = 0.;
 
     float laser_x = particles[p].position[0] + LASER_OFFSET * std::cos(particles[p].theta);
@@ -186,35 +178,33 @@ void evaluate_particle(int p)
         {
             real_distance = 1.0;
         }
-        else if (real_distance < RAY_STEP_SIZE)
-        {
-            real_distance = RAY_STEP_SIZE;
-        }
 
         // Get laser angle
         float angle = laser_angle_min + laser_angle_increment * index;
         float ray_angle = particles[p].theta + angle;
-
-        float r = RAY_STEP_SIZE;
+        
+        float ray_x_increment = RAY_STEP_SIZE * std::cos(ray_angle);
+        float ray_y_increment = RAY_STEP_SIZE * std::sin(ray_angle);
 
         float ray_x = laser_x;
         float ray_y = laser_y;
-
         // ROS_DEBUG("ray casting");
-        while (r < 1.0)
+
+        float r = 0.0;
+        for (int  i= 0; i < 100; i++)
         {
-            ray_x = laser_x + r * std::cos(ray_angle);
-            ray_y = laser_y + r * std::sin(ray_angle);
+            r += RAY_STEP_SIZE;
+            ray_x += ray_x_increment;
+            ray_y += ray_y_increment;
 
             if (ray_x > x_max || ray_x < x_min || ray_y > y_max || ray_y < y_min)
                 break;
+            
+            int x_i = std::min(std::max((int)(ray_x * 100.), 0), max_width_idx);
+            int y_i = std::min(std::max((int)(ray_y * 100.), 0), max_height_idx);
 
-            std::pair<int, int> grid_index = metric_to_grid_index(ray_x, ray_y);
-
-            if (map_data[grid_index.first][grid_index.second] != 0)
+            if (map_data[y_i][x_i] != 0)
                 break;
-
-            r += RAY_STEP_SIZE;
         }
 
         total_delta += fabs(r - real_distance);
@@ -227,11 +217,7 @@ void evaluate_particles()
 {
     for (int p = 0; p < sample_size; p++)
     {
-        std::normal_distribution<float> normal_dist(0, 1);
-        
-        if (normal_dist(generator) < EVALUATION_CHANCE) {
-            evaluate_particle(p);
-        }            
+        evaluate_particle(p);
     }
 }
 
@@ -278,9 +264,10 @@ void resample_particles()
     std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 8);
 
     int new_sample_size = calculate_sample_size();
-    int num_random_particles = std::max(0, (int)floor(MAX_NUM_RANDOM_PARTICLES * (1 - (max_weight / RELIABLE_WEIGHT))));
+    int max_num_random_particles = new_sample_size * RANDOM_PARTICLE_PART;
+    int num_random_particles = std::max(0, (int)floor(max_num_random_particles * (1 - (max_weight / RELIABLE_WEIGHT))));
 
-    ROS_INFO("max weight: %f, sample size: %d, random particles: %d", 
+    ROS_DEBUG("max weight: %f, sample size: %d, random particles: %d", 
         max_weight, new_sample_size, num_random_particles);
 
     ROS_DEBUG("resampling... ");
@@ -462,21 +449,39 @@ int main(int argc, char **argv)
     ros::Rate loop_rate(30);
     int it = 0;
     while(ros::ok()) {
+
+        auto t0 = std::chrono::high_resolution_clock::now();
+        
         ros::spinOnce();
 
         if (!laser_received) {
             loop_rate.sleep();
             continue;
         }
+        
+        auto t1 = std::chrono::high_resolution_clock::now();
 
         ROS_DEBUG("evaluate_particles");
         evaluate_particles();
 
+        auto t2= std::chrono::high_resolution_clock::now();
+        
         ROS_DEBUG("resample_particles");
         resample_particles();
 
+        auto t3= std::chrono::high_resolution_clock::now();
+
         ROS_DEBUG("publish_particles");
         publish_particles();
+
+        auto t4= std::chrono::high_resolution_clock::now();
+
+        auto d1 = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+        auto d2 = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+        auto d3 = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
+        auto d4 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
+
+        ROS_DEBUG("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
 
         loop_rate.sleep();
         it++;
