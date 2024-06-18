@@ -267,7 +267,7 @@ void resample_particles()
     int max_num_random_particles = new_sample_size * RANDOM_PARTICLE_PART;
     int num_random_particles = std::max(0, (int)floor(max_num_random_particles * (1 - (max_weight / RELIABLE_WEIGHT))));
 
-    ROS_INFO("max weight: %f, sample size: %d, random particles: %d", 
+    ROS_DEBUG("max weight: %f, sample size: %d, random particles: %d", 
         max_weight, new_sample_size, num_random_particles);
 
     ROS_DEBUG("resampling... ");
@@ -481,7 +481,7 @@ int main(int argc, char **argv)
         auto d3 = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
         auto d4 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
 
-        ROS_INFO("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
+        ROS_DEBUG("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
 
         loop_rate.sleep();
         it++;

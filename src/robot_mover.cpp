@@ -9,6 +9,7 @@
 #include <mutex>
 #include <random>
 #include <chrono>
+#include <csignal>
 
 #include "ros/ros.h"
 #include "std_srvs/Empty.h"
@@ -260,10 +261,20 @@ bool set_wander_callback(std_srvs::Empty::Request &req, std_srvs::Empty::Respons
     return true;
 }
 
+void shutdown(int signum) 
+{   
+    wheel_commands.request.left = 0.;
+    wheel_commands.request.right = 0.;
+    diff_drive_service.call(wheel_commands);
+    ros::shutdown();
+    exit(0);
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "robot_mover");
     ros::NodeHandle n;
+    signal(SIGINT, shutdown);
 
     ros::param::set("mover_drive_to_error", false);
 
