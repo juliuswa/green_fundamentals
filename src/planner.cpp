@@ -618,8 +618,6 @@ void localize()
 
     if (current_target_reached()) 
     {
-        ROS_DEBUG("Target reached, %ld targets remaining.",  local_plan.size());
-
         if (!local_plan.empty())
         {
             local_plan.pop_front();    
@@ -631,8 +629,6 @@ void localize()
         send_next_target_to_mover();        
     }
     else {
-        ROS_DEBUG("finding new unvisited cell ...");
-
         Cell unvisited_cell;
         bool found_unvisited_cell = false;
 
@@ -672,18 +668,18 @@ int main(int argc, char **argv)
     signal(SIGINT, shutdown);
 
     ROS_INFO("Starting node.");
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
     }
 
-    ROS_DEBUG("Waiting for Occupancy Map...");
+    ROS_INFO("Waiting for Occupancy Map...");
     map_sub = n.subscribe("grid_map", 1, map_callback);
     while (!map_received)
     {
         ros::spinOnce();
         loop_rate.sleep();
     }
-    ROS_DEBUG("Map received and processed.");
+    ROS_INFO("Map received and processed.");
 
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
@@ -724,7 +720,7 @@ int main(int argc, char **argv)
                 break;
 
             default:
-                ROS_INFO("State not knows.");
+                ROS_INFO("State not known.");
         }
         
         loop_rate.sleep();
