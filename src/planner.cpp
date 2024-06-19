@@ -73,6 +73,7 @@ std::vector<Grid_Coords> pickups;
 std::vector<std::vector<Grid_Coords>> gold_permutations;
 std::unordered_map<KeyType, std::vector<Grid_Coords>, key_hash> shortest_paths_precomputed;
 std::vector<std::vector<bool>> visited_cells;
+
 void reset_visited_cells() {
     for (int row = 0; row < visited_cells.size(); row++) {
         for (int col = 0; col < visited_cells[row].size(); col++)
@@ -81,11 +82,13 @@ void reset_visited_cells() {
         }
     }
 }
+
 /*
 ###################################
 GOALS
 ###################################
 */
+
 std::deque<Grid_Coords> global_plan;
 void add_goal_front(int row, int col)
 {
@@ -95,53 +98,64 @@ void add_goal_back(int row, int col)
 {
     global_plan.push_front({row, col});
 }
+
 /*
 ###################################
 POSITION
 ###################################
 */
+
 enum Orientation {
     LEFT,
     RIGHT,
     UP,
     DOWN
 };
+
 struct Position {
     float x, y, theta;
     int row, col;
     Orientation orientation = Orientation::RIGHT;
 };
+
 Position my_position{0., 0., 0., 0, 0};
 bool is_first_position = true;
 bool is_localized = false;
 int localization_points = 0;
+
 /*
 ###################################
 TARGETS
 ###################################
 */
+
 struct Target {
     float x, y, theta;
     bool should_rotate = false;
     bool must_be_reached = false;
     bool sent = false;
 };
+
 std::deque<Target> local_plan;
+
 void add_target_front(float x, float y, float theta, bool should_rotate, bool must_be_reached)
 {
     Target target{x, y, theta, should_rotate, must_be_reached, false};
     local_plan.push_front(target);
 }
+
 void add_target_back(float x, float y, float theta, bool should_rotate, bool must_be_reached)
 {
     Target target{x, y, theta, should_rotate, must_be_reached, false};
     local_plan.push_back(target);
 }
+
 /*
 ###################################
 UTILITY FUNCTIONS
 ###################################
 */
+
 void play_song_localized()
 {
     create_fundamentals::PlaySong srv;
@@ -188,11 +202,13 @@ void print_state()
             ROS_INFO("State not knows.");
     }
 }
+
 /*
 ############################################################################
 BFS SEARCH
 ############################################################################
 */
+
 std::vector<Grid_Coords> get_neighbors(const Cell& cell) 
 {
     std::vector<Grid_Coords> neighbors;
@@ -256,11 +272,13 @@ std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_C
 
     return {};
 }
+
 /*
 ############################################################################
 COMPUTE GLOBAL PLAN
 ############################################################################
 */
+
 void compute_gold_permutations()
 {
     gold_permutations.clear();
@@ -295,6 +313,7 @@ std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
                 best_endpoint_cost = endpoint_cost;
             }
         }
+
         cost += best_endpoint_cost;
 
         if (cost < best_cost)
@@ -399,11 +418,13 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
     map_received = true;
     map_sub.shutdown();
 }
+
 /*
 ############################################################################
 LOCALIZATION
 ############################################################################
 */
+
 void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 {   
     float old_x, old_y;
@@ -470,11 +491,13 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         }
     }
 }
+
 /*
 ############################################################################
 ROBOT MOVER
 ############################################################################
 */
+
 bool set_local_plan_to_next_goal() 
 {
 
