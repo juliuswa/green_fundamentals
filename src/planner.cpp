@@ -546,7 +546,7 @@ void send_next_target_to_mover()
         ROS_DEBUG("failed to call driver_service");
     }
     local_plan.front().sent = true;
-    ROS_INFO("local_plan.front() should be true: %d", local_plan.front().sent)
+    ROS_INFO("local_plan.front() should be true: %d", local_plan.front().sent);
 }
 
 bool current_target_reached()
