@@ -34,6 +34,7 @@ add_service_files(
   DriveTo.srv
   MoveToPosition.srv
   SetVideo.srv
+  GoldRun.srv
 )
 
 generate_messages(

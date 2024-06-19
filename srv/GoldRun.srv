@@ -1,0 +1,4 @@
+
+---
+# dummy value, return whether the robot successfully recieved the position
+bool success
