@@ -508,7 +508,7 @@ void send_next_target_to_mover()
 
     green_fundamentals::DriveTo drive_to_msg;
 
-    Target& current_target = local_plan.front();
+    const Target current_target = local_plan.front();
     
     drive_to_msg.request.x_current = my_position.x;
     drive_to_msg.request.y_current = my_position.y;
@@ -522,7 +522,8 @@ void send_next_target_to_mover()
     {
         ROS_DEBUG("failed to call driver_service");
     }
-    current_target.sent = true;
+    local_plan.front().sent = true;
+    ROS_INFO("local_plan.front() should be true: %d", local_plan.front().sent)
 }
 
 bool current_target_reached()
