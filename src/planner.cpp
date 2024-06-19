@@ -508,7 +508,7 @@ void send_next_target_to_mover()
 
     green_fundamentals::DriveTo drive_to_msg;
 
-    Target current_target = local_plan.front();
+    Target& current_target = local_plan.front();
     
     drive_to_msg.request.x_current = my_position.x;
     drive_to_msg.request.y_current = my_position.y;
@@ -569,12 +569,14 @@ bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req
 
 void execute_local_plan()
 {
-    if (local_plan.empty())  {
+    if (local_plan.empty())  
+    {
         state = State::NEXT_GOAL;
         return;
     }
 
-    if (!local_plan.front().sent) {
+    if (!local_plan.front().sent) 
+    {
         send_next_target_to_mover();
         return;
     }
@@ -612,24 +614,16 @@ void localize()
     {
         state = State::ALIGN;
         local_plan.clear();
+        global_plan.clear();
         // TODO check
         play_song_localized();
         return;
     }
 
-    if (current_target_reached()) 
-    {
-        if (!local_plan.empty())
-        {
-            local_plan.pop_front();    
-        }
-    }
+    // Not localized
 
-    if (!local_plan.empty())
+    if (local_plan.empty())
     {
-        send_next_target_to_mover();        
-    }
-    else {
         Cell unvisited_cell;
         bool found_unvisited_cell = false;
 
@@ -642,7 +636,30 @@ void localize()
                 found_unvisited_cell = set_local_plan_to_next_goal();
             }
         }
-    }  
+
+        return;
+    }
+
+    // not localized && local_plan not empty
+
+    if (!local_plan.front().sent) 
+    {
+        send_next_target_to_mover();
+        return;
+    }
+
+    // not localized && local_plan not empty && first_target is sent
+
+    if (current_target_reached()) 
+    {
+        if (!local_plan.empty())
+        {
+            local_plan.pop_front();    
+        }
+        return;
+    }
+
+    // not localized && local_plan not empty && first_target is sent && current target not reached
 }
 
 void align()
