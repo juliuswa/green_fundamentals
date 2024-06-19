@@ -7,6 +7,8 @@
 #include <csignal>
 #include <vector>
 
+#include "geometry_msgs/PointStamped.h"
+
 #include "green_fundamentals/Position.h"
 #include "green_fundamentals/Grid.h"
 #include "green_fundamentals/Cell.h"
@@ -41,6 +43,9 @@ GLOBAL STUFF
 ############################################################################
 */
 ros::ServiceClient mover_drive_to_client, video_player;
+
+ros::Publisher target_pub, goal_pub;
+
 /*
 ###################################
 STATE
@@ -56,6 +61,7 @@ enum State {
     GOLD_RUN
 };
 State state = State::INIT;
+State mission = State::IDLE;
 /*
 ###################################
 MAP
@@ -72,7 +78,6 @@ bool map_received = false;
 std::vector<std::vector<Cell>> cell_grid;
 std::vector<Grid_Coords> golds;
 std::vector<Grid_Coords> pickups;
-std::vector<std::vector<Grid_Coords>> gold_permutations;
 std::unordered_map<KeyType, std::vector<Grid_Coords>, key_hash> shortest_paths_precomputed;
 std::vector<std::vector<bool>> visited_cells;
 
@@ -90,15 +95,54 @@ void reset_visited_cells() {
 GOALS
 ###################################
 */
+enum GoalType {
+    POSITION,
+    GOLD,
+    HELIPORT
+};
 
-std::deque<Grid_Coords> global_plan;
-void add_goal_front(int row, int col)
+struct Goal {
+    int row;
+    int col;
+    GoalType type;
+};
+
+std::deque<Goal> global_plan;
+void add_goal_front(int col, int row, GoalType type)
 {
-    global_plan.push_back({row, col});
+    Goal goal;
+    goal.col = col;
+    goal.row = row;
+    goal.type = type;
+    global_plan.push_back(goal);
 }
-void add_goal_back(int row, int col)
+void add_goal_back(int col, int row, GoalType type)
 {
-    global_plan.push_front({row, col});
+    Goal goal;
+    goal.col = col;
+    goal.row = row;
+    goal.type = type;
+    global_plan.push_front(goal);
+}
+
+void publish_current_goal() {
+    geometry_msgs::Point point;
+
+    point.x = 0.;
+    point.y = 0.;
+    point.z = 0.;
+
+    if (global_plan.size() != 0) {
+        point.x = global_plan.front().col * CELL_LENGTH + CELL_LENGTH / 2;
+        point.y = global_plan.front().row * CELL_LENGTH + CELL_LENGTH / 2;
+    }   
+
+    geometry_msgs::PointStamped point_stamped;
+
+    point_stamped.header.frame_id = "map";
+    point_stamped.point = point;
+
+    goal_pub.publish(point_stamped);
 }
 
 /*
@@ -151,6 +195,21 @@ void add_target_back(float x, float y, float theta, bool should_rotate, bool mus
     local_plan.push_back(target);
 }
 
+void publish_current_target() {
+    geometry_msgs::Point point;
+
+    point.x = local_plan.front().x;
+    point.y = local_plan.front().y;
+    point.z = 0.;
+
+    geometry_msgs::PointStamped point_stamped;
+
+    point_stamped.header.frame_id = "map";
+    point_stamped.point = point;
+
+    target_pub.publish(point_stamped);
+}
+
 /*
 ###################################
 UTILITY FUNCTIONS
@@ -194,6 +253,7 @@ void print_state()
             break;
 
         case State::EXECUTE_PLAN:
+            set_video(4);
             ROS_INFO("State = EXECUTE_PLAN");
             break;
 
@@ -286,37 +346,44 @@ COMPUTE GLOBAL PLAN
 ############################################################################
 */
 
-void compute_gold_permutations()
+std::vector<std::vector<Grid_Coords>> compute_gold_permutations()
 {
-    gold_permutations.clear();
+    std::vector<std::vector<Grid_Coords>> gold_permutations;
     do {
         gold_permutations.push_back(golds);
     } while (std::next_permutation(golds.begin(), golds.end()));
+
+    return gold_permutations;
 }
 
-std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
+std::deque<Goal> get_best_plan(const Cell& current_cell)
 {
     int best_cost = 100000;
-    std::vector<Grid_Coords> best_path;
+    std::deque<Goal> best_path;
+
+    // Precompute gold permutations
+    std::vector<std::vector<Grid_Coords>> gold_permutations = compute_gold_permutations();
 
     for (std::vector<Grid_Coords> path : gold_permutations)
     {
         // Compute cost of path + current_to_first_gold + last_gold_to_shortest_pickup
-        int cost = shortest_paths_precomputed[{{current_cell.row, current_cell.col}, path.front()}].size();
+        int cost = shortest_paths_precomputed[{{current_cell.col, current_cell.row}, path.front()}].size();
 
         for (int i = 0; i < path.size() - 1; i++)
         {
             cost += shortest_paths_precomputed[{path[i], path[i+1]}].size();
         }
         
-        Grid_Coords best_endpoint;
+        Goal best_endpoint;
+        best_endpoint.type = GoalType::HELIPORT;
         int best_endpoint_cost = 100000;
         for (Grid_Coords pickup : pickups)
         {   
             int endpoint_cost = shortest_paths_precomputed[{path.back(), pickup}].size();
             if (endpoint_cost < best_endpoint_cost)
             {
-                best_endpoint = pickup;
+                best_endpoint.col = pickup.first;
+                best_endpoint.row = pickup.second;
                 best_endpoint_cost = endpoint_cost;
             }
         }
@@ -326,7 +393,13 @@ std::vector<Grid_Coords> get_best_plan(const Cell& current_cell)
         if (cost < best_cost)
         {
             best_cost = cost;
-            std::vector<Grid_Coords> temp = path;
+            std::deque<Goal> temp;
+            for(Grid_Coords gold : path) {
+                Goal new_gold;
+                new_gold.col = gold.first;
+                new_gold.row = gold.second;
+                new_gold.type = GoalType::GOLD;
+            }
             temp.push_back(best_endpoint);
             best_path = temp;
         }
@@ -390,9 +463,6 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
         golds.push_back({grid_rows - msg->golds[i].row - 1, msg->golds[i].column});
     }
 
-    // Precompute gold permutations
-    compute_gold_permutations();
-
     // PICKUPS
     for (int i = 0; i < msg->pickups.size(); i++)
     {
@@ -410,7 +480,7 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
                 {
                     if (row1 == row2 && col1 == col2) continue;
                     std::vector<Grid_Coords> path = get_shortest_path({row1, col1}, {row2, col2});
-                    shortest_paths_precomputed[{{row1, col1}, {row2, col2}}] = path;
+                    shortest_paths_precomputed[{{col1, row1}, {col2, row2}}] = path;
                     //std::reverse(path.begin(), path.end()); // For the reverse path
                     //shortest_paths_precomputed[{{end.row, end.col}, {start.row, start.col}}] = path;
                 }
@@ -507,12 +577,16 @@ ROBOT MOVER
 
 bool set_local_plan_to_next_goal() 
 {
+    const Goal next_goal = global_plan.front();
 
-    const Grid_Coords next_goal = global_plan.front();
+    ROS_INFO("Current position: (%d, %d).", (int)floor(my_position.x / CELL_LENGTH), (int)floor(my_position.y / CELL_LENGTH));
+    ROS_INFO("Next goal: (%d, %d).", next_goal.col, next_goal.row);
 
-    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{my_position.row, my_position.col}, next_goal}];
+    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{my_position.col, my_position.row}, {next_goal.col, next_goal.row}}];
 
-    if (path.empty()) return false;
+    ROS_INFO("Path length: %ld", path.size());
+
+    if (path.size() == 0) return false;
 
     local_plan.clear();
 
@@ -525,6 +599,7 @@ bool set_local_plan_to_next_goal()
         }
         add_target_back(cell.x, cell.y, 0.0, false, i == path.size() - 1);
     }
+
 
     return true;
 }
@@ -548,10 +623,15 @@ void send_next_target_to_mover()
     drive_to_msg.request.theta_target = current_target.theta;
     drive_to_msg.request.rotate = current_target.should_rotate;
 
+    ROS_DEBUG("sending drive to request (%f, %f) th: %f | %d", 
+        current_target.x, current_target.y, current_target.theta, current_target.should_rotate);
+
     if (!mover_drive_to_client.call(drive_to_msg))
     {
         ROS_DEBUG("failed to call driver_service");
     }
+
+    publish_current_target();
 }
 
 bool current_target_reached()
@@ -582,7 +662,7 @@ STATE FUNCTIONS
 bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req, green_fundamentals::MoveToPosition::Response &res)
 {
     global_plan.clear();
-    add_goal_front(req.row, req.column);
+    add_goal_front(req.row, req.column, GoalType::POSITION);
     
     bool success = set_local_plan_to_next_goal();
 
@@ -603,14 +683,11 @@ bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundame
     current_cell.y = my_position.y;
     current_cell.row = my_position.row;
     current_cell.col = my_position.col;
-    std::vector<Grid_Coords> goal_plan = get_best_plan(current_cell);
 
-    for(Grid_Coords goal : goal_plan) {
-        add_goal_back(goal.first, goal.second);
-        bool success = set_local_plan_to_next_goal();
-    }
+    global_plan = get_best_plan(current_cell);
     
     state = State::EXECUTE_PLAN;
+    mission = State::GOLD_RUN;
     ROS_INFO("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
     
     return true;
@@ -627,6 +704,7 @@ void execute_local_plan()
     if (current_target_reached())
     {   
         local_plan.pop_front();
+        ROS_INFO("Next target: (%d, %d).", int(local_plan.front().x / CELL_LENGTH), int(local_plan.front().y / CELL_LENGTH));
     }
     
     send_next_target_to_mover();
@@ -634,20 +712,35 @@ void execute_local_plan()
 
 void get_next_goal()
 {
-    if (global_plan.size() > 1)
+    if (global_plan.size() == 0) {
+        state = State::IDLE;
+        mission = State::IDLE;  
+    }
+    
+    if (global_plan.front().type = GoalType::GOLD) {
+        int index;
+        for(int i = 0; i < golds.size(); i++) {
+            if(global_plan.front().col == golds[i].first && global_plan.front().row == golds[i].second) {
+                index = i;
+                break;
+            }
+        }
+        ROS_INFO("Collecting gold at position: %d, %d", golds[index].first, golds[index].second);
+
+        std::swap(golds[index], golds.back());
+        golds.pop_back();
+
+        set_video(0);
+        ros::Duration(5.).sleep();
+    }
+
+    global_plan.pop_front();
+    
+    if (global_plan.size() > 0)
     {
-        global_plan.pop_front();
         set_local_plan_to_next_goal();
         state = State::EXECUTE_PLAN;
-    }
-    else if (global_plan.size() == 1)
-    {
-        global_plan.pop_front();
-        state = State::IDLE;
-    }
-    else 
-    {
-        state = State::IDLE;
+        publish_current_goal();
     }
 }
 
@@ -655,7 +748,11 @@ void localize()
 {   
     if (is_localized)
     {
-        state = State::ALIGN;
+        if(mission == State::GOLD_RUN) {
+            State::GOLD_RUN;
+        } else {
+            state = State::ALIGN;
+        }
         local_plan.clear();
         global_plan.clear();
         // TODO check
@@ -673,10 +770,19 @@ void localize()
         while (!found_unvisited_cell) {
             int rand_row = rand() % grid_rows;
             int rand_col = rand() % grid_cols;
-            if (!visited_cells[rand_row][rand_col]) {
-                global_plan.clear();
-                add_goal_front(rand_row, rand_col);
-                found_unvisited_cell = set_local_plan_to_next_goal();
+
+            if (visited_cells[rand_row][rand_col]) {
+                continue;
+            }
+
+            global_plan.clear();
+            add_goal_front(rand_row, rand_col, GoalType::POSITION);
+                            
+            found_unvisited_cell = set_local_plan_to_next_goal();
+
+            if(!found_unvisited_cell) {
+                add_target_front(my_position.x, my_position.y, my_position.theta + M_PI, true, true);
+                break;
             }
         }
 
@@ -734,6 +840,10 @@ int main(int argc, char **argv)
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     video_player = n.serviceClient<green_fundamentals::SetVideo>("set_video");
     
+
+    target_pub = n.advertise<geometry_msgs::PointStamped>("target", 1);
+    goal_pub = n.advertise< geometry_msgs::PointStamped>("goal", 1);
+
     ros::ServiceServer move_to_position_srv = n.advertiseService("move_to_position", move_to_position_callback);
     ros::ServiceServer gold_run_srv = n.advertiseService("gold_run", gold_run_callback);
     
@@ -742,6 +852,10 @@ int main(int argc, char **argv)
     while(ros::ok()) {
         ros::spinOnce();
         
+        if (global_plan.size() == 0) {
+            publish_current_goal();
+        }
+
         if (last_state != state) print_state();
         last_state = state; 
 
