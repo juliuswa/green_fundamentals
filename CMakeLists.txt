@@ -33,6 +33,7 @@ add_service_files(
   FILES
   DriveTo.srv
   MoveToPosition.srv
+  SetVideo.srv
 )
 
 generate_messages(

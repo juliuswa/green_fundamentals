@@ -33,6 +33,8 @@
 #define RESAMPLE_STD_POS 0.04
 #define RESAMPLE_STD_THETA 0.08
 
+std::string message;
+
 struct Particle {
     Eigen::Vector2f position;
     float theta;
@@ -274,8 +276,9 @@ void resample_particles()
     int max_random_particles = new_sample_size * RANDOM_PARTICLE_PART;
     int num_random_particles = std::max(0, (int)floor(max_random_particles * (1 - (max_weight / RANDOM_WEIGHT))));
 
-    ROS_DEBUG("max weight: %f, sample size: %d, random particles: %d", 
-        max_weight, new_sample_size, num_random_particles);
+    message += "max weight: " +  std::to_string(max_weight) + std::endl;
+    message += "sample size: " + std::to_string(new_sample_size) + " spreading: " + std::to_string(num_spreading_particles)
+        + " random: " + std::to_string(num_random_particles);
 
     ROS_DEBUG("resampling... ");
     Particle new_particles[new_sample_size];    
@@ -423,7 +426,9 @@ void publish_particles()
     position.x = particles[best_idx].position[0];
     position.y = particles[best_idx].position[1];
     position.theta = particles[best_idx].theta;
-    ROS_DEBUG("Publishing position: (%f, %f) th: %f", position.x, position.y, position.theta);
+
+    message += "Position: (" << position.x << "," << position.y << ") th: " << position.theta << std::endl;
+
     position_pub.publish(position);
 
     pose_pub.publish(particle_to_pose(best_idx));
@@ -509,6 +514,8 @@ int main(int argc, char **argv)
         auto d4 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
 
         ROS_DEBUG("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
+        ROS_INFO(message);
+        message = "";
 
         loop_rate.sleep();
         it++;

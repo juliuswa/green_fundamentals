@@ -133,20 +133,19 @@ struct Target {
     float x, y, theta;
     bool should_rotate = false;
     bool must_be_reached = false;
-    bool sent = false;
 };
 
 std::deque<Target> local_plan;
 
 void add_target_front(float x, float y, float theta, bool should_rotate, bool must_be_reached)
 {
-    Target target{x, y, theta, should_rotate, must_be_reached, false};
+    Target target{x, y, theta, should_rotate, must_be_reached};
     local_plan.push_front(target);
 }
 
 void add_target_back(float x, float y, float theta, bool should_rotate, bool must_be_reached)
 {
-    Target target{x, y, theta, should_rotate, must_be_reached, false};
+    Target target{x, y, theta, should_rotate, must_be_reached};
     local_plan.push_back(target);
 }
 
@@ -545,8 +544,6 @@ void send_next_target_to_mover()
     {
         ROS_DEBUG("failed to call driver_service");
     }
-    local_plan.front().sent = true;
-    ROS_INFO("local_plan.front() should be true: %d", local_plan.front().sent);
 }
 
 bool current_target_reached()
@@ -598,19 +595,13 @@ void execute_local_plan()
         state = State::NEXT_GOAL;
         return;
     }
-
-    if (!local_plan.front().sent) 
-    {
-        send_next_target_to_mover();
-        return;
-    }
     
     if (current_target_reached())
-    {
+    {   
         local_plan.pop_front();
-        send_next_target_to_mover();
-        return;
     }
+    
+    send_next_target_to_mover();
 }
 
 void get_next_goal()
@@ -666,24 +657,12 @@ void localize()
 
     // not localized && local_plan not empty
 
-    if (!local_plan.front().sent) 
-    {
-        send_next_target_to_mover();
-        return;
+    if (current_target_reached())
+    {   
+        local_plan.pop_front();
     }
 
-    // not localized && local_plan not empty && first_target is sent
-
-    if (current_target_reached()) 
-    {
-        if (!local_plan.empty())
-        {
-            local_plan.pop_front();    
-        }
-        return;
-    }
-
-    // not localized && local_plan not empty && first_target is sent && current target not reached
+    send_next_target_to_mover();
 }
 
 void align()
