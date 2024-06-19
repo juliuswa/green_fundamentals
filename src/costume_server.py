@@ -15,13 +15,14 @@ socketio = SocketIO(app)
 VIDEO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
 
 video_dict = {
-    "money" : "money.mp4",
-    "pickup": "pickup.mp4",
-    "localization": "lost.mp4"
+    0: "money.mp4",
+    1: "pickup.mp4",
+    2: "lost.mp4",
+    3: "localized.mp4"
 }
 
 # Global variable to store the current YouTube video URL
-current_video = video_dict['money']
+current_video = video_dict[2]
 
 # HTML template for the web page
 HTML_TEMPLATE = '''
@@ -86,12 +87,8 @@ def serve_video(filename):
 
 def handle_set_video(req):
     global current_video
-    if req.state == 0: # Money
-        current_video = video_dict['money']
-    elif req.state == 1: # Pickup
-        current_video = video_dict['pickup']
-    elif req.state == 2: # Localization
-        current_video = video_dict['localization']
+    if req.state in video_dict.keys():
+        current_video = video_dict[req.state]
     else:
         return SetVideoResponse(success=False)
     

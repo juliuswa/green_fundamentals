@@ -14,7 +14,7 @@
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/MoveToPosition.h"
 #include "green_fundamentals/GoldRun.h"
-#include "create_fundamentals/PlaySong.h"
+#include "green_fundamentals/SetVideo.h"
 #include "robot_constants.h"
 
 #define REASONABLE_DISTANCE 0.5
@@ -40,7 +40,7 @@ struct key_hash {
 GLOBAL STUFF
 ############################################################################
 */
-ros::ServiceClient mover_drive_to_client, play_song;
+ros::ServiceClient mover_drive_to_client, video_player;
 /*
 ###################################
 STATE
@@ -157,20 +157,18 @@ UTILITY FUNCTIONS
 ###################################
 */
 
-void play_song_localized()
+/*
+    0 = get_money 
+    1 = pickup 
+    2 = is_lost 
+    3 = is_localized
+*/
+void set_video(int state)
 {
-    create_fundamentals::PlaySong srv;
+    green_fundamentals::SetVideo srv;
 
-    srv.request.number = 1;
-    play_song.call(srv);
-}
-
-void play_song_not_localized()
-{
-    create_fundamentals::PlaySong srv;
-
-    srv.request.number = 1;
-    play_song.call(srv);
+    srv.request.state = state;
+    video_player.call(srv);
 }
 
 void shutdown(int signum) 
@@ -496,7 +494,7 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         // TODO check
         if (was_localized_before)
         {
-            play_song_not_localized();
+            set_video(2);
         }
     }
 }
@@ -661,7 +659,7 @@ void localize()
         local_plan.clear();
         global_plan.clear();
         // TODO check
-        play_song_localized();
+        set_video(3);
         return;
     }
 
@@ -734,7 +732,7 @@ int main(int argc, char **argv)
 
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
-    play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
+    video_player = n.serviceClient<green_fundamentals::SetVideo>("set_video");
     
     ros::ServiceServer move_to_position_srv = n.advertiseService("move_to_position", move_to_position_callback);
     ros::ServiceServer gold_run_srv = n.advertiseService("gold_run", gold_run_callback);
