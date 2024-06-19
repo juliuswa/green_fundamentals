@@ -181,7 +181,7 @@ void drive_to()
 
     if(is_obstacle_far_front) 
     {
-        ROS_WARN("obstacle far front", angle);
+        ROS_DEBUG("obstacle far front", angle);
         speed /= 2;
     }
     
@@ -241,7 +241,7 @@ bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fun
     target.y = req.y_target;
     target.theta = req.theta_target;
     
-    ROS_DEBUG("new target: (%f, %f)", req.x_target, req.y_target);
+    ROS_INFO("new target: (%f, %f)", req.x_target, req.y_target);
     should_rotate = req.rotate;
     
     state = State::DRIVE_TO;
@@ -278,7 +278,7 @@ int main(int argc, char **argv)
 
     ros::param::set("mover_drive_to_error", false);
 
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
     }
 
