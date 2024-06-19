@@ -509,7 +509,7 @@ bool set_local_plan_to_next_goal()
 
     local_plan.clear();
 
-    for (int i = 0; i < path.size(); i++) {
+    for (int i = 1; i < path.size(); i++) {
         const Cell cell = cell_grid[path[i].first][path[i].second];
         if (cell.row != path[i].first && cell.col != path[i].second)
         {
