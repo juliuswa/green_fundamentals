@@ -560,7 +560,7 @@ bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req
     if (success)
     {
         state = State::EXECUTE_PLAN;
-        ROS_DEBUG("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
+        ROS_INFO("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
     }
     
     res.success = success;
@@ -696,12 +696,7 @@ int main(int argc, char **argv)
     {
         ros::spinOnce();
         loop_rate.sleep();
-    }me=$(hostname -I | cut -f1 -d' ')
-master=192.168.0.7
-echo "setting $master as ROS MASTER for me ($me)"
-export ROS_MASTER_URI=http://$master:11311
-export ROS_IP=$me
-
+    }
     ROS_INFO("Map received and processed.");
 
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
