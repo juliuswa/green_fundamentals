@@ -21,14 +21,14 @@
 #define SUBSAMPLE_LASERS 24
 #define RAY_STEP_SIZE 0.01
 
-#define PARTICLES_PER_BIN 128
-#define NUM_BINS 1296
+#define PARTICLES_PER_BIN 64
+#define NUM_BINS 1764
 #define FILLED_BIN_THRESHOLD 8
 
 #define SPREAD_PARTICLE_PART 0.2
 #define RANDOM_PARTICLE_PART 0.05
 
-#define SPREAD_WEIGHT 0.2
+#define SPREAD_WEIGHT 0.15
 #define RANDOM_WEIGHT 0.05
 
 #define RESAMPLE_STD_POS 0.04
@@ -279,7 +279,7 @@ void resample_particles()
 
     message += "max weight: " +  std::to_string(max_weight) + "\n";
     message += "sample size: " + std::to_string(new_sample_size) + " spreading: " + std::to_string(num_spreading_particles)
-        + " random: " + std::to_string(num_random_particles);
+        + " random: " + std::to_string(num_random_particles) + "\n";
 
     ROS_DEBUG("resampling... ");
     Particle new_particles[new_sample_size];    
@@ -303,8 +303,8 @@ void resample_particles()
         new_particles[i].theta += normal_dist_theta(generator);
     }
 
-    std::normal_distribution<float> spread_dist_pos(0., RESAMPLE_STD_POS *2 );
-    std::normal_distribution<float> spread_dist_theta(0., RESAMPLE_STD_THETA * 2);
+    std::normal_distribution<float> spread_dist_pos(0., RESAMPLE_STD_POS * 4);
+    std::normal_distribution<float> spread_dist_theta(0., RESAMPLE_STD_THETA * 4);
 
     for (int i = new_sample_size - num_spreading_particles - num_random_particles; 
              i < new_sample_size - num_random_particles; ++i)

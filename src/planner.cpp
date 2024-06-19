@@ -13,6 +13,7 @@
 #include "green_fundamentals/Pose.h"
 #include "green_fundamentals/DriveTo.h"
 #include "green_fundamentals/MoveToPosition.h"
+#include "green_fundamentals/GoldRun.h"
 #include "create_fundamentals/PlaySong.h"
 #include "robot_constants.h"
 
@@ -51,7 +52,8 @@ enum State {
     ALIGN,
     IDLE,
     EXECUTE_PLAN,
-    NEXT_GOAL
+    NEXT_GOAL,
+    GOLD_RUN
 };
 State state = State::INIT;
 /*
@@ -598,7 +600,12 @@ bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req
 
 bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundamentals::GoldRun::Response &res)
 {
-    std::vector<Grid_Coords> goal_plan = get_best_plan();
+    Cell current_cell;
+    current_cell.x = my_position.x;
+    current_cell.y = my_position.y;
+    current_cell.row = my_position.row;
+    current_cell.col = my_position.col;
+    std::vector<Grid_Coords> goal_plan = get_best_plan(current_cell);
 
     for(Grid_Coords goal : goal_plan) {
         add_goal_back(goal.first, goal.second);
@@ -765,7 +772,7 @@ int main(int argc, char **argv)
                 break;
 
             case State::GOLD_RUN:
-                get_best_plan();
+                get_next_goal();
                 break;
 
             default:
