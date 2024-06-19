@@ -399,10 +399,14 @@ std::deque<Goal> get_best_plan(const Cell& current_cell)
                 new_gold.col = gold.first;
                 new_gold.row = gold.second;
                 new_gold.type = GoalType::GOLD;
+                temp.push_back(new_gold);
             }
             temp.push_back(best_endpoint);
             best_path = temp;
         }
+    }
+    for(Goal goal : best_path) {
+        ROS_INFO("Type: %d, Col: %d,  Row: %d", goal.type, goal.col, goal.row);
     }
 
     return best_path;
@@ -712,6 +716,8 @@ void execute_local_plan()
 
 void get_next_goal()
 {
+    ROS_DEBUG("getting next goal. global plan size: %ld", global_plan.size());
+
     if (global_plan.size() == 0) {
         state = State::IDLE;
         mission = State::IDLE;  
@@ -719,12 +725,18 @@ void get_next_goal()
     
     if (global_plan.front().type = GoalType::GOLD) {
         int index;
+
         for(int i = 0; i < golds.size(); i++) {
             if(global_plan.front().col == golds[i].first && global_plan.front().row == golds[i].second) {
                 index = i;
                 break;
             }
         }
+
+        if (index != index) {
+            ROS_WARN("Goal (%d, %d) should be gold but is not listed in golds", global_plan.front().col, global_plan.front().row);
+        }
+
         ROS_INFO("Collecting gold at position: %d, %d", golds[index].first, golds[index].second);
 
         std::swap(golds[index], golds.back());
