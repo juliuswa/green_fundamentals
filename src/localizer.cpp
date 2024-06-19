@@ -427,7 +427,7 @@ void publish_particles()
     position.y = particles[best_idx].position[1];
     position.theta = particles[best_idx].theta;
 
-    message += "Position: (" << position.x << "," << position.y << ") th: " << position.theta << std::endl;
+    message += "Position: (" + std::to_string(position.x) + "," + std::to_string(position.y) + ") th: " + std::to_string(position.theta) + std::endl;
 
     position_pub.publish(position);
 
