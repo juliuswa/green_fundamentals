@@ -24,8 +24,11 @@
 #define NUM_BINS 1296
 #define FILLED_BIN_THRESHOLD 8
 
-#define RANDOM_PARTICLE_PART 0.1
-#define RELIABLE_WEIGHT 0.02
+#define SPREAD_PARTICLE_PART 0.2
+#define RANDOM_PARTICLE_PART 0.05
+
+#define SPREAD_WEIGHT 0.2
+#define RANDOM_WEIGHT 0.05
 
 #define RESAMPLE_STD_POS 0.04
 #define RESAMPLE_STD_THETA 0.08
@@ -264,8 +267,12 @@ void resample_particles()
     std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 8);
 
     int new_sample_size = calculate_sample_size();
-    int max_num_random_particles = new_sample_size * RANDOM_PARTICLE_PART;
-    int num_random_particles = std::max(0, (int)floor(max_num_random_particles * (1 - (max_weight / RELIABLE_WEIGHT))));
+
+    int max_spreading_particles = new_sample_size * SPREAD_PARTICLE_PART;
+    int num_spreading_particles = std::max(0, (int)floor(max_spreading_particles * (1 - (max_weight / SPREAD_WEIGHT))));
+
+    int max_random_particles = new_sample_size * RANDOM_PARTICLE_PART;
+    int num_random_particles = std::max(0, (int)floor(max_random_particles * (1 - (max_weight / RANDOM_WEIGHT))));
 
     ROS_DEBUG("max weight: %f, sample size: %d, random particles: %d", 
         max_weight, new_sample_size, num_random_particles);
@@ -276,7 +283,7 @@ void resample_particles()
     int index = uni_dist(generator) * sample_size;    
     double beta = 0.0;    
     
-    for (int i = 0; i < new_sample_size - num_random_particles; ++i)
+    for (int i = 0; i < new_sample_size - num_spreading_particles - num_random_particles; ++i)
     {
         beta += uni_dist(generator) * 2 * max_weight;
 
@@ -290,6 +297,26 @@ void resample_particles()
         new_particles[i].position[0] += normal_dist_pos(generator);
         new_particles[i].position[1] += normal_dist_pos(generator);
         new_particles[i].theta += normal_dist_theta(generator);
+    }
+
+    std::normal_distribution<float> spread_dist_pos(0., RESAMPLE_STD_POS *2 );
+    std::normal_distribution<float> spread_dist_theta(0., RESAMPLE_STD_THETA * 2);
+
+    for (int i = new_sample_size - num_spreading_particles - num_random_particles; 
+             i < new_sample_size - num_random_particles; ++i)
+    {
+        beta += uni_dist(generator) * 2 * max_weight;
+
+        while (beta > particles[index].weight)
+        {
+            beta -= particles[index].weight;
+            index = (index + 1) % sample_size;
+        }
+
+        new_particles[i] = particles[index];
+        new_particles[i].position[0] += spread_dist_pos(generator);
+        new_particles[i].position[1] += spread_dist_pos(generator);
+        new_particles[i].theta += spread_dist_theta(generator);
     }
 
     for (int i = new_sample_size - num_random_particles; i < new_sample_size; ++i)
