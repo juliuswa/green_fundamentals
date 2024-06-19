@@ -165,7 +165,7 @@ UTILITY FUNCTIONS
 */
 void set_video(int state)
 {
-    create_fundamentals::SetVideo srv;
+    green_fundamentals::SetVideo srv;
 
     srv.request.state = state;
     video_player.call(srv);
