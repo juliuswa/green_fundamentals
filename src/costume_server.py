@@ -18,7 +18,8 @@ video_dict = {
     0: "money.mp4",
     1: "pickup.mp4",
     2: "lost.mp4",
-    3: "localized.mp4"
+    3: "localized.mp4",
+    4: "wandering.mp4"
 }
 
 # Global variable to store the current YouTube video URL

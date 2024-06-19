@@ -303,7 +303,7 @@ void resample_particles()
         new_particles[i].theta += normal_dist_theta(generator);
     }
 
-    std::normal_distribution<float> spread_dist_pos(0., RESAMPLE_STD_POS * 4);
+    std::normal_distribution<float> spread_dist_pos(0., RESAMPLE_STD_POS * 2);
     std::normal_distribution<float> spread_dist_theta(0., RESAMPLE_STD_THETA * 4);
 
     for (int i = new_sample_size - num_spreading_particles - num_random_particles; 
