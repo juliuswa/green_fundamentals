@@ -5,6 +5,7 @@
 #include "Eigen/Dense"
 #include <tf2/LinearMath/Quaternion.h>
 #include <chrono>
+#include <string>
 
 #include "robot_constants.h"
 
@@ -276,7 +277,7 @@ void resample_particles()
     int max_random_particles = new_sample_size * RANDOM_PARTICLE_PART;
     int num_random_particles = std::max(0, (int)floor(max_random_particles * (1 - (max_weight / RANDOM_WEIGHT))));
 
-    message += "max weight: " +  std::to_string(max_weight) + std::endl;
+    message += "max weight: " +  std::to_string(max_weight) + "\n";
     message += "sample size: " + std::to_string(new_sample_size) + " spreading: " + std::to_string(num_spreading_particles)
         + " random: " + std::to_string(num_random_particles);
 
@@ -427,7 +428,7 @@ void publish_particles()
     position.y = particles[best_idx].position[1];
     position.theta = particles[best_idx].theta;
 
-    message += "Position: (" + std::to_string(position.x) + "," + std::to_string(position.y) + ") th: " + std::to_string(position.theta) + std::endl;
+    message += "Position: (" + std::to_string(position.x) + "," + std::to_string(position.y) + ") th: " + std::to_string(position.theta) + "\n";
 
     position_pub.publish(position);
 
@@ -514,7 +515,7 @@ int main(int argc, char **argv)
         auto d4 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
 
         ROS_DEBUG("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
-        ROS_INFO(message);
+        ROS_INFO("%s", message.c_str());
         message = "";
 
         loop_rate.sleep();
