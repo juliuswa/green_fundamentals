@@ -66,7 +66,7 @@ HTML_TEMPLATE = '''
 </head>
 <body>
     <h1>Current Video</h1>
-    <video id="video_frame" width="560" height="315" controls autoplay>
+    <video id="video_frame" width="560" height="315" controls autoplay loop>
         <source src="/videos/{{ video_filename }}" type="video/mp4">
         Your browser does not support the video tag.
     </video>
@@ -86,11 +86,11 @@ def serve_video(filename):
 
 def handle_set_video(req):
     global current_video
-    if req.video == 1: # Money
+    if req.state == 0: # Money
         current_video = video_dict['money']
-    elif req.video == 2: # Pickup
+    elif req.state == 1: # Pickup
         current_video = video_dict['pickup']
-    elif req.video == 3: # Localization
+    elif req.state == 2: # Localization
         current_video = video_dict['localization']
     else:
         return SetVideoResponse(success=False)
