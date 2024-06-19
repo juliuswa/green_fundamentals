@@ -196,6 +196,14 @@ void print_state()
         case State::EXECUTE_PLAN:
             ROS_INFO("State = EXECUTE_PLAN");
             break;
+
+        case State::NEXT_GOAL:
+                ROS_INFO("State = NEXT_GOAL");
+                break;
+
+        case State::GOLD_RUN:
+                ROS_INFO("State = GOLD_RUN");;
+                break;
         
         default:
             ROS_INFO("State not knows.");
@@ -588,6 +596,21 @@ bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req
     return success;
 }
 
+bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundamentals::GoldRun::Response &res)
+{
+    std::vector<Grid_Coords> goal_plan = get_best_plan();
+
+    for(Grid_Coords goal : goal_plan) {
+        add_goal_back(goal.first, goal.second);
+        bool success = set_local_plan_to_next_goal();
+    }
+    
+    state = State::EXECUTE_PLAN;
+    ROS_INFO("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
+    
+    return true;
+}
+
 void execute_local_plan()
 {
     if (local_plan.empty())  
@@ -706,7 +729,8 @@ int main(int argc, char **argv)
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     play_song = n.serviceClient<create_fundamentals::PlaySong>("play_song");
     
-    ros::ServiceServer assignment_srv = n.advertiseService("move_to_position", move_to_position_callback);
+    ros::ServiceServer move_to_position_srv = n.advertiseService("move_to_position", move_to_position_callback);
+    ros::ServiceServer gold_run_srv = n.advertiseService("gold_run", gold_run_callback);
     
     state = State::IDLE;
     State last_state = state;
@@ -738,6 +762,10 @@ int main(int argc, char **argv)
             
             case State::NEXT_GOAL:
                 get_next_goal();
+                break;
+
+            case State::GOLD_RUN:
+                get_best_plan();
                 break;
 
             default:
