@@ -1,11 +1,3 @@
-/*
-    This Node uses Monte Carlo Localization to localize in a griven Occupancy Grid Map. It only publishes the global_position when the localization has converged.
-
-    Input: OccupancyGrid -> map, WheelEncoders -> sensor_packet, LaserScan -> scan_filtered
-
-    Output: Pose -> global_position
-*/
-
 #include "ros/ros.h"
 #include <cmath>
 #include <random>
@@ -13,6 +5,7 @@
 #include "Eigen/Dense"
 
 #include <tf2/LinearMath/Quaternion.h>
+#include <vector>
 
 #include "robot_constants.h"
 
@@ -35,8 +28,6 @@ const float RESAMPLE_STD_THETA = 10 * M_PI/180.0;
 
 // Sensor Model
 const float Z_HIT = 0.95;
-const float Z_SHORT = 0.;
-const float Z_MAX = 0.0;
 const float Z_RAND = 0.05;
 const float SIGMA_HIT = 0.1;
 const float LAMBDA_SHORT = 0.1;
@@ -51,12 +42,6 @@ const float ALPHA_SLOW = 0.001;
 float W_SLOW = 0.;
 float W_FAST = 0.;
 
-// KLD MCL Algorithm
-const float KLD_ERR = 0.01;
-const float KLD_Z = 0.99;
-const int MAX_PARTICLES = 5000;
-const int MIN_PARTICLES = 100;
-
 // Flags
 bool converged = false;
 bool force_update = true; // first localization without movement needed
@@ -67,8 +52,7 @@ bool is_first_encoder_measurement = true;
 struct Particle {
     float x, y, theta, weight;
 };
-Particle particles[NUM_PARTICLES];
-Particle new_particles[NUM_PARTICLES];
+std::vector<Particle> particles;
 
 // Map
 ros::Subscriber map_sub;
@@ -81,6 +65,8 @@ float last_left = 0.;
 float last_right = 0.;
 float current_left = 0.;
 float current_right = 0.;
+float delta_dist = 0.;
+float delta_theta = 0.;
 
 // Random generators
 std::default_random_engine generator;
@@ -90,11 +76,6 @@ std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA);
 
 // Publishers
 ros::Publisher best_particle_viz_pub, particle_array_viz_pub, position_pub;
-
-// Mutex for thread safety
-std::mutex mtx;
-
-std::vector<std::pair<double, float>> laser_data;
 
 /*
     Compute Map Indexes from metric Coordinates.
@@ -136,15 +117,9 @@ float get_particle_weight(const Particle& particle)
 {
     float q = 1.; // Probability of the particle given the observation
 
-    /*
-        Position of the laser in the global space.
-    */
     float laser_x =  particle.x + 0.13 * std::cos(particle.theta);
     float laser_y =  particle.y + 0.13 * std::sin(particle.theta);
 
-    /*
-        If the robot is out of bounds or is in a wall return a large error
-    */
     {
         if (particle.x > x_max || particle.x < 0 || particle.y > y_max || particle.y < 0) return 0.;
         if (laser_x > x_max || laser_x < 0 || laser_y > y_max || laser_y < 0) return 0.;
@@ -154,16 +129,10 @@ float get_particle_weight(const Particle& particle)
         if (map_data[grid_index.first][grid_index.second] != 0) return 0.;
     }
     
-    /*
-        Subsample the laser ranges and Compute Error between Expected and Actual Ranges.
-    */
-    for (const auto laser : laser_data) 
+    for (const auto& laser : laser_data) 
     {
         float real_distance = laser.first;
 
-        /*
-            Perform Ray Marching to get expected Distance.
-        */
         float ray_x = laser_x;
         float ray_y = laser_y;
         float ray_angle = particle.theta + laser.second;
@@ -183,19 +152,11 @@ float get_particle_weight(const Particle& particle)
             r += RAY_STEP_SIZE;
         }
 
-        /*
-            Clip the expected range between 0.01 and 1.0
-        */
         if (r > 1.0) {
             r = 1.0;
         } else if (r < RAY_STEP_SIZE) {
             r = RAY_STEP_SIZE;
         }
-        
-
-        /*
-            Compute probability of range measurement.
-        */
         float error = real_distance - r;
         float p = 0.;
 
@@ -276,114 +237,15 @@ void publish_particles()
     particle_array_viz_pub.publish(pose_array);
 }
 
-/*
-    Motion Update:
-    Move the particle by the distance the robot traveled and apply some noise.
-*/
-std::pair<float, float> motion_update()
+void init_particles()
 {
-    float distance_left = (current_left - last_left) * WHEEL_RADIUS;
-    float distance_right = (current_right - last_right) * WHEEL_RADIUS;
-    float distance = (distance_left + distance_right) / 2;
-    float delta_theta = (distance_right - distance_left) / WHEEL_BASE;
-
+    particles.clear();
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        float x_delta = distance * cos(particles[i].theta + delta_theta/2);
-        float y_delta = distance * sin(particles[i].theta + delta_theta/2);
-
-        particles[i].x += x_delta + normal_dist_pos(generator);
-        particles[i].y += y_delta + normal_dist_pos(generator);
-        particles[i].theta += delta_theta + normal_dist_theta(generator);
+        Particle particle = get_random_particle();
+        particles.push_back(particle);
     }
 
-    return {distance, delta_theta};
-}
-
-/*
-    Sensor Update:
-    Calculate the weight of the particle given the laser measurement by ray marching.
-*/
-float sensor_update()
-{
-    float total_weight = 0.;
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        float particle_weight = get_particle_weight(particles[i]);
-        particles[i].weight *= particle_weight;
-        total_weight += particle_weight;
-    }
-
-    return total_weight;
-}
-
-/*
-    Resample:
-    Draw new particles from the current particles proportional to the weight.
-*/
-void resample()
-{
-    float cumulative_weights[NUM_PARTICLES + 1];
-    cumulative_weights[0] = 0.;
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
-    }
-
-    float w_diff = std::max(0., 1. - W_FAST / W_SLOW);
-
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        if (uniform_dist(generator) < w_diff)
-        {
-            // Sample random particle
-            // TODO Make sure that the random particle kinda conforms to the measurement.
-            Particle particle = get_random_particle();
-            new_particles[i].x = particle.x;
-            new_particles[i].y = particle.y;
-            new_particles[i].theta = particle.theta;
-        } 
-        else
-        {
-            // Draw from particles
-            float rand = uniform_dist(generator);
-            int particle_index;
-            for(particle_index = 0; particle_index < NUM_PARTICLES; particle_index++)
-            {
-                if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
-            }
-            new_particles[i].x = particles[particle_index].x;
-            new_particles[i].y = particles[particle_index].y;
-            new_particles[i].theta = particles[particle_index].theta;
-        }
-
-        new_particles[i].weight = 1. / NUM_PARTICLES;
-    }
-}
-
-bool has_converged()
-{
-    float mean_x = 0.;
-    float mean_y = 0.;
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        mean_x += new_particles[i].x;
-        mean_y += new_particles[i].y;
-    }
-    mean_x /= NUM_PARTICLES;
-    mean_y /= NUM_PARTICLES;
-    bool converged_temp = true;
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        Particle particle = new_particles[i];
-        if (particle.x - mean_x > 0.1 || particle.y - mean_y > 0.1)
-        {
-            converged_temp = false;
-            break;
-        }
-    }
-
-    return converged_temp;
 }
 
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
@@ -407,10 +269,10 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     }
 }
 
-float relative_distance = 0.;
-float relative_angle = 0.;
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 {   
+    last_left = current_left;
+    last_right = current_right;
     current_left = msg->encoderLeft;
     current_right = msg->encoderRight;
     if (is_first_encoder_measurement) {
@@ -421,12 +283,13 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
         return;
     }
 
-    std::pair<float, float> distance_and_theta = motion_update();
-    relative_distance += distance_and_theta.first;
-    relative_angle += distance_and_theta.second;
+    float distance_left = (current_left - last_left) * WHEEL_RADIUS;
+    float distance_right = (current_right - last_right) * WHEEL_RADIUS; 
+    float distance = (distance_left + distance_right) / 2;
+    float delta_theta = (distance_right - distance_left) / WHEEL_BASE;
 
-    last_left = current_left;
-    last_right = current_right;
+    delta_dist += distance;
+    delta_theta += delta_theta;
 }
 
 void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
@@ -476,22 +339,13 @@ int main(int argc, char **argv)
         ros::spinOnce();
         loop_rate.sleep();
     }
-
     ROS_INFO("Map received.");
     
-    // Publishers
     best_particle_viz_pub = n.advertise<geometry_msgs::Pose>("best_particle", 1);
     particle_array_viz_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
     
-    // Initialize particles
-    for (int i = 0; i < NUM_PARTICLES; i++)
-    {
-        Particle particle = get_random_particle();
-        particles[i].x = particle.x;
-        particles[i].y = particle.y;
-        particles[i].theta = particle.theta;
-    }
+    init_particles();
 
     ROS_INFO("Start Localization...");
 
@@ -503,7 +357,8 @@ int main(int argc, char **argv)
         loop_rate.sleep();
         ros::spinOnce();
 
-        bool update = fabs(relative_distance) > 0.005 || fabs(relative_angle) > M_PI / 180. || force_update;
+        // Only Update when robot did move enough.
+        bool update = fabs(delta_dist) > 0.01 || fabs(delta_theta) > M_PI / 180. || force_update;
         force_update = false;
 
         if (!update) 
@@ -512,21 +367,36 @@ int main(int argc, char **argv)
             publish_particles();
             continue;
         }
-        // Only Update when robot did move enough.
-        relative_distance = 0.;
-        relative_angle = 0.;
+        // Motion Update
+        for (Particle& particle : particles)
+        {
+            float x_delta = delta_dist * cos(particle.theta + delta_theta/2);
+            float y_delta = delta_dist * sin(particle.theta + delta_theta/2);
 
-        float total_weight = sensor_update();
+            particle.x += x_delta + normal_dist_pos(generator);
+            particle.y += y_delta + normal_dist_pos(generator);
+            particle.theta += delta_theta + normal_dist_theta(generator);
+        }
+        // Reset motion
+        delta_dist = 0.;
+        delta_theta = 0.;
 
-        /*
-            Normalize weights and compute w_slow and w_fast for adaptive sampling.
-        */
+        // Sensor update
+        float total_weight = 0.;
+        for (Particle& particle : particles)
+        {
+            float particle_weight = get_particle_weight(particle);
+            particles.weight = particle_weight;
+            total_weight += particle_weight;
+        }
+
+        // Normalize weights and compute w_slow and w_fast for adaptive sampling.
         if (total_weight > 0.)
         {
-            float avg_weight = total_weight / NUM_PARTICLES;
-            for (int i = 0; i < NUM_PARTICLES; i++)
+            float avg_weight = total_weight / particles.size();
+            for (Particle& particle : particles)
             {
-                particles[i].weight /= total_weight;
+                particle.weight /= total_weight;
             }
 
             if(W_SLOW == 0.0)
@@ -541,35 +411,69 @@ int main(int argc, char **argv)
         } 
         else 
         {
-            for (int i = 0; i < NUM_PARTICLES; i++)
+            for (Particle& particle : particles)
             {
-                particles[i].weight = 1.0 / NUM_PARTICLES;
+                particle.weight = 1.0 / particles.size();
             }
         }
-        bool resampled = false;
-        if (!(++resample_iteration % RESAMPLE_INTERVAL))
+
+        // Resample        
+        float cumulative_weights[particles.size() + 1];
+        cumulative_weights[0] = 0.;
+        for (int i = 0; i < particles.size(); i++)
         {
-            resample();
-            resampled = true;
+            cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
         }
 
-        converged = has_converged();
+        float w_diff = std::max(0., 1. - W_FAST / W_SLOW);
+
+        std::vector<Particle> new_particles;
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            if (uniform_dist(generator) < w_diff)
+            {
+                // TODO Make sure that the random particle kinda conforms to the measurement.
+                Particle particle = get_random_particle();
+                new_particles.push_back(particle);
+            } 
+            else
+            {
+                float rand = uniform_dist(generator);
+                int particle_index;
+                for(particle_index = 0; particle_index < NUM_PARTICLES; particle_index++)
+                {
+                    if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
+                }
+                Particle particle = particles.at(particle_index);
+                particle.weight = 1. / NUM_PARTICLES;
+                new_particles.push_back(particle);
+            }
+        }
+
+        particles = new_particles;
+
+        // Has converged?
+        float mean_x = 0.;
+        float mean_y = 0.;
+        for (const Particle& particle : particles)
+        {
+            mean_x += particle.x;
+            mean_y += particle.y;
+        }
+        mean_x /= NUM_PARTICLES;
+        mean_y /= NUM_PARTICLES;
+        bool converged_temp = true;
+        for (const Particle& particle : particles)
+        {
+            if (particle.x - mean_x > 0.1 || particle.y - mean_y > 0.1)
+            {
+                converged_temp = false;
+                break;
+            }
+        }
+        converged = converged_temp;
 
         publish_particles();
-
-        /*
-            Copy new_particles into particles if resampled
-        */
-        if (resampled)
-        {
-            for (int i = 0; i < NUM_PARTICLES; i++)
-            {
-                particles[i].x = new_particles[i].x;
-                particles[i].y = new_particles[i].y;
-                particles[i].theta = new_particles[i].theta;
-                particles[i].weight = new_particles[i].weight;
-            }
-        }
     }
 
     return 0;

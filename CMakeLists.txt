@@ -73,3 +73,6 @@ add_executable(planner src/planner.cpp)
 target_link_libraries(planner ${catkin_LIBRARIES})
 add_dependencies(planner create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
 
+add_executable(localizer2 src/localizer2.cpp)
+target_link_libraries(localizer2 ${catkin_LIBRARIES})
+add_dependencies(localizer2 create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
