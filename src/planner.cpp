@@ -202,7 +202,7 @@ void print_state()
                 break;
 
         case State::GOLD_RUN:
-                ROS_INFO("State = GOLD_RUN");;
+                ROS_INFO("State = GOLD_RUN");
                 break;
         
         default:
@@ -607,9 +607,11 @@ bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundame
 
     for(Grid_Coords goal : goal_plan) {
         add_goal_back(goal.first, goal.second);
-        bool success = set_local_plan_to_next_goal();
     }
+    bool success = set_local_plan_to_next_goal();
     
+    if (!success) return false;
+
     state = State::EXECUTE_PLAN;
     ROS_INFO("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
     

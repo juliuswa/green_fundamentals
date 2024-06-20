@@ -45,8 +45,8 @@ const float SIGMA_HIT = 0.1;
 const float LAMBDA_SHORT = 0.1;
 
 // Only update when robot moved enough
-const float DISTANCE_THRESHOLD = 0.02;
-const float THETA_THRESHOLD = 5. * M_PI/180.0;
+const float DISTANCE_THRESHOLD = 0.01;
+const float THETA_THRESHOLD = M_PI/180.0;
 
 // Adapted MCL Algorithm
 const float ALPHA_FAST = 0.1;
@@ -59,14 +59,6 @@ bool converged = false;
 bool first_localization_done = false; // first localization without movement needed
 bool map_received = false;
 bool is_first_encoder_measurement = true;
-
-// State
-enum State {
-    IDLE,
-    LOCALIZE
-};
-
-State state = State::IDLE;
 
 // Particles
 struct Particle {
@@ -505,12 +497,6 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
     ros::param::get("y_max", y_max);
 }
 
-bool start_localize_callback(std_srvs::Empty::Request &req, std_srvs::Empty::Response &res)
-{
-    state = State::LOCALIZE;
-    return true;
-}
-
 /*
     Starting point. First wait for the map and then start the localization.
 */
@@ -543,14 +529,6 @@ int main(int argc, char **argv)
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
         particles[i] = get_random_particle();
-    }
-
-    ros::ServiceServer drive_to_service = n.advertiseService("localizer_start_localize", start_localize_callback);
-
-    while(state != State::LOCALIZE)
-    {
-        ros::spinOnce();
-        loop_rate.sleep();
     }
 
     ROS_INFO("Start Localization...");
