@@ -98,7 +98,7 @@ def handle_set_video(req):
     return SetVideoResponse(success=True)
 
 def start_flask_app(stop_event):
-    socketio.run(app, host='192.168.0.54', port=8080, debug=True, use_reloader=False)
+    socketio.run(app, host='192.168.0.7', port=8080, debug=True, use_reloader=False)
     stop_event.set()
 
 def signal_handler(sig, frame):

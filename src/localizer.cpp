@@ -18,7 +18,7 @@
 #include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
 
-#define SUBSAMPLE_LASERS 24
+#define SUBSAMPLE_LASERS 50
 #define RAY_STEP_SIZE 0.01
 
 #define MAX_PARTICLES 4096
@@ -481,7 +481,7 @@ int main(int argc, char **argv)
     pose_pub = n.advertise<geometry_msgs::Pose>("best_pose", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
 
-    ros::Rate loop_rate(30);
+    ros::Rate loop_rate(15);
     int it = 0;
     while(ros::ok()) {
 

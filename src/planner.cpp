@@ -19,7 +19,7 @@
 #include "green_fundamentals/SetVideo.h"
 #include "robot_constants.h"
 
-#define REASONABLE_DISTANCE 0.5
+#define REASONABLE_DISTANCE 1.
 #define LOCALIZATION_POINTS_THRESHOLD 3
 
 using Grid_Coords = std::pair<int, int>;

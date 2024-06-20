@@ -16,11 +16,8 @@
 
 #include "robot_constants.h"
 
-#include "std_srvs/Empty.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "sensor_msgs/LaserScan.h"
-#include "geometry_msgs/Point32.h"
-#include "sensor_msgs/PointCloud.h"
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/PoseArray.h"
 #include "green_fundamentals/Position.h"
@@ -28,25 +25,23 @@
 #include "create_fundamentals/SensorPacket.h"
 
 // MCL Algorithm
-const int SUBSAMPLE_LASERS = 64;
+const int SUBSAMPLE_LASERS = 50;
 const int NUM_PARTICLES = 500;
 const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
-const float RESAMPLE_STD_POS = 0.02;
+const float RESAMPLE_STD_POS = 0.05;
 const float RESAMPLE_STD_THETA = 10 * M_PI/180.0;
 
 // Sensor Model
 const float Z_HIT = 0.95;
 const float Z_SHORT = 0.;
-const float Z_MAX = 0.1;
+const float Z_MAX = 0.0;
 const float Z_RAND = 0.05;
 const float SIGMA_HIT = 0.2;
 const float LAMBDA_SHORT = 0.1;
 
-// Only update when robot moved enough
-const float DISTANCE_THRESHOLD = 0.02;
-const float THETA_THRESHOLD = 1 * M_PI/180.0;
+// Resample only every 2 iterations
 const int RESAMPLE_INTERVAL = 2;
 int resample_iteration = 0;
 
@@ -87,10 +82,6 @@ float last_right = 0.;
 float current_left = 0.;
 float current_right = 0.;
 
-// Relative motion since the last time particles were updated
-float relative_distance = 0.;
-float relative_theta = 0.;
-
 // Random generators
 std::default_random_engine generator;
 std::uniform_real_distribution<float> uniform_dist(0., 1.);
@@ -103,6 +94,8 @@ ros::Publisher best_particle_viz_pub, particle_array_viz_pub, position_pub;
 // Mutex for thread safety
 std::mutex mtx;
 
+std::vector<std::pair<double, float>> laser_data;
+
 /*
     Compute Map Indexes from metric Coordinates.
 */
@@ -114,13 +107,6 @@ std::pair<int, int> metric_to_grid_index(float x, float y)
     int col = std::min(std::max(gx, 0), map_width -1);
 
     return {row, col};
-}
-/*
-    Normalize angle between -pi and +pi.
-*/
-double normalize(double theta)
-{
-  return atan2(sin(theta),cos(theta));
 }
 
 /*
@@ -136,7 +122,7 @@ Particle get_random_particle()
         grid_index = metric_to_grid_index(x, y);
     } while (map_data[grid_index.first][grid_index.second] != 0);
     
-    float theta = normalize(uniform_dist(generator) * (2 * M_PI));
+    float theta = uniform_dist(generator) * (2 * M_PI) - M_PI;
 
     Particle particle{x, y, theta, 1/NUM_PARTICLES};
     return particle;
@@ -146,7 +132,7 @@ Particle get_random_particle()
     Perform Ray Marching to get expected ranges and compute error to actual ranges.
     Then calculate probability of Particle and return weight.
 */
-float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Particle& particle) 
+float get_particle_weight(const Particle& particle) 
 {
     float q = 1.; // Probability of the particle given the observation
 
@@ -171,27 +157,16 @@ float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Par
     /*
         Subsample the laser ranges and Compute Error between Expected and Actual Ranges.
     */
-    for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
+    for (const auto laser : laser_data) 
     {
-        int index = i * msg->ranges.size() / SUBSAMPLE_LASERS;
-
-        /*
-            Clip the actual range between 0.01 and 1.0
-        */
-        float real_distance = msg->ranges[index];
-        if (real_distance != real_distance) {
-            real_distance = 1.0;
-        }            
-        else if (real_distance < RAY_STEP_SIZE) {
-            real_distance = RAY_STEP_SIZE;
-        }
+        float real_distance = laser.first;
 
         /*
             Perform Ray Marching to get expected Distance.
         */
         float ray_x = laser_x;
         float ray_y = laser_y;
-        float ray_angle = particle.theta + (msg->angle_min + msg->angle_increment * index);
+        float ray_angle = particle.theta + laser.second;
         float r = RAY_STEP_SIZE;
         while (r < 1.0) 
         {
@@ -234,7 +209,7 @@ float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Par
         // 4. Probability for Random measurement
         if(real_distance < 1.0) p += Z_RAND;
 
-        q += p*p*p;
+        q *= p;
     }
 
     return q;
@@ -271,8 +246,22 @@ green_fundamentals::Position particle_to_position(const Particle& particle)
     return pos;
 }
 
-void publish_particles(const Particle& best_particle)
-{
+void publish_particles()
+{   
+
+    float best_weight = -1;
+    int best_index = -1;
+    for (int i = 0; i < NUM_PARTICLES; i++)
+    {
+        if (particles[i].weight > best_weight) 
+        {
+            best_index = i;
+            best_weight = particles[i].weight;
+        }
+    }
+
+    const Particle& best_particle = particles[best_index];
+
     // Position for other nodes
     position_pub.publish(particle_to_position(best_particle));
 
@@ -291,29 +280,36 @@ void publish_particles(const Particle& best_particle)
     Motion Update:
     Move the particle by the distance the robot traveled and apply some noise.
 */
-void motion_update()
+std::pair<float, float> motion_update()
 {
+    float distance_left = (current_left - last_left) * WHEEL_RADIUS;
+    float distance_right = (current_right - last_right) * WHEEL_RADIUS;
+    float distance = (distance_left + distance_right) / 2;
+    float delta_theta = (distance_right - distance_left) / WHEEL_BASE;
+
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        float x_delta = relative_distance * cos(particles[i].theta + relative_theta/2);
-        float y_delta = relative_distance * sin(particles[i].theta + relative_theta/2);
+        float x_delta = distance * cos(particles[i].theta + delta_theta/2);
+        float y_delta = distance * sin(particles[i].theta + delta_theta/2);
 
         particles[i].x += x_delta + normal_dist_pos(generator);
         particles[i].y += y_delta + normal_dist_pos(generator);
-        particles[i].theta = normalize(particles[i].theta + relative_theta + normal_dist_theta(generator));
+        particles[i].theta += delta_theta + normal_dist_theta(generator);
     }
+
+    return {distance, delta_theta};
 }
 
 /*
     Sensor Update:
     Calculate the weight of the particle given the laser measurement by ray marching.
 */
-float sensor_update(const sensor_msgs::LaserScan::ConstPtr& msg)
+float sensor_update()
 {
     float total_weight = 0.;
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        float particle_weight = get_particle_weight(msg, particles[i]);
+        float particle_weight = get_particle_weight(particles[i]);
         particles[i].weight *= particle_weight;
         total_weight += particle_weight;
     }
@@ -342,7 +338,10 @@ void resample()
         {
             // Sample random particle
             // TODO Make sure that the random particle kinda conforms to the measurement.
-            new_particles[i] = get_random_particle();
+            Particle particle = get_random_particle();
+            new_particles[i].x = particle.x;
+            new_particles[i].y = particle.y;
+            new_particles[i].theta = particle.theta;
         } 
         else
         {
@@ -353,16 +352,15 @@ void resample()
             {
                 if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
             }
-            new_particles[i] = particles[particle_index];
+            new_particles[i].x = particles[particle_index].x;
+            new_particles[i].y = particles[particle_index].y;
+            new_particles[i].theta = particles[particle_index].theta;
         }
 
         new_particles[i].weight = 1. / NUM_PARTICLES;
     }
 }
 
-/*
-    Check if localization has converged.
-*/
 bool has_converged()
 {
     float mean_x = 0.;
@@ -388,103 +386,31 @@ bool has_converged()
     return converged_temp;
 }
 
-/*
-    Process new Laser Scan and perform localization.
-*/
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
-    std::lock_guard<std::mutex> lock(mtx);
-
-    bool enough_movement = fabs(relative_distance) > DISTANCE_THRESHOLD || 
-                           fabs(relative_theta) > THETA_THRESHOLD;
-
-    bool update = enough_movement || force_update;
-    force_update = false;
-
-    if (!update) 
+    laser_data.clear();
+    for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
     {
-        ROS_DEBUG("Not enough movement.");
-        return;
-    }
-    // Only Update when the movement was big enough.
+        int index = i * msg->ranges.size() / SUBSAMPLE_LASERS;
 
-    motion_update();
-    /*
-        Reset distance traveled by robot
-    */
-    relative_distance = 0.;
-    relative_theta = 0.;
-
-    float total_weight = sensor_update(msg);
-
-    /*
-        Normalize weights and compute w_slow and w_fast for adaptive sampling.
-    */
-    float best_weight = -1;
-    int best_index = -1;
-    if (total_weight > 0.)
-    {
-        float avg_weight = total_weight / NUM_PARTICLES;
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            particles[i].weight /= total_weight;
-            if (particles[i].weight > best_weight) 
-            {
-                best_index = i;
-                best_weight = particles[i].weight;
-            }
+        float real_distance = msg->ranges[index];
+        if (real_distance != real_distance) {
+            real_distance = 1.0;
+        }            
+        else if (real_distance < RAY_STEP_SIZE) {
+            real_distance = RAY_STEP_SIZE;
         }
 
-        if(W_SLOW == 0.0)
-            W_SLOW = avg_weight;
-        else
-            W_SLOW += ALPHA_SLOW * (avg_weight - W_SLOW);
-        
-        if(W_FAST == 0.0)
-            W_FAST = avg_weight;
-        else
-            W_FAST += ALPHA_FAST * (avg_weight - W_FAST);
-    } 
-    else 
-    {
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            particles[i].weight = 1.0 / NUM_PARTICLES;
-        }
-    }
-    bool resampled = false;
-    if (!(++resample_iteration % RESAMPLE_INTERVAL))
-    {
-        resample();
-        resampled = true;
-    }
+        float ray_angle = msg->angle_min + msg->angle_increment * index;
 
-    converged = has_converged();
-
-    publish_particles(particles[best_index]);
-
-    /*
-        Copy new_particles into particles if resampled
-    */
-    if (resampled)
-    {
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            particles[i] = new_particles[i];
-        }
+        laser_data.push_back({real_distance, ray_angle});
     }
-    
 }
 
-/*
-    Accumulate the relative motion of the robot since the last laser measurement.
-*/
+float relative_distance = 0.;
+float relative_angle = 0.;
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 {   
-    std::lock_guard<std::mutex> lock(mtx);
-
-    last_left = current_left;
-    last_right = current_right;
     current_left = msg->encoderLeft;
     current_right = msg->encoderRight;
     if (is_first_encoder_measurement) {
@@ -492,20 +418,17 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
         last_right = current_right;
 
         is_first_encoder_measurement = false;
+        return;
     }
-    
-    float distance_left = (current_left - last_left) * WHEEL_RADIUS;
-    float distance_right = (current_right - last_right) * WHEEL_RADIUS;
-    float distance = (distance_left + distance_right) / 2;
-    float delta_theta = (distance_right - distance_left) / WHEEL_BASE;
 
-    relative_distance += distance;
-    relative_theta += delta_theta;
+    std::pair<float, float> distance_and_theta = motion_update();
+    relative_distance += distance_and_theta.first;
+    relative_angle += distance_and_theta.second;
+
+    last_left = current_left;
+    last_right = current_right;
 }
 
-/*
-    Receive Occupancy Map and then unsubscribe from the topic.
-*/
 void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 {    
     map_height = msg->info.height;
@@ -536,21 +459,18 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
     ros::param::get("y_max", y_max);
 }
 
-/*
-    Starting point. First wait for the map and then start the localization.
-*/
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "mc_localization");
     ros::NodeHandle n;
     ROS_INFO("Starting node.");
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
     }
 
     ROS_INFO("Waiting for Occupancy Map...");
     map_sub = n.subscribe("map", 1, map_callback);
-    ros::Rate loop_rate(15);
+    ros::Rate loop_rate(10);
     while (!map_received)
     {
         ros::spinOnce();
@@ -567,7 +487,10 @@ int main(int argc, char **argv)
     // Initialize particles
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        particles[i] = get_random_particle();
+        Particle particle = get_random_particle();
+        particles[i].x = particle.x;
+        particles[i].y = particle.y;
+        particles[i].theta = particle.theta;
     }
 
     ROS_INFO("Start Localization...");
@@ -576,7 +499,78 @@ int main(int argc, char **argv)
     ros::Subscriber odo_sub = n.subscribe("sensor_packet", 1, sensor_callback);
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
-    ros::spin();
+    while(ros::ok()) {
+        loop_rate.sleep();
+        ros::spinOnce();
+
+        bool update = fabs(relative_distance) > 0.005 || fabs(relative_angle) > M_PI / 180. || force_update;
+        force_update = false;
+
+        if (!update) 
+        {
+            ROS_DEBUG("Not enough movement.");
+            publish_particles();
+            continue;
+        }
+        // Only Update when robot did move enough.
+        relative_distance = 0.;
+        relative_angle = 0.;
+
+        float total_weight = sensor_update();
+
+        /*
+            Normalize weights and compute w_slow and w_fast for adaptive sampling.
+        */
+        if (total_weight > 0.)
+        {
+            float avg_weight = total_weight / NUM_PARTICLES;
+            for (int i = 0; i < NUM_PARTICLES; i++)
+            {
+                particles[i].weight /= total_weight;
+            }
+
+            if(W_SLOW == 0.0)
+                W_SLOW = avg_weight;
+            else
+                W_SLOW += ALPHA_SLOW * (avg_weight - W_SLOW);
+            
+            if(W_FAST == 0.0)
+                W_FAST = avg_weight;
+            else
+                W_FAST += ALPHA_FAST * (avg_weight - W_FAST);
+        } 
+        else 
+        {
+            for (int i = 0; i < NUM_PARTICLES; i++)
+            {
+                particles[i].weight = 1.0 / NUM_PARTICLES;
+            }
+        }
+        bool resampled = false;
+        if (!(++resample_iteration % RESAMPLE_INTERVAL))
+        {
+            resample();
+            resampled = true;
+        }
+
+        converged = has_converged();
+
+        publish_particles();
+
+        /*
+            Copy new_particles into particles if resampled
+        */
+        if (resampled)
+        {
+            for (int i = 0; i < NUM_PARTICLES; i++)
+            {
+                particles[i].x = new_particles[i].x;
+                particles[i].y = new_particles[i].y;
+                particles[i].theta = new_particles[i].theta;
+                particles[i].weight = new_particles[i].weight;
+            }
+        }
+    }
 
     return 0;
 }
