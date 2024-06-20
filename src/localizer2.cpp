@@ -19,22 +19,12 @@
 
 // MCL Algorithm
 const int SUBSAMPLE_LASERS = 32;
-const int NUM_PARTICLES = 500;
+const int NUM_PARTICLES = 1000;
 const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
 const float RESAMPLE_STD_POS = 0.05;
 const float RESAMPLE_STD_THETA = 10 * M_PI/180.0;
-
-// Sensor Model
-const float Z_HIT = 0.95;
-const float Z_RAND = 0.05;
-const float SIGMA_HIT = 0.1;
-const float LAMBDA_SHORT = 0.1;
-
-// Resample only every 2 iterations
-const int RESAMPLE_INTERVAL = 2;
-int resample_iteration = 0;
 
 // Adapted MCL Algorithm
 const float ALPHA_FAST = 0.1;
@@ -77,7 +67,7 @@ std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS);
 std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA);
 
 // Publishers
-ros::Publisher best_particle_viz_pub, particle_array_viz_pub, position_pub;
+ros::Publisher particle_array_viz_pub, position_pub;
 
 // ############### HELPERS ###############
 std::pair<int, int> metric_to_grid_index(float x, float y) 
@@ -340,12 +330,11 @@ int main(int argc, char **argv)
         ros::spinOnce();
 
         // Only Update when robot did move enough.
-        bool update = fabs(delta_dist) > 0.01 || fabs(delta_theta) > M_PI / 180. || force_update;
+        const bool update = fabs(delta_dist) > 0.01 || fabs(delta_theta) > M_PI / 180. || force_update;
         force_update = false;
 
         if (!update) 
         {
-            ROS_DEBUG("Not enough movement.");
             publish_particles();
             continue;
         }
@@ -362,7 +351,7 @@ int main(int argc, char **argv)
             particle.theta += delta_theta + normal_dist_theta(generator);
 
             // Sensor update
-            float particle_weight = get_particle_weight(particle);
+            const float particle_weight = get_particle_weight(particle);
             particle.weight = particle_weight;
             total_weight += particle_weight;
         }
@@ -414,7 +403,7 @@ int main(int argc, char **argv)
                 cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
             }
 
-            float w_diff = std::max(0., 1. - W_FAST / W_SLOW);
+            const float w_diff = std::max(0., 1. - W_FAST / W_SLOW);
 
             std::vector<Particle> new_particles;
             while (new_particles.size() < NUM_PARTICLES)
@@ -427,7 +416,7 @@ int main(int argc, char **argv)
                 } 
                 else
                 {
-                    float rand = uniform_dist(generator);
+                    const float rand = uniform_dist(generator);
                     int particle_index;
                     for(particle_index = 0; particle_index < NUM_PARTICLES; particle_index++)
                     {
