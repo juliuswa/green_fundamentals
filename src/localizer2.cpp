@@ -308,7 +308,7 @@ void motion_update()
     Sensor Update:
     Calculate the weight of the particle given the laser measurement by ray marching.
 */
-float sensor_update()
+float sensor_update(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
     float total_weight = 0.;
     for (int i = 0; i < NUM_PARTICLES; i++)
@@ -415,7 +415,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     relative_distance = 0.;
     relative_theta = 0.;
 
-    float total_weight = sensor_update();
+    float total_weight = sensor_update(msg);
 
     /*
         Normalize weights and compute w_slow and w_fast for adaptive sampling.
@@ -427,7 +427,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
         float avg_weight = total_weight / NUM_PARTICLES;
         for (int i = 0; i < NUM_PARTICLES; i++)
         {
-            particles[i].weight /= total;
+            particles[i].weight /= total_weight;
             if (particles[i].weight > best_weight) 
             {
                 best_index = i;
