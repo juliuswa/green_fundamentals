@@ -21,15 +21,17 @@
 #define SUBSAMPLE_LASERS 24
 #define RAY_STEP_SIZE 0.01
 
-#define PARTICLES_PER_BIN 64
-#define NUM_BINS 1764
+#define MAX_PARTICLES 4096
+
+#define PARTICLES_PER_BIN 128
+#define NUM_BINS 1296 // 36x36
 #define FILLED_BIN_THRESHOLD 8
 
-#define SPREAD_PARTICLE_PART 0.2
+#define SPREAD_PARTICLE_PART 0.1
 #define RANDOM_PARTICLE_PART 0.05
 
-#define SPREAD_WEIGHT 0.15
-#define RANDOM_WEIGHT 0.05
+#define SPREAD_WEIGHT 0.10
+#define RANDOM_WEIGHT 0.03
 
 #define RESAMPLE_STD_POS 0.04
 #define RESAMPLE_STD_THETA 0.08
@@ -97,9 +99,9 @@ std::default_random_engine generator;
 
 // Particles
 
-Particle particles[PARTICLES_PER_BIN * NUM_BINS];
+Particle particles[MAX_PARTICLES];
 
-int sample_size = PARTICLES_PER_BIN;
+int sample_size = MAX_PARTICLES;
 
 int bins[NUM_BINS];
 int bin_division = floor(std::sqrt(NUM_BINS));
@@ -252,7 +254,7 @@ int calculate_sample_size() {
         }            
     }
 
-    return std::max(1, filled_bin_count) * PARTICLES_PER_BIN;
+    return std::min(MAX_PARTICLES, std::max(1, filled_bin_count) * PARTICLES_PER_BIN);
 }
 
 void reset_bins() {
@@ -287,7 +289,7 @@ void resample_particles()
     int index = uni_dist(generator) * sample_size;    
     double beta = 0.0;    
     
-    for (int i = 0; i < new_sample_size - num_spreading_particles - num_random_particles; ++i)
+    for (int i = 0; i < new_sample_size - (num_spreading_particles + num_random_particles); ++i)
     {
         beta += uni_dist(generator) * 2 * max_weight;
 
@@ -303,10 +305,10 @@ void resample_particles()
         new_particles[i].theta += normal_dist_theta(generator);
     }
 
-    std::normal_distribution<float> spread_dist_pos(0., RESAMPLE_STD_POS * 4);
-    std::normal_distribution<float> spread_dist_theta(0., RESAMPLE_STD_THETA * 4);
+    std::normal_distribution<float> spread_dist_pos(0., RESAMPLE_STD_POS);
+    std::normal_distribution<float> spread_dist_theta(0., RESAMPLE_STD_THETA * 2);
 
-    for (int i = new_sample_size - num_spreading_particles - num_random_particles; 
+    for (int i = new_sample_size - (num_spreading_particles + num_random_particles); 
              i < new_sample_size - num_random_particles; ++i)
     {
         beta += uni_dist(generator) * 2 * max_weight;

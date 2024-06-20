@@ -18,7 +18,8 @@ video_dict = {
     0: "money.mp4",
     1: "pickup.mp4",
     2: "lost.mp4",
-    3: "localized.mp4"
+    3: "localized.mp4",
+    4: "wandering.mp4"
 }
 
 # Global variable to store the current YouTube video URL
@@ -97,7 +98,7 @@ def handle_set_video(req):
     return SetVideoResponse(success=True)
 
 def start_flask_app(stop_event):
-    socketio.run(app, host='192.168.0.51', port=8080, debug=True, use_reloader=False)
+    socketio.run(app, host='192.168.0.54', port=8080, debug=True, use_reloader=False)
     stop_event.set()
 
 def signal_handler(sig, frame):
