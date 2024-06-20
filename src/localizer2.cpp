@@ -28,7 +28,7 @@
 #include "create_fundamentals/SensorPacket.h"
 
 // MCL Algorithm
-const int SUBSAMPLE_LASERS = 32;
+const int SUBSAMPLE_LASERS = 64;
 const int NUM_PARTICLES = 500;
 const float RAY_STEP_SIZE = 0.01;
 
@@ -39,14 +39,15 @@ const float RESAMPLE_STD_THETA = 0.04;
 // Sensor Model
 const float Z_HIT = 0.95;
 const float Z_SHORT = 0.;
-const float Z_MAX = 0.0;
+const float Z_MAX = 0.1;
 const float Z_RAND = 0.05;
-const float SIGMA_HIT = 0.1;
+const float SIGMA_HIT = 0.2;
 const float LAMBDA_SHORT = 0.1;
 
 // Only update when robot moved enough
-const float DISTANCE_THRESHOLD = 0.01;
-const float THETA_THRESHOLD = M_PI/180.0;
+const float DISTANCE_THRESHOLD = 0.02;
+const float THETA_THRESHOLD = 1 * M_PI/180.0;
+const int RESAMPLE_INTERVAL = 2;
 
 // Adapted MCL Algorithm
 const float ALPHA_FAST = 0.1;
@@ -54,9 +55,15 @@ const float ALPHA_SLOW = 0.001;
 float W_SLOW = 0.;
 float W_FAST = 0.;
 
+// KLD MCL Algorithm
+const float KLD_ERR = 0.01;
+const float KLD_Z = 0.99;
+const int MAX_PARTICLES = 5000;
+const int MIN_PARTICLES = 100;
+
 // Flags
 bool converged = false;
-bool first_localization_done = false; // first localization without movement needed
+bool force_update = true; // first localization without movement needed
 bool map_received = false;
 bool is_first_encoder_measurement = true;
 
@@ -285,9 +292,11 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
     std::lock_guard<std::mutex> lock(mtx);
 
-    bool enough_movement = fabs(relative_distance) > DISTANCE_THRESHOLD || fabs(relative_theta) > THETA_THRESHOLD;
+    bool enough_movement = fabs(relative_distance) > DISTANCE_THRESHOLD || 
+                           fabs(relative_theta) > THETA_THRESHOLD;
 
-    bool update = enough_movement || !first_localization_done;
+    bool update = enough_movement || !force_update;
+    force_update = false;
 
     if (!update) 
     {
@@ -429,11 +438,6 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     {
         particles[i] = new_particles[i];
     }
-
-    /*
-        From now on only update when robot moved.
-    */
-    first_localization_done = true;
 }
 
 /*
@@ -505,7 +509,7 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "mc_localization");
     ros::NodeHandle n;
     ROS_INFO("Starting node.");
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
         ros::console::notifyLoggerLevelsChanged();
     }
 
