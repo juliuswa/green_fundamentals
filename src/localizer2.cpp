@@ -34,7 +34,7 @@ const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
 const float RESAMPLE_STD_POS = 0.02;
-const float RESAMPLE_STD_THETA = 0.04;
+const float RESAMPLE_STD_THETA = 10 * M_PI/180.0;
 
 // Sensor Model
 const float Z_HIT = 0.95;
@@ -48,6 +48,7 @@ const float LAMBDA_SHORT = 0.1;
 const float DISTANCE_THRESHOLD = 0.02;
 const float THETA_THRESHOLD = 1 * M_PI/180.0;
 const int RESAMPLE_INTERVAL = 2;
+int resample_iteration = 0;
 
 // Adapted MCL Algorithm
 const float ALPHA_FAST = 0.1;
@@ -69,9 +70,10 @@ bool is_first_encoder_measurement = true;
 
 // Particles
 struct Particle {
-    float x, y, theta;
+    float x, y, theta, weight;
 };
 Particle particles[NUM_PARTICLES];
+Particle new_particles[NUM_PARTICLES];
 
 // Map
 ros::Subscriber map_sub;
@@ -136,7 +138,7 @@ Particle get_random_particle()
     
     float theta = normalize(uniform_dist(generator) * (2 * M_PI));
 
-    Particle particle{x, y, theta};
+    Particle particle{x, y, theta, 1/NUM_PARTICLES};
     return particle;
 }
 
@@ -171,7 +173,7 @@ float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Par
     */
     for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
     {
-        int index = i * msg->ranges.size() / SUBSAMPLE_LASERS; // TODO Überspringe die ersten paar Laser wegen dem Balken
+        int index = i * msg->ranges.size() / SUBSAMPLE_LASERS;
 
         /*
             Clip the actual range between 0.01 and 1.0
@@ -226,13 +228,13 @@ float get_particle_weight(const sensor_msgs::LaserScan::ConstPtr& msg, const Par
         // 1. Probability for good but noisy measurement
         p += Z_HIT * exp(-(error * error) / (2 * SIGMA_HIT * SIGMA_HIT));
         // 2. Probability for unexpected Obstacle
-        //if(error < 0) p += Z_SHORT * LAMBDA_SHORT * exp(-LAMBDA_SHORT*real_distance);
+        if(error < 0) p += Z_SHORT * LAMBDA_SHORT * exp(-LAMBDA_SHORT*real_distance);
         // 3. Probability for Failure to detect obstacle
-        //if(real_distance == 1.0) p += Z_MAX * 1.0;
+        if(real_distance == 1.0) p += Z_MAX * 1.0;
         // 4. Probability for Random measurement
         if(real_distance < 1.0) p += Z_RAND;
 
-        q *= p;
+        q += p*p*p;
     }
 
     return q;
@@ -286,104 +288,57 @@ void publish_particles(const Particle& best_particle)
 }
 
 /*
-    Process new Laser Scan and perform localization.
+    Motion Update:
+    Move the particle by the distance the robot traveled and apply some noise.
 */
-void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
+void motion_update()
 {
-    std::lock_guard<std::mutex> lock(mtx);
-
-    bool enough_movement = fabs(relative_distance) > DISTANCE_THRESHOLD || 
-                           fabs(relative_theta) > THETA_THRESHOLD;
-
-    bool update = enough_movement || !force_update;
-    force_update = false;
-
-    if (!update) 
-    {
-        ROS_DEBUG("Not enough movement.");
-        return;
-    }
-    // Only Update when the movement was big enough.
-
-    float weights[NUM_PARTICLES];
-    float total_weight = 0.;
     for (int i = 0; i < NUM_PARTICLES; i++)
-    {   
-        /*
-            Motion Update:
-            Move the particle by the distance the robot traveled and apply some noise.
-        */
+    {
         float x_delta = relative_distance * cos(particles[i].theta + relative_theta/2);
         float y_delta = relative_distance * sin(particles[i].theta + relative_theta/2);
 
         particles[i].x += x_delta + normal_dist_pos(generator);
         particles[i].y += y_delta + normal_dist_pos(generator);
         particles[i].theta = normalize(particles[i].theta + relative_theta + normal_dist_theta(generator));
+    }
+}
 
-        /*
-            Sensor Update:
-            Calculate the weight of the particle given the laser measurement by ray marching.
-        */
+/*
+    Sensor Update:
+    Calculate the weight of the particle given the laser measurement by ray marching.
+*/
+float sensor_update()
+{
+    float total_weight = 0.;
+    for (int i = 0; i < NUM_PARTICLES; i++)
+    {
         float particle_weight = get_particle_weight(msg, particles[i]);
-        weights[i] = particle_weight;
+        particles[i].weight *= particle_weight;
         total_weight += particle_weight;
     }
-    /*
-        Reset distance traveled by robot
-    */
-    relative_distance = 0.;
-    relative_theta = 0.;
 
-    /*
-        Normalize weights and compute w_slow and w_fast for adaptive sampling.
-    */
-    float avg_weight = total_weight / NUM_PARTICLES;
-    float best_weight = -1;
-    int best_index = -1;
-    if (total_weight > 0.)
-    {
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            weights[i] /= total_weight;
-            if (weights[i] > best_weight) 
-            {
-                best_index = i;
-                best_weight = weights[i];
-            }
-        }
-        if(W_SLOW == 0.0)
-            W_SLOW = avg_weight;
-        else
-            W_SLOW += ALPHA_SLOW * (avg_weight - W_SLOW);
-        if(W_FAST == 0.0)
-            W_FAST = avg_weight;
-        else
-            W_FAST += ALPHA_FAST * (avg_weight - W_FAST);
-    } 
-    else 
-    {
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            weights[i] = 1.0 / NUM_PARTICLES;
-        }
-    }
+    return total_weight;
+}
 
-    /*
-        Resample:
-        Draw new particles from the current particles proportional to the weight.
-        Only if effective sample size is big enough.
-    */
+/*
+    Resample:
+    Draw new particles from the current particles proportional to the weight.
+*/
+void resample()
+{
     float cumulative_weights[NUM_PARTICLES + 1];
     cumulative_weights[0] = 0.;
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        cumulative_weights[i+1] = cumulative_weights[i] + weights[i];
+        cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
     }
 
-    Particle new_particles[NUM_PARTICLES];
+    float w_diff = std::max(0., 1. - W_FAST / W_SLOW);
+
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        if (uniform_dist(generator) < std::max(0., 1. - W_FAST / W_SLOW))
+        if (uniform_dist(generator) < w_diff)
         {
             // Sample random particle
             // TODO Make sure that the random particle kinda conforms to the measurement.
@@ -400,11 +355,16 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
             }
             new_particles[i] = particles[particle_index];
         }
-    }
 
-    /*
-        Check if localization has converged.
-    */
+        new_particles[i].weight = 1. / NUM_PARTICLES;
+    }
+}
+
+/*
+    Check if localization has converged.
+*/
+bool has_converged()
+{
     float mean_x = 0.;
     float mean_y = 0.;
     for (int i = 0; i < NUM_PARTICLES; i++)
@@ -424,20 +384,96 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
             break;
         }
     }
-    converged = converged_temp;
+
+    return converged_temp;
+}
+
+/*
+    Process new Laser Scan and perform localization.
+*/
+void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
+{
+    std::lock_guard<std::mutex> lock(mtx);
+
+    bool enough_movement = fabs(relative_distance) > DISTANCE_THRESHOLD || 
+                           fabs(relative_theta) > THETA_THRESHOLD;
+
+    bool update = enough_movement || force_update;
+    force_update = false;
+
+    if (!update) 
+    {
+        ROS_DEBUG("Not enough movement.");
+        return;
+    }
+    // Only Update when the movement was big enough.
+
+    motion_update();
+    /*
+        Reset distance traveled by robot
+    */
+    relative_distance = 0.;
+    relative_theta = 0.;
+
+    float total_weight = sensor_update();
 
     /*
-        Publish particles.
+        Normalize weights and compute w_slow and w_fast for adaptive sampling.
     */
+    float best_weight = -1;
+    int best_index = -1;
+    if (total_weight > 0.)
+    {
+        float avg_weight = total_weight / NUM_PARTICLES;
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            particles[i].weight /= total;
+            if (particles[i].weight > best_weight) 
+            {
+                best_index = i;
+                best_weight = particles[i].weight;
+            }
+        }
+
+        if(W_SLOW == 0.0)
+            W_SLOW = avg_weight;
+        else
+            W_SLOW += ALPHA_SLOW * (avg_weight - W_SLOW);
+        
+        if(W_FAST == 0.0)
+            W_FAST = avg_weight;
+        else
+            W_FAST += ALPHA_FAST * (avg_weight - W_FAST);
+    } 
+    else 
+    {
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            particles[i].weight = 1.0 / NUM_PARTICLES;
+        }
+    }
+    bool resampled = false;
+    if (!(++resample_iteration % RESAMPLE_INTERVAL))
+    {
+        resample();
+        resampled = true;
+    }
+
+    converged = has_converged();
+
     publish_particles(particles[best_index]);
 
     /*
-        Copy particles
+        Copy new_particles into particles if resampled
     */
-    for (int i = 0; i < NUM_PARTICLES; i++)
+    if (resampled)
     {
-        particles[i] = new_particles[i];
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            particles[i] = new_particles[i];
+        }
     }
+    
 }
 
 /*
@@ -456,7 +492,6 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
         last_right = current_right;
 
         is_first_encoder_measurement = false;
-        return;
     }
     
     float distance_left = (current_left - last_left) * WHEEL_RADIUS;
