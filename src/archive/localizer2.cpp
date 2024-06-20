@@ -25,7 +25,7 @@
 #include "create_fundamentals/SensorPacket.h"
 
 // MCL Algorithm
-const int SUBSAMPLE_LASERS = 50;
+const int SUBSAMPLE_LASERS = 32;
 const int NUM_PARTICLES = 500;
 const float RAY_STEP_SIZE = 0.01;
 
@@ -38,7 +38,7 @@ const float Z_HIT = 0.95;
 const float Z_SHORT = 0.;
 const float Z_MAX = 0.0;
 const float Z_RAND = 0.05;
-const float SIGMA_HIT = 0.2;
+const float SIGMA_HIT = 0.1;
 const float LAMBDA_SHORT = 0.1;
 
 // Resample only every 2 iterations
