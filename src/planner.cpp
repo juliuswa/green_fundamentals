@@ -22,18 +22,32 @@
 #define REASONABLE_DISTANCE 1.
 #define LOCALIZATION_POINTS_THRESHOLD 3
 
-using Grid_Coords = std::pair<int, int>;
-using KeyType = std::pair<Grid_Coords, Grid_Coords>;
+struct GridCoords{
+    int col;
+    int row;
 
-struct pair_hash_int {
-    std::size_t operator()(const Grid_Coords& p) const {
-        return p.first * 32 + p.second;
+    bool operator==(const GridCoords &other) const {
+        return row == other.row && col == other.col;
+    }
+
+    bool operator<(const GridCoords &other) const {
+        return col < other.col || (col == other.col && row < other.row);
+    }
+};
+
+struct MapCoords{
+    float x, y;
+};
+
+struct GridCoordsHash {
+    std::size_t operator()(const GridCoords& p) const {
+        return p.row * 32 + p.col;
     }
 };
 
 struct key_hash {
-    std::size_t operator()(const KeyType& k) const {
-        return pair_hash_int()(k.first) * 64 + pair_hash_int()(k.second);
+    std::size_t operator()(const std::pair<GridCoords, GridCoords>& k) const {
+        return GridCoordsHash()(k.first) * 64 + GridCoordsHash()(k.second);
     }
 };
 
@@ -83,17 +97,17 @@ struct Cell {
 int grid_rows, grid_cols;
 ros::Subscriber map_sub;
 bool map_received = false;
-std::vector<std::vector<Cell>> cell_grid;  // row, col
-std::vector<Grid_Coords> golds;
-std::vector<Grid_Coords> pickups;
-std::unordered_map<KeyType, std::vector<Grid_Coords>, key_hash> shortest_paths_precomputed;
+std::vector<std::vector<Cell>> cell_grid;
+std::vector<GridCoords> golds;
+std::vector<GridCoords> pickups;
+std::unordered_map<std::pair<GridCoords, GridCoords>, std::vector<GridCoords>, key_hash> shortest_paths_precomputed;
 std::vector<std::vector<bool>> visited_cells;
 
 void reset_visited_cells() {
-    for (int row = 0; row < visited_cells.size(); row++) {
-        for (int col = 0; col < visited_cells[row].size(); col++)
+    for (int col = 0; col < visited_cells.size(); col++) {
+        for (int row = 0; row < visited_cells[col].size(); row++)
         {
-            visited_cells[row][col] = false;
+            visited_cells[col][row] = false;
         }
     }
 }
@@ -158,23 +172,29 @@ void print_state()
     }
 }
 
-std::pair<int, int> position_to_grid_cell(float x, float y) {
+GridCoords position_to_grid_cell(float x, float y) {
     int col = floor(x / CELL_LENGTH);
     int row = floor(y / CELL_LENGTH);
 
-    return {col, row};
+    GridCoords temp;
+    temp.col = col;
+    temp.row = row;
+
+    return temp;
 }
 
-std::pair<float, float> grid_cell_to_position(int col, int row) {
-    float x = (float)col * CELL_LENGTH + CELL_LENGTH / 2.;
-    float y = (float)row * CELL_LENGTH + CELL_LENGTH / 2.;
-
-    return {x, y};
+MapCoords grid_cell_to_position(const GridCoords& coords) {
+    float x = (float)coords.col * CELL_LENGTH + CELL_LENGTH / 2.;
+    float y = (float)coords.row * CELL_LENGTH + CELL_LENGTH / 2.;
+    MapCoords temp;
+    temp.x = x;
+    temp.y = y;
+    return temp;
 }
 
-std::vector<Grid_Coords> get_neighbors(const Cell& cell) 
+std::vector<GridCoords> get_neighbors(const Cell& cell) 
 {
-    std::vector<Grid_Coords> neighbors;
+    std::vector<GridCoords> neighbors;
     int row = cell.row;
     int col = cell.col;
 
@@ -195,14 +215,14 @@ std::vector<Grid_Coords> get_neighbors(const Cell& cell)
 }
 
 bool are_neighbors(const Cell& cell1, const Cell& cell2) {
-    std::vector<Grid_Coords> cell1_neighbors = get_neighbors(cell1);
+    std::vector<GridCoords> cell1_neighbors = get_neighbors(cell1);
 
     if (cell1.col == cell2.col && cell1.row == cell2.row) {
         return true;
     }
 
     for (const auto& neighbor : cell1_neighbors) {
-        if (neighbor.first == cell2.col && neighbor.second == cell2.row) {
+        if (neighbor.col == cell2.col && neighbor.row == cell2.row) {
             return true;
         }
     }
@@ -253,9 +273,15 @@ void publish_current_goal() {
     point.z = 0.;
 
     if (global_plan.size() != 0) {
-        std::pair<float, float> position = grid_cell_to_position(global_plan.front().col, global_plan.front().row);
-        point.x = position.first;
-        point.y = position.second;
+        Goal current_goal = global_plan.front();
+        GridCoords current_goal_coords;
+        current_goal_coords.col = current_goal.col;
+        current_goal_coords.row = current_goal.row;
+
+        MapCoords position = grid_cell_to_position(current_goal_coords);
+
+        point.x = position.x;
+        point.y = position.y;
     }   
 
     geometry_msgs::PointStamped point_stamped;
@@ -337,41 +363,47 @@ BFS SEARCH
 ############################################################################
 */
 
-std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_Coords end) 
+std::vector<GridCoords> get_shortest_path(const GridCoords start, const GridCoords end) 
 {   
-    std::vector<std::vector<bool>> visited(grid_rows, std::vector<bool>(grid_cols, false));
-    std::unordered_map<Grid_Coords, Grid_Coords, pair_hash_int> parent;
-    parent[{start.first, start.second}] = {-1, -1};
+    std::vector<std::vector<bool>> visited(grid_cols, std::vector<bool>(grid_rows, false));
+    std::unordered_map<GridCoords, GridCoords, GridCoordsHash> parent;
+    GridCoords min1;
+    min1.col = -1;
+    min1.row = -1;
+    parent[start] = min1;
 
-    std::deque<Grid_Coords> q;
+    std::deque<GridCoords> q;
 
-    q.push_back({start.first, start.second});
-    visited[start.first][start.second] = true;
+    q.push_back(start);
+    visited[start.col][start.row] = true;
 
     //ROS_INFO("Starting Node is (%d, %d)", start.first, start.second);
 
     while (!q.empty()) {
-        auto [currentRow, currentCol] = q.front();
-        visited[currentRow][currentCol] = true;
+        GridCoords current = q.front();
+        visited[current.col][current.row] = true;
         q.pop_front();
 
-        if (currentRow == end.first && currentCol == end.second) {
-            std::vector<Grid_Coords> path;
-            for (Grid_Coords at = {end.first, end.second}; at.first != -1; at = parent[at]) {
+        if (current.row == end.row && current.col == end.col) {
+            std::vector<GridCoords> path;
+            for (GridCoords at = end; at.col != -1; at = parent[at]) {
                 path.push_back(at);
             }
             std::reverse(path.begin(), path.end());
             return path;
         }
         
-        std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[currentRow][currentCol]);
+        std::vector<GridCoords> neighbors = get_neighbors(cell_grid[current.col][current.row]);
         //ROS_INFO("%d Neighbors for cell (%d, %d)", neighbors.size(), currentRow, currentCol);
+
         for (const auto& neighbor : neighbors) {
-            int newRow = neighbor.second;
-            int newCol = neighbor.first;
-            if (!visited[newRow][newCol]) {
-                q.push_back({newRow, newCol});
-                parent[{newRow, newCol}] = {currentRow, currentCol};
+            GridCoords new_coord;
+            new_coord.col = neighbor.col;
+            new_coord.row = neighbor.row;
+            
+            if (!visited[new_coord.col][new_coord.row]) {
+                q.push_back(new_coord);
+                parent[new_coord] = current;
             }
         }
     }
@@ -385,9 +417,9 @@ COMPUTE GLOBAL PLAN
 ############################################################################
 */
 
-std::vector<std::vector<Grid_Coords>> compute_gold_permutations()
+std::vector<std::vector<GridCoords>> compute_gold_permutations()
 {
-    std::vector<std::vector<Grid_Coords>> gold_permutations;
+    std::vector<std::vector<GridCoords>> gold_permutations;
     do {
         gold_permutations.push_back(golds);
     } while (std::next_permutation(golds.begin(), golds.end()));
@@ -395,11 +427,12 @@ std::vector<std::vector<Grid_Coords>> compute_gold_permutations()
     return gold_permutations;
 }
 
-std::pair<Grid_Coords, int> get_best_heliport(const Grid_Coords& from)
+std::pair<GridCoords, int> get_best_heliport(const GridCoords& from)
 {
     int best_endpoint_cost = 100000;
-    Grid_Coords best_end;
-    for (Grid_Coords pickup : pickups)
+    GridCoords best_end;
+
+    for (GridCoords pickup : pickups)
     {   
         int endpoint_cost = shortest_paths_precomputed[{from, pickup}].size();
         if (endpoint_cost < best_endpoint_cost)
@@ -415,15 +448,20 @@ std::pair<Grid_Coords, int> get_best_heliport(const Grid_Coords& from)
 std::deque<Goal> get_best_plan(const Cell& current_cell)
 {
     int best_cost = 100000;
-    std::vector<Grid_Coords> best_path;
+    std::vector<GridCoords> best_path;
 
     // Precompute gold permutations
-    std::vector<std::vector<Grid_Coords>> gold_permutations = compute_gold_permutations();
+    std::vector<std::vector<GridCoords>> gold_permutations = compute_gold_permutations();
 
-    for (std::vector<Grid_Coords> path : gold_permutations)
+    for (std::vector<GridCoords> path : gold_permutations)
     {
         // Compute cost of path + current_to_first_gold + last_gold_to_shortest_pickup
-        int cost = shortest_paths_precomputed[{{current_cell.col, current_cell.row}, path.front()}].size();
+
+
+        GridCoords temp;
+        temp.col = current_cell.col;
+        temp.row =  current_cell.row;
+        int cost = shortest_paths_precomputed[{temp, path.front()}].size();
 
         for (int i = 0; i < path.size() - 1; i++)
         {
@@ -442,13 +480,13 @@ std::deque<Goal> get_best_plan(const Cell& current_cell)
     }
 
     std::deque<Goal> best_path_deq;
-    for(Grid_Coords gold : best_path) {
+    for(GridCoords gold : best_path) {
         Goal new_gold;
-        new_gold.col = gold.first;
-        new_gold.row = gold.second;
+        new_gold.col = gold.col;
+        new_gold.row = gold.row;
         new_gold.type = GoalType::GOLD;
         best_path_deq.push_back(new_gold);
-        ROS_INFO("Type: %d, Col: %d,  Row: %d", gold.first, gold.second);
+        ROS_INFO("Type: %d, Col: %d,  Row: %d", gold.col, gold.row);
     }
 
     return best_path_deq;
@@ -462,25 +500,30 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
 
     cell_grid.resize(grid_rows);
 
-    for (int row = 0; row < msg->rows.size(); row++)
+    for (int col = 0; col < msg->rows[0].cells.size(); col++)
     {
-        std::vector<Cell> column_cells;
+        std::vector<Cell> row_cells;
 
-        for (int col = 0; col < msg->rows[row].cells.size(); col++)
+        for (int row = 0; row < msg->rows.size(); row++)
         {
-            std::pair<float, float> position = grid_cell_to_position(col, (grid_rows - row - 1));
+            GridCoords cell_coords;
+            cell_coords.col = col;
+            cell_coords.row = row;
+
+            MapCoords position = grid_cell_to_position(cell_coords);
             
             Cell new_cell;
-            new_cell.x = position.first;
-            new_cell.y = position.second;
-            new_cell.row = (grid_rows - row - 1);
-            new_cell.col = col;
+            new_cell.x = position.x;
+            new_cell.y = position.y;
+            new_cell.row = cell_coords.row;
+            new_cell.col = cell_coords.col;
             new_cell.wall_right = false;
             new_cell.wall_up = false;
             new_cell.wall_left = false;
             new_cell.wall_down = false;
             
-            green_fundamentals::Cell current = msg->rows[row].cells[col];
+            green_fundamentals::Cell current = msg->rows[(grid_rows - row - 1)].cells[col];
+
             for (auto wall : current.walls) 
             {
                 switch(wall) {
@@ -499,10 +542,13 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
                 }
             }
 
-            column_cells.push_back(new_cell);
+            ROS_INFO("x %f, y %f, col %d, row %d, %d, %d, %d, %d",
+                new_cell.x, new_cell.y, new_cell.col, new_cell.row, new_cell.wall_right, new_cell.wall_up, new_cell.wall_left, new_cell.wall_down);
+
+            row_cells.push_back(new_cell);
         }
 
-        cell_grid[grid_rows - row - 1] = column_cells;
+        cell_grid[col] = row_cells;
     }
 
     // GOLDS
@@ -527,7 +573,7 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
                 for (int col2 = 0; col2 < grid_cols; ++col2)
                 {
                     if (row1 == row2 && col1 == col2) continue;
-                    std::vector<Grid_Coords> path = get_shortest_path({row1, col1}, {row2, col2});
+                    std::vector<GridCoords> path = get_shortest_path({col1, row1}, {col2, row2});
                     shortest_paths_precomputed[{{col1, row1}, {col2, row2}}] = path;
                     //std::reverse(path.begin(), path.end()); // For the reverse path
                     //shortest_paths_precomputed[{{end.row, end.col}, {start.row, start.col}}] = path;
@@ -569,10 +615,10 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     my_position.y = msg->y;
     my_position.theta = msg->theta;
 
-    std::pair<int, int> cell = position_to_grid_cell(my_position.x, my_position.y);
+    GridCoords cell = position_to_grid_cell(my_position.x, my_position.y);
 
-    my_position.col = cell.first;
-    my_position.row = cell.second;
+    my_position.col = cell.col;
+    my_position.row = cell.row;
 
     if (my_position.theta <= M_PI/4 && my_position.theta > -M_PI/4)
     {
@@ -600,9 +646,9 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         localization_points = 0;
         local_plan.clear();
     }    
-    else if (!visited_cells[my_position.row][my_position.row])
+    else if (!visited_cells[my_position.col][my_position.row])
     {
-        visited_cells[my_position.row][my_position.row] = true;
+        visited_cells[my_position.col][my_position.row] = true;
         localization_points += 1;
     }
     
@@ -633,25 +679,18 @@ bool set_local_plan_to_current_goal()
     ROS_INFO("Current position: (%d, %d).", my_position.col, my_position.row);
     ROS_INFO("Next goal: (%d, %d).", next_goal.col, next_goal.row);
 
-    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{my_position.col, my_position.row}, {next_goal.col, next_goal.row}}];
+    std::vector<GridCoords> path = shortest_paths_precomputed[{{my_position.col, my_position.row}, {next_goal.col, next_goal.row}}];
 
     ROS_INFO("Path length: %ld", path.size());
 
-    if (path.size() == 0) return false;
+    if (path.empty()) return false;
 
     local_plan.clear();
 
     for (int i = 0; i < path.size(); i++) {
-        const Cell cell = cell_grid[path[i].first][path[i].second];
-        if (cell.row != path[i].first && cell.col != path[i].second)
-        {
-            ROS_INFO("ERROR in drive_to_cell with cell conversion from first to row and second to col.");
-            continue;
-        }
+        const Cell cell = cell_grid[path[i].col][path[i].row];
         add_target_back(cell.x, cell.y, 0.0, false, i == path.size() - 1);
     }
-
-
     return true;
 }
 
@@ -663,10 +702,10 @@ bool send_next_target_to_mover()
     }
 
     const Target current_target = local_plan.front();
-    std::pair<int, int> target_cell_coords = position_to_grid_cell(current_target.x, current_target.y);
+    GridCoords target_cell_coords = position_to_grid_cell(current_target.x, current_target.y);
     
-    Cell current_cell = cell_grid[my_position.row][my_position.col];
-    Cell target_cell = cell_grid[target_cell_coords.second][target_cell_coords.first];
+    Cell current_cell = cell_grid[my_position.col][my_position.row];
+    Cell target_cell = cell_grid[target_cell_coords.col][target_cell_coords.row];
 
     if (!are_neighbors(current_cell, target_cell)) {
         ROS_DEBUG("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
@@ -725,7 +764,7 @@ STATE FUNCTIONS
 bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req, green_fundamentals::MoveToPosition::Response &res)
 {
     global_plan.clear();
-    add_goal_front(req.row, req.column, GoalType::POSITION);
+    add_goal_front(req.column, req.row, GoalType::POSITION);
     
     bool success = set_local_plan_to_current_goal();
 
@@ -765,7 +804,7 @@ void collect_gold() {
     int index;
 
     for(int i = 0; i < golds.size(); i++) {
-        if(global_plan.front().col == golds[i].first && global_plan.front().row == golds[i].second) {
+        if(global_plan.front().col == golds[i].col && global_plan.front().row == golds[i].row) {
             index = i;
             break;
         }
@@ -775,7 +814,7 @@ void collect_gold() {
         ROS_WARN("Goal (%d, %d) should be gold but is not listed in golds", global_plan.front().col, global_plan.front().row);
     }
 
-    ROS_INFO("Collecting gold at position: %d, %d", golds[index].first, golds[index].second);
+    ROS_INFO("Collecting gold at position: %d, %d", golds[index].col, golds[index].row);
 
     std::swap(golds[index], golds.back());
     golds.pop_back();
@@ -804,8 +843,8 @@ void execute_local_plan()
     if (current_target_reached())
     {   
         local_plan.pop_front();
-        std::pair<int, int> cell = position_to_grid_cell(local_plan.front().x, local_plan.front().y);
-        ROS_INFO("Next target: (%d, %d).", cell.first, cell.second);
+        GridCoords cell = position_to_grid_cell(local_plan.front().x, local_plan.front().y);
+        ROS_INFO("Next target: (%d, %d).", cell.col, cell.row);
     }
     
     if(!send_next_target_to_mover()) {
@@ -844,8 +883,8 @@ void localize()
 {   
     if (is_localized)
     {
-        if(mission == State::GOLD_RUN) {
-            State::GOLD_RUN;
+        if(mission == Mission::M_GOLD_RUN) {
+            state = State::GOLD_RUN;
         } else {
             state = State::ALIGN;
             global_plan.clear();
@@ -867,12 +906,12 @@ void localize()
             int rand_row = rand() % grid_rows;
             int rand_col = rand() % grid_cols;
 
-            if (visited_cells[rand_row][rand_col]) {
+            if (visited_cells[rand_col][rand_row]) {
                 continue;
             }
 
             global_plan.clear();
-            add_goal_front(rand_row, rand_col, GoalType::POSITION);
+            add_goal_front(rand_col, rand_row, GoalType::POSITION);
                             
             found_unvisited_cell = set_local_plan_to_current_goal();
 
@@ -911,7 +950,7 @@ void align()
 void set_heliport_to_goal() {
     ROS_INFO("Driving to heliport");
     auto heliport_pair = get_best_heliport({my_position.col, my_position.row});
-    add_goal_front(heliport_pair.first.first, heliport_pair.first.second, GoalType::HELIPORT);
+    add_goal_front(heliport_pair.first.col, heliport_pair.first.row, GoalType::HELIPORT);
     set_local_plan_to_current_goal();
     state = State::EXECUTE_PLAN;
     mission = Mission::M_DRIVE_TO;
