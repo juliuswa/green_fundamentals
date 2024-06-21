@@ -448,7 +448,7 @@ std::deque<Goal> get_best_plan(const Cell& current_cell)
         new_gold.row = gold.second;
         new_gold.type = GoalType::GOLD;
         best_path_deq.push_back(new_gold);
-        ROS_INFO("Type: %d, Col: %d,  Row: %d", gold.first, gold.second);
+        ROS_INFO("Remaining Gold Col: %d,  Row: %d", new_gold.col, new_gold.row);
     }
 
     return best_path_deq;
@@ -743,7 +743,7 @@ bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req
     return success;
 }
 
-bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundamentals::GoldRun::Response &res)
+void start_gold_run()
 {
     Cell current_cell;
     current_cell.x = my_position.x;
@@ -752,12 +752,18 @@ bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundame
     current_cell.col = my_position.col;
 
     global_plan = get_best_plan(current_cell);
+
     local_plan.clear();
+    set_local_plan_to_current_goal();
     
     state = State::EXECUTE_PLAN;
     mission = Mission::M_GOLD_RUN;
     ROS_INFO("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
-    
+}
+
+bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundamentals::GoldRun::Response &res)
+{
+    start_gold_run();
     return true;
 }
 
@@ -775,7 +781,7 @@ void collect_gold() {
         ROS_WARN("Goal (%d, %d) should be gold but is not listed in golds", global_plan.front().col, global_plan.front().row);
     }
 
-    ROS_INFO("Collecting gold at position: %d, %d", golds[index].first, golds[index].second);
+    ROS_INFO("Collecting gold at position: %d, %d (real position %d, %d)", golds[index].first, golds[index].second, my_position.row, my_position.col);
 
     std::swap(golds[index], golds.back());
     golds.pop_back();
@@ -845,12 +851,12 @@ void localize()
     if (is_localized)
     {
         if(mission == Mission::M_GOLD_RUN) {
-            state = State::GOLD_RUN;
+            start_gold_run();
         } else {
             state = State::ALIGN;
             global_plan.clear();
+            local_plan.clear();
         }
-        local_plan.clear();
         // TODO check
         set_video(3);
         return;
@@ -996,7 +1002,7 @@ int main(int argc, char **argv)
                 break;
             case State::LEAVE:
                 set_heliport_to_goal();
-                break;
+                    break;
 
             default:
                 ROS_INFO("State not known.");
