@@ -200,8 +200,6 @@ void publish_particles()
     position.theta = theta;
     position_pub.publish(position);
 
-    ROS_INFO("Publish position: %f, %f, %f", x, y, theta);
-
     // Visualizations
     geometry_msgs::PoseArray pose_array;
     pose_array.header.frame_id = "map";
