@@ -18,8 +18,8 @@
 #include "create_fundamentals/SensorPacket.h"
 
 // MCL Algorithm
-const int SUBSAMPLE_LASERS = 32;
-const int NUM_PARTICLES = 250;
+const int SUBSAMPLE_LASERS = 100;
+const int NUM_PARTICLES = 1000;
 const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
@@ -28,7 +28,7 @@ const float RESAMPLE_STD_THETA = 10 * M_PI/180.0;
 
 // Adapted MCL Algorithm
 const float ALPHA_FAST = 0.1;
-const float ALPHA_SLOW = 0.001;
+const float ALPHA_SLOW = 0.01;
 float W_SLOW = 0.;
 float W_FAST = 0.;
 
@@ -46,6 +46,7 @@ std::vector<Particle> particles;
 
 std::vector<std::pair<float, float>> laser_data;
 bool laser_received = false;
+bool sensor_received = false;
 
 // Map
 ros::Subscriber map_sub;
@@ -251,13 +252,29 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
         return;
     }
 
+    if (last_left == current_left && last_right == current_right)
+    {
+        sensor_received = false;
+        return;
+    }
+
     float distance_left = (current_left - last_left) * WHEEL_RADIUS;
     float distance_right = (current_right - last_right) * WHEEL_RADIUS; 
     float distance = (distance_left + distance_right) / 2;
-    float delta_theta = (distance_right - distance_left) / WHEEL_BASE;
+    float angle_change = (distance_right - distance_left) / WHEEL_BASE;
 
-    delta_dist += distance;
-    delta_theta += delta_theta;
+    for (Particle& particle : particles)
+    {
+        // Motion Update
+        float x_delta = distance * cos(particle.theta);
+        float y_delta = distance * sin(particle.theta);
+
+        particle.x += x_delta + normal_dist_pos(generator);
+        particle.y += y_delta + normal_dist_pos(generator);
+        particle.theta = normalize_angle(particle.theta + angle_change + normal_dist_theta(generator));
+    }
+
+    sensor_received = true;
 }
 
 void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
@@ -302,7 +319,7 @@ int main(int argc, char **argv)
 
     ROS_INFO("Waiting for Occupancy Map...");
     map_sub = n.subscribe("map", 1, map_callback);
-    ros::Rate loop_rate(10);
+    ros::Rate loop_rate(20);
     while (!map_received)
     {
         ros::spinOnce();
@@ -327,12 +344,13 @@ int main(int argc, char **argv)
     ros::Subscriber odo_sub = n.subscribe("sensor_packet", 1, sensor_callback);
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
+    float avg_weight, avg_weight_before = 0.;
     while(ros::ok()) {
         loop_rate.sleep();
         ros::spinOnce();
 
         // Only Update when robot did move enough.
-        bool update = laser_received && (fabs(delta_dist) > 0.01 || fabs(delta_theta) > M_PI / 180. || force_update);
+        bool update = laser_received && (sensor_received || force_update);
 
         if (!update) 
         {
@@ -340,49 +358,31 @@ int main(int argc, char **argv)
             continue;
         }
 
-        ROS_INFO("Updating Particles");
-
+        ROS_INFO("Updating Weights");
+        // Motion update already happened in callback
+        // Sensor update
         float total_weight = 0.;
         for (Particle& particle : particles)
         {
-            // Motion Update
-            float x_delta = delta_dist * cos(particle.theta + delta_theta/2);
-            float y_delta = delta_dist * sin(particle.theta + delta_theta/2);
-
-            particle.x += x_delta + normal_dist_pos(generator);
-            particle.y += y_delta + normal_dist_pos(generator);
-            particle.theta += delta_theta + normal_dist_theta(generator);
-
-            // Sensor update
             const float particle_weight = get_particle_weight(particle);
             particle.weight = particle_weight;
             total_weight += particle_weight;
-            ROS_INFO("Particle (%f, %f) has weight: %f", particle.x, particle.y, particle.weight);
+            ROS_DEBUG("Particle (%f, %f) has weight: %f", particle.x, particle.y, particle.weight);
         }
         // Reset motion
-        delta_dist = 0.;
-        delta_theta = 0.;
+        sensor_received = false;
         laser_received = false;
         force_update = false;
 
         // Normalize weights and compute w_slow and w_fast for adaptive sampling.
         if (total_weight > 0.)
         {
-            float avg_weight = total_weight / particles.size();
+            avg_weight = total_weight / particles.size();
+            if (avg_weight_before == 0) avg_weight_before = avg_weight;
             for (Particle& particle : particles)
             {
                 particle.weight /= total_weight;
-            }
-
-            if(W_SLOW == 0.0)
-                W_SLOW = avg_weight;
-            else
-                W_SLOW += ALPHA_SLOW * (avg_weight - W_SLOW);
-            
-            if(W_FAST == 0.0)
-                W_FAST = avg_weight;
-            else
-                W_FAST += ALPHA_FAST * (avg_weight - W_FAST);
+            }  
         } 
         else 
         {
@@ -403,8 +403,8 @@ int main(int argc, char **argv)
             cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
         }
 
-        const float w_diff = std::max(0., 1. - W_FAST / W_SLOW);
-
+        const float w_diff = std::max(0., 1. - avg_weight / avg_weight_before);
+        ROS_INFO("w_diff = %f", w_diff);
         std::vector<Particle> new_particles;
         while (new_particles.size() < NUM_PARTICLES)
         {
@@ -422,7 +422,7 @@ int main(int argc, char **argv)
                     if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
                 }
                 Particle particle = particles.at(particle_index);
-                ROS_INFO("Draw Particle (%f, %f) with weight: %f", particle.x, particle.y, particle.weight);
+                ROS_DEBUG("Draw Particle (%f, %f) with weight: %f", particle.x, particle.y, particle.weight);
                 particle.weight = 1. / NUM_PARTICLES;
                 new_particles.push_back(particle);
             }
