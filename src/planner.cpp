@@ -790,7 +790,7 @@ void collect_gold() {
     golds.pop_back();
 
     set_video(3);
-    ros::Duration(5.).sleep();
+    ros::Duration(5.5).sleep();
 }
 
 void execute_local_plan()
@@ -803,7 +803,7 @@ void execute_local_plan()
         else if (global_plan.front().type == GoalType::HELIPORT)
         {
             set_video(4);
-            ros::Duration(5.).sleep();
+            ros::Duration(5.5).sleep();
         }
 
         state = State::NEXT_GOAL;
