@@ -19,7 +19,7 @@
 
 // MCL Algorithm
 const int SUBSAMPLE_LASERS = 32;
-const int NUM_PARTICLES = 500;
+const int NUM_PARTICLES = 250;
 const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
@@ -45,6 +45,7 @@ struct Particle {
 std::vector<Particle> particles;
 
 std::vector<std::pair<float, float>> laser_data;
+bool laser_received = false;
 
 // Map
 ros::Subscriber map_sub;
@@ -96,12 +97,13 @@ Particle get_random_particle(float init_weight)
     return particle;
 }
 
-float normal_pdf(float x, float m, float s)
+float normalize_angle(float angle)
 {
-    static const float inv_sqrt_2pi = 0.3989422804014327;
-    float a = (x - m) / s;
+    angle = fmod(angle, (2 * M_PI));
+    if (angle > M_PI)
+        angle -= 2 * M_PI;
 
-    return inv_sqrt_2pi / s * std::exp(-0.5f * a * a);
+    return angle;
 }
 
 float get_particle_weight(const Particle& particle) 
@@ -148,9 +150,9 @@ float get_particle_weight(const Particle& particle)
             r = RAY_STEP_SIZE;
         }
         
-        total += fabs(real_distance - r);
+        total += (real_distance - r) * (real_distance - r);
+        
     }
-
     return std::exp(-total);
 }
 
@@ -232,6 +234,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
         laser_data.push_back({real_distance, ray_angle});
     }
+    laser_received = true;
 }
 
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
@@ -329,8 +332,7 @@ int main(int argc, char **argv)
         ros::spinOnce();
 
         // Only Update when robot did move enough.
-        const bool update = fabs(delta_dist) > 0.01 || fabs(delta_theta) > M_PI / 180. || force_update;
-        force_update = false;
+        bool update = laser_received && (fabs(delta_dist) > 0.01 || fabs(delta_theta) > M_PI / 180. || force_update);
 
         if (!update) 
         {
@@ -355,10 +357,13 @@ int main(int argc, char **argv)
             const float particle_weight = get_particle_weight(particle);
             particle.weight = particle_weight;
             total_weight += particle_weight;
+            ROS_INFO("Particle (%f, %f) has weight: %f", particle.x, particle.y, particle.weight);
         }
         // Reset motion
         delta_dist = 0.;
         delta_theta = 0.;
+        laser_received = false;
+        force_update = false;
 
         // Normalize weights and compute w_slow and w_fast for adaptive sampling.
         if (total_weight > 0.)
@@ -417,6 +422,7 @@ int main(int argc, char **argv)
                     if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
                 }
                 Particle particle = particles.at(particle_index);
+                ROS_INFO("Draw Particle (%f, %f) with weight: %f", particle.x, particle.y, particle.weight);
                 particle.weight = 1. / NUM_PARTICLES;
                 new_particles.push_back(particle);
             }
