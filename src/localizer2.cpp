@@ -186,7 +186,7 @@ green_fundamentals::Position particle_to_position(const Particle& particle)
 void publish_particles()
 {   
     // Position estimate
-    float x, y, theta;
+    float x, y, theta = 0.;
     for (const Particle& particle : particles)
     {
         x += particle.x * particle.weight;
