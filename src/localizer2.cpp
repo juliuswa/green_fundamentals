@@ -18,13 +18,13 @@
 #include "create_fundamentals/SensorPacket.h"
 
 // MCL Algorithm
-const int SUBSAMPLE_LASERS = 100;
+const int SUBSAMPLE_LASERS = 32;
 const int NUM_PARTICLES = 1000;
 const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
-const float RESAMPLE_STD_POS = 0.05;
-const float RESAMPLE_STD_THETA = 10 * M_PI/180.0;
+const float RESAMPLE_STD_POS = 0.03;
+const float RESAMPLE_STD_THETA = 5 * M_PI/180.0;
 
 // Adapted MCL Algorithm
 const float ALPHA_FAST = 0.1;
@@ -219,9 +219,9 @@ void publish_particles()
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
     laser_data.clear();
-    for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
+    for (int i = 50; i < SUBSAMPLE_LASERS; i++) 
     {
-        int index = i * msg->ranges.size() / SUBSAMPLE_LASERS;
+        int index = i * (msg->ranges.size()-50) / SUBSAMPLE_LASERS;
 
         float real_distance = msg->ranges[index];
         if (real_distance != real_distance) {
@@ -404,9 +404,9 @@ int main(int argc, char **argv)
         }
 
         const float w_diff = std::max(0., 1. - avg_weight / avg_weight_before);
-        ROS_INFO("w_diff = %f", w_diff);
+        ROS_INFO("w_diff = %f, avg_weight = %f, avg_weight_before = %f", w_diff, avg_weight, avg_weight_before);
         std::vector<Particle> new_particles;
-        while (new_particles.size() < NUM_PARTICLES)
+        for (int i = 0; i < NUM_PARTICLES; i++)
         {
             if (uniform_dist(generator) < w_diff)
             {
