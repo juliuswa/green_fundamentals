@@ -22,7 +22,7 @@ for category in os.listdir(VIDEO_DIR):
     for video in os.listdir(category_path):
         video_path = os.path.join(category_path, video)
         if os.path.isfile(video_path) and video_path.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv')):
-            video_dict[category].append(video_path)
+            video_dict[category].append(f"{category}/{video}")
 
 def pick_random_video(category):
     video_choices = video_dict[category]
@@ -76,7 +76,7 @@ HTML_TEMPLATE = '''
 <body>
     <h1>Current Video</h1>
     <video id="video_frame" width="560" height="315" controls autoplay loop>
-        <source src="{{ video_filename }}" type="video/mp4">
+        <source src="/videos/{{ video_filename }}" type="video/mp4">
         Your browser does not support the video tag.
     </video>
     <br>
