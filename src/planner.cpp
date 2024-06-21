@@ -53,9 +53,9 @@ STATE
 */
 
 enum Mission {
-    IDLE,
-    GOLD_RUN,
-    DRIVE_TO
+    M_IDLE,
+    M_GOLD_RUN,
+    M_DRIVE_TO
 };
 
 enum State {
@@ -69,7 +69,7 @@ enum State {
     LEAVE
 };
 State state = State::INIT;
-Mission mission = Mission::IDLE;
+Mission mission = Mission::M_IDLE;
 /*
 ###################################
 MAP
@@ -755,7 +755,7 @@ bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundame
     local_plan.clear();
     
     state = State::EXECUTE_PLAN;
-    mission = State::GOLD_RUN;
+    mission = Mission::M_GOLD_RUN;
     ROS_INFO("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
     
     return true;
@@ -818,13 +818,13 @@ void get_next_goal()
     ROS_DEBUG("getting next goal. global plan size: %ld", global_plan.size());
 
     if (global_plan.size() == 0) {
-        if (mission == Mission::GOLD_RUN) {
+        if (mission == Mission::M_GOLD_RUN) {
             state = State::LEAVE;
-            mission = Mission::DRIVE_TO;  
+            mission = Mission::M_DRIVE_TO;  
         }
         else {
             state = State::IDLE;
-            mission = Mission::IDLE;  
+            mission = Mission::M_IDLE;  
         }
 
         return;
@@ -844,8 +844,8 @@ void localize()
 {   
     if (is_localized)
     {
-        if(mission == State::GOLD_RUN) {
-            State::GOLD_RUN;
+        if(mission == Mission::M_GOLD_RUN) {
+            state = State::GOLD_RUN;
         } else {
             state = State::ALIGN;
             global_plan.clear();
@@ -914,7 +914,7 @@ void set_heliport_to_goal() {
     add_goal_front(heliport_pair.first.first, heliport_pair.first.second, GoalType::HELIPORT);
     set_local_plan_to_current_goal();
     state = State::EXECUTE_PLAN;
-    mission = Mission::DRIVE_TO;
+    mission = Mission::M_DRIVE_TO;
 }
 
 /*
