@@ -26,16 +26,12 @@ const float RAY_STEP_SIZE = 0.01;
 const float RESAMPLE_STD_POS = 0.03;
 const float RESAMPLE_STD_THETA = 5 * M_PI/180.0;
 
-// Adapted MCL Algorithm
-const float ALPHA_FAST = 0.1;
-const float ALPHA_SLOW = 0.01;
-float W_SLOW = 0.;
-float W_FAST = 0.;
-
 // Flags
 bool converged = false;
 bool force_update = true; // first localization without movement needed
 bool map_received = false;
+bool laser_received = false;
+bool sensor_received = false;
 bool is_first_encoder_measurement = true;
 
 // Particles
@@ -44,9 +40,8 @@ struct Particle {
 };
 std::vector<Particle> particles;
 
+// Lasers
 std::vector<std::pair<float, float>> laser_data;
-bool laser_received = false;
-bool sensor_received = false;
 
 // Map
 ros::Subscriber map_sub;
@@ -403,7 +398,7 @@ int main(int argc, char **argv)
             cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
         }
 
-        const float w_diff = std::max(0., 1. - avg_weight / avg_weight_before);
+        float w_diff = std::max(0., 1. - avg_weight / avg_weight_before);
         ROS_INFO("w_diff = %f, avg_weight = %f, avg_weight_before = %f", w_diff, avg_weight, avg_weight_before);
         std::vector<Particle> new_particles;
         for (int i = 0; i < NUM_PARTICLES; i++)
@@ -415,7 +410,7 @@ int main(int argc, char **argv)
             } 
             else
             {
-                const float rand = uniform_dist(generator);
+                float rand = uniform_dist(generator);
                 int particle_index;
                 for(particle_index = 0; particle_index < particles.size(); particle_index++)
                 {
