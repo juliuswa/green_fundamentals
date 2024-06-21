@@ -51,6 +51,13 @@ ros::Publisher target_pub, goal_pub;
 STATE
 ###################################
 */
+
+enum Mission {
+    IDLE,
+    GOLD_RUN,
+    DRIVE_TO
+};
+
 enum State {
     INIT,
     LOCALIZE,
@@ -58,10 +65,11 @@ enum State {
     IDLE,
     EXECUTE_PLAN,
     NEXT_GOAL,
-    GOLD_RUN
+    GOLD_RUN,
+    LEAVE
 };
 State state = State::INIT;
-State mission = State::IDLE;
+Mission mission = Mission::IDLE;
 /*
 ###################################
 MAP
@@ -387,10 +395,27 @@ std::vector<std::vector<Grid_Coords>> compute_gold_permutations()
     return gold_permutations;
 }
 
+std::pair<Grid_Coords, int> get_best_heliport(const Grid_Coords& from)
+{
+    int best_endpoint_cost = 100000;
+    Grid_Coords best_end;
+    for (Grid_Coords pickup : pickups)
+    {   
+        int endpoint_cost = shortest_paths_precomputed[{from, pickup}].size();
+        if (endpoint_cost < best_endpoint_cost)
+        {
+            best_endpoint_cost = endpoint_cost;
+            best_end = pickup;
+        }
+    }
+
+    return {best_end, best_endpoint_cost};
+}
+
 std::deque<Goal> get_best_plan(const Cell& current_cell)
 {
     int best_cost = 100000;
-    std::deque<Goal> best_path;
+    std::vector<Grid_Coords> best_path;
 
     // Precompute gold permutations
     std::vector<std::vector<Grid_Coords>> gold_permutations = compute_gold_permutations();
@@ -405,42 +430,28 @@ std::deque<Goal> get_best_plan(const Cell& current_cell)
             cost += shortest_paths_precomputed[{path[i], path[i+1]}].size();
         }
         
-        Goal best_endpoint;
-        best_endpoint.type = GoalType::HELIPORT;
-        int best_endpoint_cost = 100000;
-        for (Grid_Coords pickup : pickups)
-        {   
-            int endpoint_cost = shortest_paths_precomputed[{path.back(), pickup}].size();
-            if (endpoint_cost < best_endpoint_cost)
-            {
-                best_endpoint.col = pickup.first;
-                best_endpoint.row = pickup.second;
-                best_endpoint_cost = endpoint_cost;
-            }
-        }
+        auto best_endpoint_pair = get_best_heliport(path.back());
 
-        cost += best_endpoint_cost;
+        cost += best_endpoint_pair.second;
 
         if (cost < best_cost)
         {
             best_cost = cost;
-            std::deque<Goal> temp;
-            for(Grid_Coords gold : path) {
-                Goal new_gold;
-                new_gold.col = gold.first;
-                new_gold.row = gold.second;
-                new_gold.type = GoalType::GOLD;
-                temp.push_back(new_gold);
-            }
-            temp.push_back(best_endpoint);
-            best_path = temp;
+            best_path = path;
         }
     }
-    for(Goal goal : best_path) {
-        ROS_INFO("Type: %d, Col: %d,  Row: %d", goal.type, goal.col, goal.row);
+
+    std::deque<Goal> best_path_deq;
+    for(Grid_Coords gold : best_path) {
+        Goal new_gold;
+        new_gold.col = gold.first;
+        new_gold.row = gold.second;
+        new_gold.type = GoalType::GOLD;
+        best_path_deq.push_back(new_gold);
+        ROS_INFO("Type: %d, Col: %d,  Row: %d", gold.first, gold.second);
     }
 
-    return best_path;
+    return best_path_deq;
 }
 
 void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
@@ -750,10 +761,42 @@ bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundame
     return true;
 }
 
+void collect_gold() {
+    int index;
+
+    for(int i = 0; i < golds.size(); i++) {
+        if(global_plan.front().col == golds[i].first && global_plan.front().row == golds[i].second) {
+            index = i;
+            break;
+        }
+    }
+
+    if (index != index) {
+        ROS_WARN("Goal (%d, %d) should be gold but is not listed in golds", global_plan.front().col, global_plan.front().row);
+    }
+
+    ROS_INFO("Collecting gold at position: %d, %d", golds[index].first, golds[index].second);
+
+    std::swap(golds[index], golds.back());
+    golds.pop_back();
+
+    set_video(0);
+    ros::Duration(5.).sleep();
+}
+
 void execute_local_plan()
 {
     if (local_plan.empty())  
     {
+        if (global_plan.front().type == GoalType::GOLD) {
+            collect_gold();
+        }
+        else if (global_plan.front().type == GoalType::HELIPORT)
+        {
+            set_video(1);
+            ros::Duration(5.).sleep();
+        }
+
         state = State::NEXT_GOAL;
         return;
     }
@@ -775,32 +818,16 @@ void get_next_goal()
     ROS_DEBUG("getting next goal. global plan size: %ld", global_plan.size());
 
     if (global_plan.size() == 0) {
-        state = State::IDLE;
-        mission = State::IDLE;  
-    }
-    
-    if (global_plan.front().type == GoalType::GOLD) {
-        int index;
-
-        for(int i = 0; i < golds.size(); i++) {
-            if(global_plan.front().col == golds[i].first && global_plan.front().row == golds[i].second) {
-                index = i;
-                break;
-            }
+        if (mission == Mission::GOLD_RUN) {
+            state = State::LEAVE;
+            mission = Mission::DRIVE_TO;  
+        }
+        else {
+            state = State::IDLE;
+            mission = Mission::IDLE;  
         }
 
-        if (index != index) {
-            ROS_WARN("Goal (%d, %d) should be gold but is not listed in golds", global_plan.front().col, global_plan.front().row);
-        }
-
-        ROS_INFO("Collecting gold at position: %d, %d", golds[index].first, golds[index].second);
-
-        std::swap(golds[index], golds.back());
-        golds.pop_back();
-
-        set_video(0);
-        ros::Duration(5.).sleep();
-        set_video(3);
+        return;
     }
 
     global_plan.pop_front();
@@ -881,6 +908,15 @@ void align()
     local_plan.clear();
 }
 
+void set_heliport_to_goal() {
+    ROS_INFO("Driving to heliport");
+    auto heliport_pair = get_best_heliport({my_position.col, my_position.row});
+    add_goal_front(heliport_pair.first.first, heliport_pair.first.second, GoalType::HELIPORT);
+    set_local_plan_to_current_goal();
+    state = State::EXECUTE_PLAN;
+    mission = Mission::DRIVE_TO;
+}
+
 /*
 ###################################
 MAIN LOOP
@@ -957,6 +993,9 @@ int main(int argc, char **argv)
 
             case State::GOLD_RUN:
                 get_next_goal();
+                break;
+            case State::LEAVE:
+                set_heliport_to_goal();
                 break;
 
             default:
