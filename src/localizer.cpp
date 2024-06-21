@@ -18,21 +18,20 @@
 #include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
 
-#define SUBSAMPLE_LASERS 50
+#define SUBSAMPLE_LASERS 24
 #define RAY_STEP_SIZE 0.01
 
 #define MAX_PARTICLES 4096
 
-#define PARTICLES_PER_BIN 128
+#define PARTICLES_PER_BIN 64
 #define NUM_BINS 1296 // 36x36
-#define FILLED_BIN_THRESHOLD 8
+#define FILLED_BIN_THRESHOLD 4
 
 #define SPREAD_PARTICLE_PART 0.1
-#define RANDOM_PARTICLE_PART 0.05
+#define RANDOM_PARTICLE_PART 0.1
 
 #define SPREAD_WEIGHT 0.10
-#define RANDOM_WEIGHT 0.03
-
+#define RANDOM_WEIGHT 0.02
 #define RESAMPLE_STD_POS 0.04
 #define RESAMPLE_STD_THETA 0.08
 
@@ -119,6 +118,7 @@ int get_bin_for_position(int i) {
 void set_particle(Particle particle, int index) {
     particles[index] = particle;
     int bin = get_bin_for_position(index);
+    //ROS_DEBUG("bin index: %d, max num bins: %d", bin, NUM_BINS);
     bins[bin] += 1;
 }
 
@@ -335,6 +335,7 @@ void resample_particles()
     reset_bins();
     for (int i = 0; i < new_sample_size; i++) 
     {
+        //ROS_DEBUG("new sample size: %d, max paricles: %d", new_sample_size, MAX_PARTICLES);
         set_particle(new_particles[i], i);
     }
     
@@ -452,7 +453,7 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "mc_localization");
     ros::NodeHandle n;
 
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
     }
     
@@ -481,7 +482,7 @@ int main(int argc, char **argv)
     pose_pub = n.advertise<geometry_msgs::Pose>("best_pose", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
 
-    ros::Rate loop_rate(15);
+    ros::Rate loop_rate(30);
     int it = 0;
     while(ros::ok()) {
 
@@ -516,7 +517,7 @@ int main(int argc, char **argv)
         auto d3 = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
         auto d4 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
 
-        ROS_DEBUG("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
+        ROS_INFO("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
         ROS_INFO("%s", message.c_str());
         message = "";
 
