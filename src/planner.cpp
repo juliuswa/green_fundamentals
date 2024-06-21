@@ -20,7 +20,7 @@
 #include "robot_constants.h"
 
 #define REASONABLE_DISTANCE 1.
-#define LOCALIZATION_POINTS_THRESHOLD 3
+#define LOCALIZATION_POINTS_THRESHOLD 4
 
 using Grid_Coords = std::pair<int, int>;
 using KeyType = std::pair<Grid_Coords, Grid_Coords>;
@@ -90,10 +90,10 @@ std::unordered_map<KeyType, std::vector<Grid_Coords>, key_hash> shortest_paths_p
 std::vector<std::vector<bool>> visited_cells;
 
 void reset_visited_cells() {
-    for (int row = 0; row < visited_cells.size(); row++) {
-        for (int col = 0; col < visited_cells[row].size(); col++)
+    for (int col = 0; col < visited_cells.size(); col++) {
+        for (int row = 0; row < visited_cells[col].size(); row++)
         {
-            visited_cells[row][col] = false;
+            visited_cells[col][row] = false;
         }
     }
 }
@@ -169,7 +169,8 @@ void print_state()
 std::pair<int, int> position_to_grid_cell(float x, float y) {
     int col = floor(x / CELL_LENGTH);
     int row = floor(y / CELL_LENGTH);
-
+    col = std::max(0, std::min(col, grid_cols-1));
+    row = std::max(0, std::min(row, grid_rows-1));
     return {col, row};
 }
 
@@ -607,11 +608,13 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         reset_visited_cells();
         localization_points = 0;
         local_plan.clear();
+        ROS_INFO("Localization points %d", localization_points);
     }    
-    else if (!visited_cells[my_position.row][my_position.row])
+    else if (!visited_cells[my_position.col][my_position.row])
     {
-        visited_cells[my_position.row][my_position.row] = true;
+        visited_cells[my_position.col][my_position.row] = true;
         localization_points += 1;
+        ROS_INFO("Localization points %d", localization_points);
     }
     
     bool was_localized_before = is_localized;
@@ -874,7 +877,7 @@ void localize()
             int rand_row = rand() % grid_rows;
             int rand_col = rand() % grid_cols;
 
-            if (visited_cells[rand_row][rand_col]) {
+            if (visited_cells[rand_col][rand_row]) {
                 continue;
             }
 
