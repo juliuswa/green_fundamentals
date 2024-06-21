@@ -8,22 +8,29 @@ from threading import Thread, Event
 import signal
 import sys
 import os
+import random
 
 app = Flask(__name__)
 socketio = SocketIO(app)
 
 VIDEO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
 
-video_dict = {
-    0: "money.mp4",
-    1: "pickup.mp4",
-    2: "lost.mp4",
-    3: "localized.mp4",
-    4: "wandering.mp4"
-}
+video_dict = {}
+for category in os.listdir(VIDEO_DIR):
+    category_path = os.path.join(VIDEO_DIR, category)
+    video_dict[category] = []
+    for video in os.listdir(category_path):
+        video_path = os.path.join(category_path, video)
+        if os.path.isfile(video_path) and video_path.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv')):
+            video_dict[category].append(video_path)
+
+def pick_random_video(category):
+    video_choices = video_dict[category]
+    random_video = random.choice(video_choices)
+    return random_video
 
 # Global variable to store the current YouTube video URL
-current_video = video_dict[2]
+current_video = pick_random_video("idle")
 
 # HTML template for the web page
 HTML_TEMPLATE = '''
@@ -88,8 +95,16 @@ def serve_video(filename):
 
 def handle_set_video(req):
     global current_video
-    if req.state in video_dict.keys():
-        current_video = video_dict[req.state]
+    if req.state == 0:
+        current_video = pick_random_video("driving")
+    elif req.state == 1:
+        current_video = pick_random_video("idle")
+    elif req.state == 2:
+        current_video = pick_random_video("localizing")
+    elif req.state == 3:
+        current_video = pick_random_video("money")
+    elif req.state == 4:
+        current_video = pick_random_video("pickup")
     else:
         return SetVideoResponse(success=False)
     

@@ -105,10 +105,11 @@ UTILITY FUNCTIONS
 */
 
 /*
-    0 = get_money 
-    1 = pickup 
-    2 = is_lost 
-    3 = is_localized
+    0 = driving
+    1 = idle
+    2 = localizing 
+    3 = money
+    4 = pickup
 */
 void set_video(int state)
 {
@@ -129,29 +130,36 @@ void print_state()
     switch (state)
     {
         case State::IDLE:
+            set_video(1);
             ROS_INFO("State = IDLE");
             break;
         
         case State::LOCALIZE:
+            set_video(2);
             ROS_INFO("State = LOCALIZE");
             break;
 
         case State::ALIGN:
+            set_video(0);
             ROS_INFO("State = ALIGN");
             break;
 
         case State::EXECUTE_PLAN:
-            set_video(4);
+            set_video(0);
             ROS_INFO("State = EXECUTE_PLAN");
             break;
 
         case State::NEXT_GOAL:
-                ROS_INFO("State = NEXT_GOAL");
-                break;
+            ROS_INFO("State = NEXT_GOAL");
+            break;
 
         case State::GOLD_RUN:
-                ROS_INFO("State = GOLD_RUN");
-                break;
+            ROS_INFO("State = GOLD_RUN");
+            break;
+        
+        case State::LEAVE:
+            ROS_INFO("State = LEAVE");
+            break;
         
         default:
             ROS_INFO("State not knows.");
@@ -612,11 +620,6 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     if (!is_localized)
     {   
         state = State::LOCALIZE;
-        // TODO check
-        if (was_localized_before)
-        {
-            set_video(2);
-        }
     }
 }
 
@@ -786,7 +789,7 @@ void collect_gold() {
     std::swap(golds[index], golds.back());
     golds.pop_back();
 
-    set_video(0);
+    set_video(3);
     ros::Duration(5.).sleep();
 }
 
@@ -799,7 +802,7 @@ void execute_local_plan()
         }
         else if (global_plan.front().type == GoalType::HELIPORT)
         {
-            set_video(1);
+            set_video(4);
             ros::Duration(5.).sleep();
         }
 
@@ -857,8 +860,6 @@ void localize()
             global_plan.clear();
             local_plan.clear();
         }
-        // TODO check
-        set_video(3);
         return;
     }
 
@@ -1002,7 +1003,7 @@ int main(int argc, char **argv)
                 break;
             case State::LEAVE:
                 set_heliport_to_goal();
-                    break;
+                break;
 
             default:
                 ROS_INFO("State not known.");
