@@ -76,7 +76,7 @@ HTML_TEMPLATE = '''
 <body>
     <h1>Current Video</h1>
     <video id="video_frame" width="560" height="315" controls autoplay loop>
-        <source src="/videos/{{ video_filename }}" type="video/mp4">
+        <source src="{{ video_filename }}" type="video/mp4">
         Your browser does not support the video tag.
     </video>
     <br>
