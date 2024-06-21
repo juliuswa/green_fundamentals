@@ -19,7 +19,7 @@
 
 // MCL Algorithm
 const int SUBSAMPLE_LASERS = 32;
-const int NUM_PARTICLES = 1000;
+const int NUM_PARTICLES = 500;
 const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
@@ -118,7 +118,7 @@ float get_particle_weight(const Particle& particle)
         if (map_data[grid_index.first][grid_index.second] != 0) return 0.;
     }
     
-    float q = 1.;
+    float total = 0.;
     for (const auto& laser : laser_data) 
     {
         float real_distance = laser.first;
@@ -148,10 +148,10 @@ float get_particle_weight(const Particle& particle)
             r = RAY_STEP_SIZE;
         }
         
-        q *= normal_pdf(real_distance, r, 0.1);
+        total += fabs(real_distance - r);
     }
 
-    return q;
+    return std::exp(-total);
 }
 
 geometry_msgs::Pose particle_to_viz_pose(const Particle& particle)
@@ -307,7 +307,6 @@ int main(int argc, char **argv)
     }
     ROS_INFO("Map received.");
     
-    best_particle_viz_pub = n.advertise<geometry_msgs::Pose>("best_particle", 1);
     particle_array_viz_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
     
@@ -338,7 +337,9 @@ int main(int argc, char **argv)
             publish_particles();
             continue;
         }
-        
+
+        ROS_INFO("Updating Particles");
+
         float total_weight = 0.;
         for (Particle& particle : particles)
         {
@@ -389,47 +390,39 @@ int main(int argc, char **argv)
         publish_particles();
 
         // Resample
-        float effective_sample_size = 0.;
-        for (const Particle& particle : particles)
+        ROS_INFO("Resampling") ; 
+        float cumulative_weights[particles.size() + 1];
+        cumulative_weights[0] = 0.;
+        for (int i = 0; i < particles.size(); i++)
         {
-            effective_sample_size += particle.weight * particle.weight;
+            cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
         }
-        if (1. / effective_sample_size < particles.size() / 5.)
-        {      
-            float cumulative_weights[particles.size() + 1];
-            cumulative_weights[0] = 0.;
-            for (int i = 0; i < particles.size(); i++)
-            {
-                cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
-            }
 
-            const float w_diff = std::max(0., 1. - W_FAST / W_SLOW);
+        const float w_diff = std::max(0., 1. - W_FAST / W_SLOW);
 
-            std::vector<Particle> new_particles;
-            while (new_particles.size() < NUM_PARTICLES)
+        std::vector<Particle> new_particles;
+        while (new_particles.size() < NUM_PARTICLES)
+        {
+            if (uniform_dist(generator) < w_diff)
             {
-                if (uniform_dist(generator) < w_diff)
+                Particle particle = get_random_particle(1./NUM_PARTICLES);
+                new_particles.push_back(particle);
+            } 
+            else
+            {
+                const float rand = uniform_dist(generator);
+                int particle_index;
+                for(particle_index = 0; particle_index < particles.size(); particle_index++)
                 {
-                    // TODO Make sure that the random particle kinda conforms to the measurement.
-                    Particle particle = get_random_particle(1./NUM_PARTICLES);
-                    new_particles.push_back(particle);
-                } 
-                else
-                {
-                    const float rand = uniform_dist(generator);
-                    int particle_index;
-                    for(particle_index = 0; particle_index < NUM_PARTICLES; particle_index++)
-                    {
-                        if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
-                    }
-                    Particle particle = particles.at(particle_index);
-                    particle.weight = 1. / NUM_PARTICLES;
-                    new_particles.push_back(particle);
+                    if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
                 }
+                Particle particle = particles.at(particle_index);
+                particle.weight = 1. / NUM_PARTICLES;
+                new_particles.push_back(particle);
             }
-
-            particles = new_particles;
         }
+
+        particles = new_particles;
     }
 
     return 0;

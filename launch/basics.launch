@@ -1,5 +1,9 @@
 <launch>
 
+    <node pkg="create_fundamentals" type="driver.py" name="driver" />
+
+    <include file="$(find create_fundamentals)/laser.launch" />
+
     <node pkg="green_fundamentals" type="publish_map.py" name="publish_map" output="screen" />
 
     <node pkg="green_fundamentals" type="map_generator" name="map_generator" output="screen" />

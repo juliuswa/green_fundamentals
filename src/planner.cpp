@@ -675,6 +675,10 @@ bool move_to_position_callback(green_fundamentals::MoveToPosition::Request  &req
         state = State::EXECUTE_PLAN;
         ROS_INFO("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
     }
+    else
+    {
+        state = State::IDLE;
+    }
     
     res.success = success;
     return success;
@@ -689,6 +693,7 @@ bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundame
     current_cell.col = my_position.col;
 
     global_plan = get_best_plan(current_cell);
+    local_plan.clear();
     
     state = State::EXECUTE_PLAN;
     mission = State::GOLD_RUN;
@@ -744,6 +749,7 @@ void get_next_goal()
 
         set_video(0);
         ros::Duration(5.).sleep();
+        set_video(3);
     }
 
     global_plan.pop_front();
@@ -764,9 +770,9 @@ void localize()
             State::GOLD_RUN;
         } else {
             state = State::ALIGN;
+            global_plan.clear();
         }
         local_plan.clear();
-        global_plan.clear();
         // TODO check
         set_video(3);
         return;
