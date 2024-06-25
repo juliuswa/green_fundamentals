@@ -26,7 +26,6 @@ def get_key(settings, timeout):
     return key
 
 def call_diff_drive_service(left_velocity, right_velocity):
-    rospy.loginfo("Cell diff drive")
     return diff_drive(DiffDriveRequest(left=left_velocity, right=right_velocity))
 
 if __name__ == "__main__":
