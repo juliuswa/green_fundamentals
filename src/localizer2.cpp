@@ -36,7 +36,7 @@ bool is_first_encoder_measurement = true;
 
 // Particles
 struct Particle {
-    float x, y, theta, weight;
+    float x, y, theta, weight = 0.;
 };
 std::vector<Particle> particles;
 
@@ -186,18 +186,17 @@ green_fundamentals::Position particle_to_position(const Particle& particle)
 void publish_particles()
 {   
     // Position estimate
-    float x, y, theta = 0.;
+    Particle best_particle;
     for (const Particle& particle : particles)
     {
-        x += particle.x * particle.weight;
-        y += particle.y * particle.weight;
-        theta += particle.theta * particle.weight;
+        if (particle.weight > best_particle.weight)
+            best_particle = particle;
     }
 
     green_fundamentals::Position position;
-    position.x = x;
-    position.y = y;
-    position.theta = theta;
+    position.x = best_particle.x;
+    position.y = best_particle.y;
+    position.theta = best_particle.theta;
     position_pub.publish(position);
 
     // Visualizations
@@ -246,12 +245,13 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
         is_first_encoder_measurement = false;
         return;
     }
-
+    /*
     if (last_left == current_left && last_right == current_right)
     {
         sensor_received = false;
         return;
     }
+    */
 
     float distance_left = (current_left - last_left) * WHEEL_RADIUS;
     float distance_right = (current_right - last_right) * WHEEL_RADIUS; 
@@ -362,7 +362,7 @@ int main(int argc, char **argv)
             const float particle_weight = get_particle_weight(particle);
             particle.weight = particle_weight;
             total_weight += particle_weight;
-            ROS_DEBUG("Particle (%f, %f) has weight: %f", particle.x, particle.y, particle.weight);
+            //ROS_INFO("Particle (%f, %f) has weight: %f", particle.x, particle.y, particle.weight);
         }
         // Reset motion
         sensor_received = false;
@@ -391,49 +391,48 @@ int main(int argc, char **argv)
         publish_particles();
 
         // Resample
-        float effective_sample_size = 0.;
-        for (const Particle& particle : particles)
-        {
-            effective_sample_size += particle.weight * particle.weight;
+        ROS_INFO("Resampling"); 
+        std::vector<float> cum_sum(particles.size());
+        cum_sum[0] = particles[0].weight;
+        for (int i = 1; i < particles.size(); ++i) {
+            cum_sum[i] = cum_sum[i - 1] + particles[i].weight;
         }
-        effective_sample_size = 1 / effective_sample_size;
-        if (effective_sample_size < particles.size()/2)
-        {
-            ROS_INFO("Resampling") ; 
-            float cumulative_weights[particles.size() + 1];
-            cumulative_weights[0] = 0.;
-            for (int i = 0; i < particles.size(); i++)
-            {
-                cumulative_weights[i+1] = cumulative_weights[i] + particles[i].weight;
-            }
 
-            float w_diff = std::max(0., 1. - avg_weight_short / avg_weight_long);
-            ROS_INFO("w_diff = %f, avg_weight_short = %f, avg_weight_long = %f", w_diff, avg_weight_short, avg_weight_long);
-            std::vector<Particle> new_particles;
-            for (int i = 0; i < NUM_PARTICLES; i++)
+        float w_diff = std::max(0., 1. - avg_weight_short / avg_weight_long);
+        //ROS_INFO("w_diff = %f, avg_weight_short = %f, avg_weight_long = %f", w_diff, avg_weight_short, avg_weight_long);
+        std::vector<Particle> new_particles;
+        for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            if (uniform_dist(generator) < w_diff)
             {
-                if (uniform_dist(generator) < w_diff)
-                {
-                    Particle particle = get_random_particle(1./NUM_PARTICLES);
-                    new_particles.push_back(particle);
-                } 
-                else
+                ROS_INFO("Sampling Random"); 
+                Particle particle = get_random_particle(1./NUM_PARTICLES);
+                new_particles.push_back(particle);
+            } 
+            else
+            {
+                //ROS_INFO("Sampling from Particles"); 
+                while (true)
                 {
                     float rand = uniform_dist(generator);
-                    int particle_index;
-                    for(particle_index = 0; particle_index < particles.size(); particle_index++)
+                    int particle_index = 0;
+                    while (cum_sum[particle_index] < rand && particle_index < particles.size())
                     {
-                        if((cumulative_weights[particle_index] <= rand) && (rand < cumulative_weights[particle_index+1])) break;
+                        particle_index++;
                     }
-                    Particle particle = particles.at(particle_index);
-                    ROS_DEBUG("Draw Particle (%f, %f) with weight: %f", particle.x, particle.y, particle.weight);
-                    particle.weight = 1. / NUM_PARTICLES;
-                    new_particles.push_back(particle);
+                    if (particle_index < particles.size())
+                    {
+                        Particle particle = particles.at(particle_index);
+                        //ROS_INFO("Draw Particle (%f, %f) with weight: %f", particle.x, particle.y, particle.weight);
+                        particle.weight = 1. / NUM_PARTICLES;
+                        new_particles.push_back(particle);
+                        break;
+                    }
                 }
             }
-
-            particles = new_particles;
         }
+
+        particles = new_particles;
     }
 
     return 0;

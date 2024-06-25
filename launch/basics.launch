@@ -1,6 +1,6 @@
 <launch>
 
-    <node pkg="create_fundamentals" type="driver.py" name="driver" />
+    <node pkg="create_fundamentals" type="driver.py" name="driver" output="screen"/>
 
     <include file="$(find create_fundamentals)/laser.launch" />
 
