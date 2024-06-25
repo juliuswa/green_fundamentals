@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
 import rospy
-from std_srvs.srv import Empty
 from create_fundamentals.srv import DiffDrive, DiffDriveRequest
 import sys, select, termios, tty
 
 # Dictionary to store keyboard mappings to velocities
-MAX_VEL = 14.
+MAX_VEL = 10.
 key_mapping = {
     'w': [1, 1],
     's': [-1, -1],
@@ -15,18 +14,20 @@ key_mapping = {
     'x': [0, 0]
 }
 
-def get_key():
+def get_key(settings, timeout):
     tty.setraw(sys.stdin.fileno())
-    select.select([sys.stdin], [], [], 0)
-    key = sys.stdin.read(1)
+    # sys.stdin.read() returns a string on Linux
+    rlist, _, _ = select.select([sys.stdin], [], [], timeout)
+    if rlist:
+        key = sys.stdin.read(1)
+    else:
+        key = ''
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
     return key
 
 def call_diff_drive_service(left_velocity, right_velocity):
-    try:
-        return diff_drive(DiffDriveRequest(left=left_velocity, right=right_velocity))
-    except rospy.ServiceException as e:
-        rospy.logerr("Service call failed: %s" % e)
+    rospy.loginfo("Cell diff drive")
+    return diff_drive(DiffDriveRequest(left=left_velocity, right=right_velocity))
 
 if __name__ == "__main__":
     settings = termios.tcgetattr(sys.stdin)
@@ -38,7 +39,7 @@ if __name__ == "__main__":
 
     try:
         while not rospy.is_shutdown():
-            key = get_key()
+            key = get_key(settings, 0.5)
             if key in key_mapping:
                 left, right = key_mapping[key]
                 call_diff_drive_service(left * MAX_VEL, right * MAX_VEL)

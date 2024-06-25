@@ -1,8 +1,8 @@
 <launch>
 
-    <node pkg="create_fundamentals" type="driver.py" name="driver" output="screen"/>
+    <!-- <node pkg="create_fundamentals" type="driver.py" name="driver" output="screen"/> -->
 
-    <include file="$(find create_fundamentals)/laser.launch" />
+    <!-- <include file="$(find create_fundamentals)/laser.launch" /> -->
 
     <node pkg="green_fundamentals" type="publish_map.py" name="publish_map" output="screen" />
 
