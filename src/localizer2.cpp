@@ -19,12 +19,12 @@
 
 // MCL Algorithm
 const int SUBSAMPLE_LASERS = 32;
-const int NUM_PARTICLES = 1000;
+const int NUM_PARTICLES = 10; // 1000;
 const float RAY_STEP_SIZE = 0.01;
 
 // Motion Model 
-const float RESAMPLE_STD_POS = 0.03;
-const float RESAMPLE_STD_THETA = 5 * M_PI/180.0;
+const float RESAMPLE_STD_POS = 0.01;
+const float RESAMPLE_STD_THETA = M_PI/180.0;
 
 // Flags
 bool converged = false;
@@ -146,7 +146,7 @@ float get_particle_weight(const Particle& particle)
             r = RAY_STEP_SIZE;
         }
         
-        total += (real_distance - r) * (real_distance - r);
+        total += fabs(real_distance - r);
         
     }
     return std::exp(-total);
@@ -234,8 +234,6 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 {   
-    last_left = current_left;
-    last_right = current_right;
     current_left = msg->encoderLeft;
     current_right = msg->encoderRight;
     if (is_first_encoder_measurement) {
@@ -245,13 +243,12 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
         is_first_encoder_measurement = false;
         return;
     }
-    /*
+    
     if (last_left == current_left && last_right == current_right)
     {
         sensor_received = false;
         return;
     }
-    */
 
     float distance_left = (current_left - last_left) * WHEEL_RADIUS;
     float distance_right = (current_right - last_right) * WHEEL_RADIUS; 
@@ -261,13 +258,16 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
     for (Particle& particle : particles)
     {
         // Motion Update
-        float x_delta = distance * cos(particle.theta);
-        float y_delta = distance * sin(particle.theta);
+        float x_delta = distance * cos(particle.theta + angle_change/2);
+        float y_delta = distance * sin(particle.theta + angle_change/2);
 
         particle.x += x_delta + normal_dist_pos(generator);
         particle.y += y_delta + normal_dist_pos(generator);
         particle.theta = normalize_angle(particle.theta + angle_change + normal_dist_theta(generator));
     }
+
+    last_left = current_left;
+    last_right = current_right;
 
     sensor_received = true;
 }
@@ -353,7 +353,7 @@ int main(int argc, char **argv)
             continue;
         }
 
-        ROS_INFO("Updating Weights");
+        // ROS_INFO("Updating Weights");
         // Motion update already happened in callback
         // Sensor update
         float total_weight = 0.;
@@ -391,7 +391,7 @@ int main(int argc, char **argv)
         publish_particles();
 
         // Resample
-        ROS_INFO("Resampling"); 
+        // ROS_INFO("Resampling"); 
         std::vector<float> cum_sum(particles.size());
         cum_sum[0] = particles[0].weight;
         for (int i = 1; i < particles.size(); ++i) {
@@ -399,7 +399,7 @@ int main(int argc, char **argv)
         }
 
         float w_diff = std::max(0., 1. - avg_weight_short / avg_weight_long);
-        //ROS_INFO("w_diff = %f, avg_weight_short = %f, avg_weight_long = %f", w_diff, avg_weight_short, avg_weight_long);
+        ROS_INFO("w_diff = %f, avg_weight_short = %f, avg_weight_long = %f", w_diff, avg_weight_short, avg_weight_long);
         std::vector<Particle> new_particles;
         for (int i = 0; i < NUM_PARTICLES; i++)
         {
@@ -425,6 +425,9 @@ int main(int argc, char **argv)
                         Particle particle = particles.at(particle_index);
                         //ROS_INFO("Draw Particle (%f, %f) with weight: %f", particle.x, particle.y, particle.weight);
                         particle.weight = 1. / NUM_PARTICLES;
+                        particle.x += normal_dist_pos(generator);
+                        particle.y += normal_dist_pos(generator);
+                        particle.theta = normalize_angle(particle.theta + normal_dist_theta(generator));
                         new_particles.push_back(particle);
                         break;
                     }

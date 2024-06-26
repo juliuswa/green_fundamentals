@@ -5,7 +5,7 @@ from create_fundamentals.srv import DiffDrive, DiffDriveRequest
 import sys, select, termios, tty
 
 # Dictionary to store keyboard mappings to velocities
-MAX_VEL = 10.
+MAX_VEL = 5.
 key_mapping = {
     'w': [1, 1],
     's': [-1, -1],
