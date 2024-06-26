@@ -203,21 +203,21 @@ void publish_particles()
     particle_array_viz_pub.publish(pose_array);
 }
 
-std::vector<std::vector<int>> initialize_bins2d(int x_size, int y_size, int initial_value = 0) {
+std::vector<std::vector<bool>> initialize_bins2d(int x_size, int y_size) {
     // Create a 3D vector with the given dimensions and initial value
-    std::vector<std::vector<std::vector<int>>> vec2d(
-        x_size, std::vector<int>(y_size, initial_value)
+    std::vector<std::vector<bool>> vec2d(
+        x_size, std::vector<bool>(y_size, false)
     );
 
     return vec2d;
 }
 
-std::vector<std::vector<std::vector<int>>> initialize_bins3d(int x_size, int y_size, int z_size, int initial_value = 0) {
+std::vector<std::vector<std::vector<bool>>> initialize_bins3d(int x_size, int y_size, int z_size) {
     // Create a 3D vector with the given dimensions and initial value
-    std::vector<std::vector<std::vector<int>>> vec3d(
-        x_size, std::vector<std::vector<int>>(
-            y_size, std::vector<int>(
-                z_size, initial_value
+    std::vector<std::vector<std::vector<bool>>> vec3d(
+        x_size, std::vector<std::vector<bool>>(
+            y_size, std::vector<bool>(
+                z_size, false
             )
         )
     );
@@ -520,7 +520,8 @@ int main(int argc, char **argv)
     particles.clear();
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        Particle particle = get_random_particle(1./NUM_PARTICLES);
+        Particle particle = get_random_particle();
+        particle.weight = 1./NUM_PARTICLES;
         particles.push_back(particle);
     }
 
