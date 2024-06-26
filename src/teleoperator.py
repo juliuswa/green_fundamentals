@@ -42,7 +42,6 @@ if __name__ == "__main__":
             if key in key_mapping:
                 left, right = key_mapping[key]
                 call_diff_drive_service(left * MAX_VEL, right * MAX_VEL)
-                rospy.loginfo("Left Velocity: %s, Right Velocity: %s" % (left, right))
             elif key == '\x03':  # CTRL+C to quit
                 break
     except Exception as e:
