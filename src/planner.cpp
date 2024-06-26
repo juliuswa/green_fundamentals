@@ -200,6 +200,56 @@ std::vector<Grid_Coords> get_neighbors(const Cell& cell)
         neighbors.push_back({col + 1, row});
     }
 
+    // Check for diagonal cells
+    
+    // Up-Left
+    if (!cell.wall_up && row < grid_rows - 1 && !cell.wall_left && col > 0) {
+        // Check walls of other cells
+        const Cell& up_cell = cell_grid[col][row+1];
+        const Cell& left_cell = cell_grid[col-1][row];
+
+        if (!up_cell.wall_left && !left_cell.wall_up)
+        {
+            neighbors.push_back({col-1, row+1});
+        }
+    }
+
+    // Up-Right
+    if (!cell.wall_up && row < grid_rows - 1 && !cell.wall_right && col < grid_cols - 1) {
+        // Check walls of other cells
+        const Cell& up_cell = cell_grid[col][row+1];
+        const Cell& right_cell = cell_grid[col+1][row];
+
+        if (!up_cell.wall_right && !right_cell.wall_up)
+        {
+            neighbors.push_back({col+1, row+1});
+        }
+    }
+
+    // Down-Left
+    if (!cell.wall_down && row > 0 && !cell.wall_left && col > 0) {
+        // Check walls of other cells
+        const Cell& down_cell = cell_grid[col][row-1];
+        const Cell& left_cell = cell_grid[col-1][row];
+
+        if (!down_cell.wall_left && !left_cell.wall_down)
+        {
+            neighbors.push_back({col-1, row-1});
+        }
+    }
+
+    // Down-Right
+    if (!cell.wall_down && row > 0 && !cell.wall_right && col < grid_cols - 1) {
+        // Check walls of other cells
+        const Cell& down_cell = cell_grid[col][row-1];
+        const Cell& right_cell = cell_grid[col+1][row];
+
+        if (!down_cell.wall_right && !right_cell.wall_down)
+        {
+            neighbors.push_back({col+1, row-1});
+        }
+    }
+
     return neighbors;
 }
 
