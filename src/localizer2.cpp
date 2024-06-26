@@ -49,13 +49,7 @@ std::vector<std::vector<int8_t>> map_data;
 int map_height, map_width;
 float x_max, y_max; // m
 
-// Encoder values
-float last_left = 0.;
-float last_right = 0.;
-float current_left = 0.;
-float current_right = 0.;
-float delta_dist = 0.;
-float delta_theta = 0.;
+
 
 // Random generators
 std::default_random_engine generator;
@@ -77,7 +71,7 @@ std::pair<int, int> metric_to_grid_index(float x, float y)
     return {row, col};
 }
 
-Particle get_random_particle(float init_weight) 
+Particle get_random_particle() 
 {
     float x, y;
     std::pair<int, int> grid_index;
@@ -89,7 +83,7 @@ Particle get_random_particle(float init_weight)
     
     float theta = uniform_dist(generator) * (2 * M_PI) - M_PI;
 
-    Particle particle{x, y, theta, init_weight};
+    Particle particle{x, y, theta, 0.};
     return particle;
 }
 
@@ -209,68 +203,29 @@ void publish_particles()
     particle_array_viz_pub.publish(pose_array);
 }
 
+std::vector<std::vector<int>> initialize_bins2d(int x_size, int y_size, int initial_value = 0) {
+    // Create a 3D vector with the given dimensions and initial value
+    std::vector<std::vector<std::vector<int>>> vec2d(
+        x_size, std::vector<int>(y_size, initial_value)
+    );
+
+    return vec2d;
+}
+
+std::vector<std::vector<std::vector<int>>> initialize_bins3d(int x_size, int y_size, int z_size, int initial_value = 0) {
+    // Create a 3D vector with the given dimensions and initial value
+    std::vector<std::vector<std::vector<int>>> vec3d(
+        x_size, std::vector<std::vector<int>>(
+            y_size, std::vector<int>(
+                z_size, initial_value
+            )
+        )
+    );
+
+    return vec3d;
+}
+
 // ############### CALLBACKS ###############
-void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
-{
-    laser_data.clear();
-    for (int i = 50; i < SUBSAMPLE_LASERS; i++) 
-    {
-        int index = i * (msg->ranges.size()-50) / SUBSAMPLE_LASERS;
-
-        float real_distance = msg->ranges[index];
-        if (real_distance != real_distance) {
-            real_distance = 1.0;
-        }            
-        else if (real_distance < RAY_STEP_SIZE) {
-            real_distance = RAY_STEP_SIZE;
-        }
-
-        float ray_angle = msg->angle_min + msg->angle_increment * index;
-
-        laser_data.push_back({real_distance, ray_angle});
-    }
-    laser_received = true;
-}
-
-void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
-{   
-    current_left = msg->encoderLeft;
-    current_right = msg->encoderRight;
-    if (is_first_encoder_measurement) {
-        last_left = current_left;
-        last_right = current_right;
-
-        is_first_encoder_measurement = false;
-        return;
-    }
-    
-    if (last_left == current_left && last_right == current_right)
-    {
-        sensor_received = false;
-        return;
-    }
-
-    float distance_left = (current_left - last_left) * WHEEL_RADIUS;
-    float distance_right = (current_right - last_right) * WHEEL_RADIUS; 
-    float distance = (distance_left + distance_right) / 2;
-    float angle_change = (distance_right - distance_left) / WHEEL_BASE;
-
-    for (Particle& particle : particles)
-    {
-        // Motion Update
-        float x_delta = distance * cos(particle.theta + angle_change/2);
-        float y_delta = distance * sin(particle.theta + angle_change/2);
-
-        particle.x += x_delta + normal_dist_pos(generator);
-        particle.y += y_delta + normal_dist_pos(generator);
-        particle.theta = normalize_angle(particle.theta + angle_change + normal_dist_theta(generator));
-    }
-
-    last_left = current_left;
-    last_right = current_right;
-
-    sensor_received = true;
-}
 
 void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 {    
@@ -300,6 +255,242 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 
     ros::param::get("x_max", x_max);
     ros::param::get("y_max", y_max);
+}
+
+void motion_update(const float distance, const float angle_change)
+{
+    for (Particle& particle : particles)
+    {
+        // Motion Update
+        const float x_delta = distance * cos(particle.theta + angle_change/2);
+        const float y_delta = distance * sin(particle.theta + angle_change/2);
+
+        particle.x += x_delta + normal_dist_pos(generator);
+        particle.y += y_delta + normal_dist_pos(generator);
+        particle.theta = normalize_angle(particle.theta + angle_change + normal_dist_theta(generator));
+    }
+}
+
+float moved_distance, moved_angle, last_left, last_right, current_left, current_right = 0.;
+bool use_selective_resampling = false;
+void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
+{   
+    current_left = msg->encoderLeft;
+    current_right = msg->encoderRight;
+    if (is_first_encoder_measurement) {
+        last_left = current_left;
+        last_right = current_right;
+
+        is_first_encoder_measurement = false;
+        return;
+    }
+
+    float distance_left = (current_left - last_left) * WHEEL_RADIUS;
+    float distance_right = (current_right - last_right) * WHEEL_RADIUS; 
+    float distance = (distance_left + distance_right) / 2;
+    float angle_change = (distance_right - distance_left) / WHEEL_BASE;
+
+    motion_update(distance, angle_change);
+
+    last_left = current_left;
+    last_right = current_right;
+
+    moved_distance += distance;
+    moved_angle = normalize_angle(moved_angle + angle_change);
+}
+
+float avg_short, avg_long = 0.;
+const float alpha_short = 0.;
+const float alpha_long = 0.;
+
+const int resample_interval = 1;
+int resample_count = 0.;
+
+const int min_particles = 100;
+const int max_particles = 5000;
+
+struct Bins {
+
+    std::vector<std::vector<bool>> bins;
+
+    float bin_width, bin_height;
+
+    int num_bins_with_support = 0;
+
+    Bins(float num_bins_on_one_axis) {
+        bin_width = x_max / num_bins_on_one_axis;
+        bin_height = y_max / num_bins_on_one_axis;
+
+        bins = initialize_bins2d(num_bins_on_one_axis, num_bins_on_one_axis);
+    }
+
+    bool add_particle(float x, float y) {
+
+        int bin_x =  (int)floor(x / bin_width);
+        int bin_y =  (int)floor(y / bin_height);
+
+        if (bins[bin_x][bin_y] == false) {
+            num_bins_with_support++;
+            bins[bin_x][bin_y] = true;
+            return true;
+        }
+        else return false;
+    }
+
+    int get_new_sample_size(float upper_quantile=3, float epsilon=0.1) {
+        float x = 1.0 - 2.0 / (9.0 * (num_bins_with_support - 1)) + sqrt(2.0 / (9.0 * (num_bins_with_support - 1))) * upper_quantile;
+        return ceil((num_bins_with_support - 1) / (2.0 * epsilon) * x * x * x);
+    }
+
+};
+
+void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
+{
+    laser_data.clear();
+    for (int i = 50; i < SUBSAMPLE_LASERS; i++) 
+    {
+        int index = i * (msg->ranges.size()-50) / SUBSAMPLE_LASERS;
+
+        float real_distance = msg->ranges[index];
+        if (real_distance != real_distance) {
+            real_distance = 1.0;
+        }            
+        else if (real_distance < RAY_STEP_SIZE) {
+            real_distance = RAY_STEP_SIZE;
+        }
+
+        float ray_angle = msg->angle_min + msg->angle_increment * index;
+
+        laser_data.push_back({real_distance, ray_angle});
+    }
+    
+    bool update = fabs(moved_distance) > 0.05 || fabs(moved_angle) > 0.5 || force_update;
+    force_update = false;
+    moved_distance = 0.;
+    moved_angle = 0.;
+
+    if (!update) 
+    {
+        publish_particles();
+        return;
+    }
+
+    // Motion update already happened in callback
+
+    // Sensor update
+    float total_weight = 0.;
+    for (Particle& particle : particles)
+    {
+        const float particle_weight = get_particle_weight(particle);
+        particle.weight = particle_weight;
+        total_weight += particle_weight;
+    }
+
+    float n_eff = 0.;
+
+    if (total_weight > 0.)
+    {
+        // normalize weight
+        float avg_weight = 0.;
+        for (Particle& particle : particles)
+        {
+            avg_weight += particle.weight;
+            particle.weight /= total_weight;
+            n_eff += particle.weight*particle.weight;
+        }
+        avg_weight /= particles.size();
+        if(avg_long == 0.0)
+            avg_long = avg_weight;
+        else
+            avg_long += alpha_long * (avg_long);
+        if(avg_short == 0.0)
+            avg_short = avg_weight;
+        else
+            avg_short += alpha_short * (avg_weight - avg_short);
+    }
+    else
+    {
+        for (Particle& particle : particles)
+        {
+            particle.weight = 1.0 / particles.size();
+        }
+    }
+
+    n_eff = 1.0/n_eff;
+
+    if(!(++resample_count % resample_interval)) 
+    {
+        
+        if (use_selective_resampling && n_eff > 0.5 * particles.size())
+        {
+            // Skip
+            publish_particles();
+            return;
+        }
+
+        // Resample
+        std::vector<float> cum_sum(particles.size());
+        cum_sum[0] = particles[0].weight;
+        for (int i = 1; i < particles.size(); ++i) {
+            cum_sum[i] = cum_sum[i - 1] + particles[i].weight;
+        }
+
+        float w_diff = std::max(0., 1. - avg_short / avg_long);
+
+        std::vector<Particle> new_particles;
+
+        Bins bin_grid(36);
+
+        int num_req_particles = min_particles;
+        while (new_particles.size() < num_req_particles)//for (int i = 0; i < NUM_PARTICLES; i++)
+        {
+            Particle particle;
+            if (uniform_dist(generator) < w_diff)
+            {
+                ROS_INFO("Sampling Random"); 
+                particle = get_random_particle();
+                particle.weight = 1./NUM_PARTICLES;
+            } 
+            else
+            {
+                float rand = uniform_dist(generator);
+                int particle_index = 0;
+                while (cum_sum[particle_index] < rand && particle_index < particles.size())
+                {
+                    particle_index++;
+                }
+                // HACK
+                if (particle_index >= particles.size()) particle_index = particles.size() -1;
+                
+                particle = particles.at(particle_index);
+                particle.weight = 1. / NUM_PARTICLES;
+
+                // ADD NOISE TO RESAMPLING
+                particle.x += normal_dist_pos(generator);
+                particle.y += normal_dist_pos(generator);
+                particle.theta = normalize_angle(particle.theta + normal_dist_theta(generator));
+            }
+
+            new_particles.push_back(particle);
+            if (bin_grid.add_particle(particle.x, particle.y))
+            {
+                // Falls into empty bin
+                num_req_particles = std::min(std::max(bin_grid.get_new_sample_size(), min_particles), max_particles);
+            }
+        }
+
+        if(w_diff > 0.0) avg_short = avg_long = 0.0;
+
+        // Normalize weights
+        for (Particle& particle : new_particles)
+        {
+            particle.weight /= new_particles.size();
+        }
+
+        particles = new_particles;
+    }
+
+    publish_particles();
 }
 
 // ############### MAIN ###############
@@ -339,104 +530,5 @@ int main(int argc, char **argv)
     ros::Subscriber odo_sub = n.subscribe("sensor_packet", 1, sensor_callback);
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
-    float avg_weight_short, avg_weight_long = 0.;
-    while(ros::ok()) {
-        loop_rate.sleep();
-        ros::spinOnce();
-
-        // Only Update when robot did move enough.
-        bool update = laser_received && (sensor_received || force_update);
-
-        if (!update) 
-        {
-            publish_particles();
-            continue;
-        }
-
-        // ROS_INFO("Updating Weights");
-        // Motion update already happened in callback
-        // Sensor update
-        float total_weight = 0.;
-        for (Particle& particle : particles)
-        {
-            const float particle_weight = get_particle_weight(particle);
-            particle.weight = particle_weight;
-            total_weight += particle_weight;
-            //ROS_INFO("Particle (%f, %f) has weight: %f", particle.x, particle.y, particle.weight);
-        }
-        // Reset motion
-        sensor_received = false;
-        laser_received = false;
-        force_update = false;
-
-        // Normalize weights and compute w_slow and w_fast for adaptive sampling.
-        if (total_weight > 0.)
-        {
-            float avg_weight = total_weight / particles.size();
-            avg_weight_short = 0.5 * avg_weight + (1. - 0.5) * (avg_weight_short == 0. ? avg_weight : avg_weight_short);
-            avg_weight_long = 0.1 * avg_weight + (1. - 0.1) * (avg_weight_short == 0. ? avg_weight : avg_weight_short);
-            for (Particle& particle : particles)
-            {
-                particle.weight /= total_weight;
-            }  
-        } 
-        else 
-        {
-            for (Particle& particle : particles)
-            {
-                particle.weight = 1.0 / particles.size();
-            }
-        }
-
-        publish_particles();
-
-        // Resample
-        // ROS_INFO("Resampling"); 
-        std::vector<float> cum_sum(particles.size());
-        cum_sum[0] = particles[0].weight;
-        for (int i = 1; i < particles.size(); ++i) {
-            cum_sum[i] = cum_sum[i - 1] + particles[i].weight;
-        }
-
-        float w_diff = std::max(0., 1. - avg_weight_short / avg_weight_long);
-        ROS_INFO("w_diff = %f, avg_weight_short = %f, avg_weight_long = %f", w_diff, avg_weight_short, avg_weight_long);
-        std::vector<Particle> new_particles;
-        for (int i = 0; i < NUM_PARTICLES; i++)
-        {
-            if (uniform_dist(generator) < w_diff)
-            {
-                ROS_INFO("Sampling Random"); 
-                Particle particle = get_random_particle(1./NUM_PARTICLES);
-                new_particles.push_back(particle);
-            } 
-            else
-            {
-                //ROS_INFO("Sampling from Particles"); 
-                while (true)
-                {
-                    float rand = uniform_dist(generator);
-                    int particle_index = 0;
-                    while (cum_sum[particle_index] < rand && particle_index < particles.size())
-                    {
-                        particle_index++;
-                    }
-                    if (particle_index < particles.size())
-                    {
-                        Particle particle = particles.at(particle_index);
-                        //ROS_INFO("Draw Particle (%f, %f) with weight: %f", particle.x, particle.y, particle.weight);
-                        particle.weight = 1. / NUM_PARTICLES;
-                        particle.x += normal_dist_pos(generator);
-                        particle.y += normal_dist_pos(generator);
-                        particle.theta = normalize_angle(particle.theta + normal_dist_theta(generator));
-                        new_particles.push_back(particle);
-                        break;
-                    }
-                }
-            }
-        }
-
-        particles = new_particles;
-    }
-
-    return 0;
+    ros::spin();
 }
