@@ -321,7 +321,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     {
         const float particle_error = get_particle_error(particle, laser_data);
         assert(particle_error > 0.);
-        assert(weight_parameter <= 1. && weight_parameter > 0.);
+        assert(weight_parameter < 1. && weight_parameter > 0.);
         particle.weight = std::exp(-particle_error * weight_parameter);
         total_weight += particle.weight;
 
