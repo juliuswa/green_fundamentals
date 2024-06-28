@@ -138,7 +138,7 @@ bool has_converged_fast()
 
     for (int i = 0; i < CONVERGED_NUM; i++)
     {
-        int index = floor(uniform_dist(generator) * (float)particles.size());
+        int index = uniform_dist(generator) * particles.size());
 
         mean_x += particles[index].x;
         mean_y += particles[index].y;
@@ -151,7 +151,7 @@ bool has_converged_fast()
 
     for (int i = 0; i < CONVERGED_NUM; i++)
     {
-        int index = floor(uniform_dist(generator) * (float)particles.size());
+        int index = uniform_dist(generator) * particles.size());
 
         float d_x = mean_x - particles[index].x;
         float d_y = mean_y - particles[index].y;

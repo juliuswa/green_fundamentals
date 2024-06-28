@@ -21,7 +21,7 @@
 #include "std_srvs/SetBool.h"
 #include "robot_constants.h"
 
-#define REASONABLE_DISTANCE 1.
+#define REASONABLE_DISTANCE 0.25
 #define LOCALIZATION_POINTS_THRESHOLD 4
 
 using Grid_Coords = std::pair<int, int>;

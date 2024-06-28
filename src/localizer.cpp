@@ -25,19 +25,19 @@
 #define RAY_STEP_SIZE 0.01
 
 #define SPREAD_PARTICLE_PART 0.25
-#define SPREAD_WEIGHT 0.05
+#define SPREAD_WEIGHT 0.1
 
 #define STD_POS_INITIAL 0.05
 #define STD_THETA_INITIAL 0.05
 
-#define STD_POS_UPDATE 0.02
-#define STD_THETA_UPDATE 0.04
-
 #define STD_POS_RESAMPLE 0.005
 #define STD_THETA_RESAMPLE 0.01
 
-#define STD_POS_SPREAD 0.0
-#define STD_THETA_SPREAD 0.0
+#define STD_POS_UPDATE 0.02
+#define STD_THETA_UPDATE 0.04
+
+#define STD_POS_SPREAD 0.08
+#define STD_THETA_SPREAD 0.16
 
 bool active = false;
 
