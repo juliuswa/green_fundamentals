@@ -187,6 +187,54 @@ std::vector<Grid_Coords> get_neighbors(const Cell& cell)
     int row = cell.row;
     int col = cell.col;
 
+    // Up-Left
+    if (!cell.wall_up && row < grid_rows - 1 && !cell.wall_left && col > 0) {
+        // Check walls of other cells
+        const Cell& up_cell = cell_grid[row+1][col];
+        const Cell& left_cell = cell_grid[row][col-1];
+
+        if (!up_cell.wall_left && !left_cell.wall_up)
+        {
+            neighbors.push_back({col-1, row+1});
+        }
+    }
+
+    // Up-Right
+    if (!cell.wall_up && row < grid_rows - 1 && !cell.wall_right && col < grid_cols - 1) {
+        // Check walls of other cells
+        const Cell& up_cell = cell_grid[row+1][col];
+        const Cell& right_cell = cell_grid[row][col+1];
+
+        if (!up_cell.wall_right && !right_cell.wall_up)
+        {
+            neighbors.push_back({col+1, row+1});
+        }
+    }
+
+    // Down-Left
+    if (!cell.wall_down && row > 0 && !cell.wall_left && col > 0) {
+        // Check walls of other cells
+        const Cell& down_cell = cell_grid[row-1][col];
+        const Cell& left_cell = cell_grid[row][col-1];
+
+        if (!down_cell.wall_left && !left_cell.wall_down)
+        {
+            neighbors.push_back({col-1, row-1});
+        }
+    }
+
+    // Down-Right
+    if (!cell.wall_down && row > 0 && !cell.wall_right && col < grid_cols - 1) {
+        // Check walls of other cells
+        const Cell& down_cell = cell_grid[row-1][col];
+        const Cell& right_cell = cell_grid[row][col+1];
+
+        if (!down_cell.wall_right && !right_cell.wall_down)
+        {
+            neighbors.push_back({col+1, row-1});
+        }
+    }
+
     if (!cell.wall_up && row < grid_rows - 1) {
         neighbors.push_back({col, row + 1});
     }
@@ -198,56 +246,6 @@ std::vector<Grid_Coords> get_neighbors(const Cell& cell)
     }
     if (!cell.wall_right && col < grid_cols - 1) {
         neighbors.push_back({col + 1, row});
-    }
-
-    // Check for diagonal cells
-    
-    // Up-Left
-    if (!cell.wall_up && row < grid_rows - 1 && !cell.wall_left && col > 0) {
-        // Check walls of other cells
-        const Cell& up_cell = cell_grid[col][row+1];
-        const Cell& left_cell = cell_grid[col-1][row];
-
-        if (!up_cell.wall_left && !left_cell.wall_up)
-        {
-            neighbors.push_back({col-1, row+1});
-        }
-    }
-
-    // Up-Right
-    if (!cell.wall_up && row < grid_rows - 1 && !cell.wall_right && col < grid_cols - 1) {
-        // Check walls of other cells
-        const Cell& up_cell = cell_grid[col][row+1];
-        const Cell& right_cell = cell_grid[col+1][row];
-
-        if (!up_cell.wall_right && !right_cell.wall_up)
-        {
-            neighbors.push_back({col+1, row+1});
-        }
-    }
-
-    // Down-Left
-    if (!cell.wall_down && row > 0 && !cell.wall_left && col > 0) {
-        // Check walls of other cells
-        const Cell& down_cell = cell_grid[col][row-1];
-        const Cell& left_cell = cell_grid[col-1][row];
-
-        if (!down_cell.wall_left && !left_cell.wall_down)
-        {
-            neighbors.push_back({col-1, row-1});
-        }
-    }
-
-    // Down-Right
-    if (!cell.wall_down && row > 0 && !cell.wall_right && col < grid_cols - 1) {
-        // Check walls of other cells
-        const Cell& down_cell = cell_grid[col][row-1];
-        const Cell& right_cell = cell_grid[col+1][row];
-
-        if (!down_cell.wall_right && !right_cell.wall_down)
-        {
-            neighbors.push_back({col+1, row-1});
-        }
     }
 
     return neighbors;
@@ -395,8 +393,8 @@ void publish_current_target() {
 BFS SEARCH
 ############################################################################
 */
-
-std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_Coords end) 
+//                                                           row, col                 row, col
+std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_Coords end, bool verbose = false) 
 {   
     std::vector<std::vector<bool>> visited(grid_rows, std::vector<bool>(grid_cols, false));
     std::unordered_map<Grid_Coords, Grid_Coords, pair_hash_int> parent;
@@ -407,11 +405,10 @@ std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_C
     q.push_back({start.first, start.second});
     visited[start.first][start.second] = true;
 
-    //ROS_INFO("Starting Node is (%d, %d)", start.first, start.second);
+    if (verbose) ROS_INFO("Starting Node is (%d, %d)", start.second, start.first);
 
     while (!q.empty()) {
         auto [currentRow, currentCol] = q.front();
-        visited[currentRow][currentCol] = true;
         q.pop_front();
 
         if (currentRow == end.first && currentCol == end.second) {
@@ -422,7 +419,7 @@ std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_C
             std::reverse(path.begin(), path.end());
             return path;
         }
-        
+        //                       col, row
         std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[currentRow][currentCol]);
         //ROS_INFO("%d Neighbors for cell (%d, %d)", neighbors.size(), currentRow, currentCol);
         for (const auto& neighbor : neighbors) {
@@ -430,7 +427,11 @@ std::vector<Grid_Coords> get_shortest_path(const Grid_Coords start, const Grid_C
             int newCol = neighbor.first;
             if (!visited[newRow][newCol]) {
                 q.push_back({newRow, newCol});
+                if (verbose) ROS_INFO("Adding (%d, %d) to queue", newCol, newRow);
                 parent[{newRow, newCol}] = {currentRow, currentCol};
+                if (verbose) ROS_INFO("Parent of (%d, %d) is now (%d, %d)", newCol, newRow, currentCol, currentRow);
+                visited[newRow][newCol] = true;
+                if (verbose) ROS_INFO("(%d, %d) is now visited", newCol, newRow);
             }
         }
     }
@@ -1008,21 +1009,30 @@ int main(int argc, char **argv)
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     video_player = n.serviceClient<green_fundamentals::SetVideo>("set_video");
 
-    {
-        std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[3][3]);
-        ROS_INFO("Neighbors of 3, 3");
-        for (Grid_Coords neighbor : neighbors)
-        {
-            ROS_INFO("Neighbor Col: %f, Row: %f", neighbor.first, neighbor.second);
-        }
-    }
-    
-
     target_pub = n.advertise<geometry_msgs::PointStamped>("target", 1);
     goal_pub = n.advertise< geometry_msgs::PointStamped>("goal", 1);
 
     ros::ServiceServer move_to_position_srv = n.advertiseService("move_to_position", move_to_position_callback);
     ros::ServiceServer gold_run_srv = n.advertiseService("gold_run", gold_run_callback);
+
+    {
+        ROS_INFO("NEIGHBORS");
+        std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[2][3]);
+        for (Grid_Coords neighbor : neighbors)
+        {
+            ROS_INFO("Neighbor Col: %d, Row: %d", neighbor.first, neighbor.second);
+        }
+    }
+
+    {
+        ROS_INFO("SHORTEST PATH");
+        std::vector<Grid_Coords> path = get_shortest_path({2, 3}, {4, 2}, true);
+        for (Grid_Coords cell : path)
+        {
+            ROS_INFO("Path: Col %d, Row: %d", cell.second, cell.first);
+        }
+    }
+
     
     state = State::IDLE;
     State last_state = state;
