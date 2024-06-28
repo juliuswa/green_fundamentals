@@ -506,7 +506,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     }
 
     // Resample
-    particles = normal_resample();
+    particles = residual_resample();
 
     publish_particles();
     return;
