@@ -18,7 +18,7 @@
 #define CONVERGED_NUM 100
 
 bool force_update = true; // first localization without movement needed
-const int num_particles = 6000;
+const int num_particles = 5000;
 const int num_ignore_sides = 50; // Leave out because of metal near sensor
 const float weight_parameter = 0.9;
 

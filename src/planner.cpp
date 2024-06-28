@@ -1001,117 +1001,88 @@ void localize()
 
     // Not localized
 
-    // if (local_plan.empty())
-    // {
     const Cell& cell = cell_grid[my_position.row][my_position.col];
-    int col = -1;
-    int row = -1;
+    ROS_INFO("INSIDE LOCALIZE() Cell (%d, %d)", cell.col, cell.row);
+    int col = cell.col;
+    int row = cell.row;
     switch (my_position.orientation)
     {
         case Orientation::UP:
             if (!cell.wall_up && cell.row < grid_rows - 1) {
-                col = cell.col;
-                row = cell.row+1;
+                row++;
             }
             else if (!cell.wall_left && cell.col > 0) {
-                col = cell.col-1;
-                row = cell.row;
+                col--;
 
             }
             else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                col = cell.col+1;
-                row = cell.row+1;
+                col++;
 
             }
             else if (!cell.wall_down && cell.row > 0) {
-                col = cell.col;
-                row = cell.row-1;
+                row--;
 
             }
             break;
         case Orientation::DOWN:
             if (!cell.wall_down && cell.row > 0) {
-                col = cell.col;
-                row = cell.row-1;
+                row--;
 
             }
             else if (!cell.wall_left && cell.col > 0) {
-                col = cell.col-1;
-                row = cell.row;
+                col--;
 
             }
             else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                col = cell.col+1;
-                row = cell.row+1;
+                col++;
 
             }
             else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                col = cell.col;
-                row = cell.row+1;
+                row++;
 
             }
             break;
         case Orientation::LEFT:
             if (!cell.wall_left && cell.col > 0) {
-                col = cell.col-1;
-                row = cell.row;
+                col--;
 
             }
             else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                col = cell.col;
-                row = cell.row+1;
+                row++;
 
             }
             else if (!cell.wall_down && cell.row > 0) {
-                col = cell.col;
-                row = cell.row-1;
+                row--;
 
             }
             else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                col = cell.col+1;
-                row = cell.row+1;
+                col++;
 
             }
             break;
         case Orientation::RIGHT:
             if (!cell.wall_right && cell.col < grid_cols - 1) {
-                col = cell.col+1;
-                row = cell.row+1;
+                col++;
 
             }
             else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                col = cell.col;
-                row = cell.row+1;
+                row++;
 
             }
             else if (!cell.wall_down && cell.row > 0) {
-                col = cell.col;
-                row = cell.row-1;
+                row--;
 
             }
             else if (!cell.wall_left && cell.col > 0) {
-                col = cell.col-1;
-                row = cell.row;
+                col--;
             }
             break;
         default:
             ROS_INFO("ERROR IN BIG SWITCH");
     }
-    if (col == -1 || row == -1) return;
+    ROS_INFO("INSIDE LOCALIZE() col=%d row=%d", col, row);
     send_direct_cell(col, row);
     return;
-
-    // not localized && local_plan not empty
-
-    // if (current_target_reached())
-    // {   
-    //     local_plan.clear();
-    // }
-
-    // if(!send_next_target_to_mover()) {
-    //     local_plan.clear();
-    // }
-    // ros::Duration(1).sleep();
 }
 
 void align()
