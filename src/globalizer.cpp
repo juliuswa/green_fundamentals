@@ -8,8 +8,8 @@
 #include "robot_constants.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "sensor_msgs/LaserScan.h"
-#include "geometry_msgs/Pose.h"
 #include "geometry_msgs/PoseArray.h"
+#include "geometry_msgs/PoseStamped.h"
 #include "std_srvs/SetBool.h"
 #include "green_fundamentals/Position.h"
 #include "green_fundamentals/Pose.h"
@@ -18,7 +18,7 @@
 #define CONVERGED_NUM 100
 
 bool force_update = true; // first localization without movement needed
-const int num_particles = 3000;
+const int num_particles = 6000;
 const int num_ignore_sides = 50; // Leave out because of metal near sensor
 const float weight_parameter = 0.9;
 
@@ -171,7 +171,7 @@ bool has_converged_fast()
     return true;
 }
 
-ros::Publisher particle_array_viz_pub, position_pub;
+ros::Publisher particle_array_viz_pub, position_pub, pose_pub;
 void publish_particles()
 {   
     // Position estimate
@@ -188,6 +188,12 @@ void publish_particles()
     position.theta = best_particle.theta;
     position.converged = has_converged_fast();
     position_pub.publish(position);
+
+    geometry_msgs::PoseStamped best_pose;
+    best_pose.header.frame_id = "map";
+    best_pose.pose = particle_to_viz_pose(best_particle);
+
+    pose_pub.publish(best_pose);
 
     if (position.converged) {
         ROS_INFO("HAS CONVERGED");
@@ -562,6 +568,7 @@ int main(int argc, char **argv)
     ROS_INFO("Map received.");
 
     particle_array_viz_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
+    pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_pose", 1);
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
     ros::ServiceServer activate_service = n.advertiseService("activate_globalizer", activate);
     
