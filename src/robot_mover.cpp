@@ -167,10 +167,10 @@ void drive_to()
 
     int direction = cross_product_z < 0 ? 1 : -1;
 
-    float exponential_factor = 2 * std::exp(-angle) - 1;
+    // float exponential_factor = 2 * std::exp(-angle) - 1;
     float linear_factor = - 2 * angle / (M_PI / 2) + 1;
 
-    float factor = (linear_factor + exponential_factor) / 2;
+    float factor = (linear_factor + linear_factor) / 2;
 
     if (is_obstacle_front) { 
         factor = -1;
@@ -180,12 +180,12 @@ void drive_to()
     speed = std::min(cur_max_speed, speed);
     speed = std::max(min_speed, speed);     
 
-    if(is_obstacle_far_front) 
+    if(is_obstacle_far_front || factor < 1) 
     {
-        ROS_DEBUG("obstacle far front", angle);
+        ROS_DEBUG("slowing down. obstacle: %d, curve: %d", is_obstacle_far_front, factor < 1);
         speed /= 2;
     }
-    
+
     if (direction < 0) 
     {
         wheel_commands.request.left = speed;
