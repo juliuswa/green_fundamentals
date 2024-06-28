@@ -762,7 +762,7 @@ bool set_local_plan_to_current_goal()
     return true;
 }
 
-bool send_next_target_to_mover() 
+bool send_next_target_to_mover(bool deactivate=false) 
 {
     if (local_plan.empty()) {
         ROS_DEBUG("Cannot set target, because local_plan is empty");
@@ -775,7 +775,7 @@ bool send_next_target_to_mover()
     Cell current_cell = cell_grid[my_position.row][my_position.col];
     Cell target_cell = cell_grid[target_cell_coords.second][target_cell_coords.first];
 
-    if (!are_neighbors(current_cell, target_cell)) {
+    if (!deactivate && !are_neighbors(current_cell, target_cell)) {
         ROS_DEBUG("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
             current_cell.col, current_cell.row, target_cell.col, target_cell.row);
 
@@ -1036,9 +1036,11 @@ void localize()
                     set_local_plan_to_cell(cell.col-1, cell.row);
                 }
                 break;
+            default:
+                ROS_INFO("ERROR IN BIG SWITCH");
         }
 
-        send_next_target_to_mover();
+        send_next_target_to_mover(true);
         return;
     }
 
