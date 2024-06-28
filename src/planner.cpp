@@ -712,6 +712,27 @@ ROBOT MOVER
 ############################################################################
 */
 
+bool set_local_plan_to_cell(int col, int row)
+{
+    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{my_position.col, my_position.row}, {col, row}}];
+
+    if (path.size() == 0) return false;
+
+    local_plan.clear();
+
+    for (int i = 0; i < path.size(); i++) {
+        const Cell cell = cell_grid[path[i].first][path[i].second];
+        if (cell.row != path[i].first && cell.col != path[i].second)
+        {
+            ROS_INFO("ERROR in drive_to_cell with cell conversion from first to row and second to col.");
+            continue;
+        }
+        add_target_back(cell.x, cell.y, 0.0, false, i == path.size() - 1);
+    }
+
+    return true;
+}
+
 bool set_local_plan_to_current_goal() 
 {
     const Goal next_goal = global_plan.front();
@@ -955,28 +976,69 @@ void localize()
 
     if (local_plan.empty())
     {
-        Cell unvisited_cell;
-        bool found_unvisited_cell = false;
-
-        while (!found_unvisited_cell) {
-            int rand_row = rand() % grid_rows;
-            int rand_col = rand() % grid_cols;
-
-            if (visited_cells[rand_col][rand_row]) {
-                continue;
-            }
-
-            global_plan.clear();
-            add_goal_front(rand_row, rand_col, GoalType::POSITION);
-                            
-            found_unvisited_cell = set_local_plan_to_current_goal();
-
-            if(!found_unvisited_cell) {
-                add_target_front(my_position.x, my_position.y, my_position.theta + M_PI, true, true);
+        
+        const Cell& cell = cell_grid[my_position.row][my_position.col];
+        switch (my_position.orientation)
+        {
+            case Orientation::UP:
+                if (!cell.wall_up && cell.row < grid_rows - 1) {
+                    set_local_plan_to_cell(cell.col, cell.row+1);
+                }
+                else if (!cell.wall_left && cell.col > 0) {
+                    set_local_plan_to_cell(cell.col-1, cell.row);
+                }
+                else if (!cell.wall_right && cell.col < grid_cols - 1) {
+                    set_local_plan_to_cell(cell.col+1, cell.row+1);
+                }
+                else if (!cell.wall_down && cell.row > 0) {
+                    set_local_plan_to_cell(cell.col, cell.row-1);
+                }
                 break;
-            }
+            case Orientation::DOWN:
+                if (!cell.wall_down && cell.row > 0) {
+                    set_local_plan_to_cell(cell.col, cell.row-1);
+                }
+                else if (!cell.wall_left && cell.col > 0) {
+                    set_local_plan_to_cell(cell.col-1, cell.row);
+                }
+                else if (!cell.wall_right && cell.col < grid_cols - 1) {
+                    set_local_plan_to_cell(cell.col+1, cell.row+1);
+                }
+                else if (!cell.wall_up && cell.row < grid_rows - 1) {
+                    set_local_plan_to_cell(cell.col, cell.row+1);
+                }
+                break;
+            case Orientation::LEFT:
+                if (!cell.wall_left && cell.col > 0) {
+                    set_local_plan_to_cell(cell.col-1, cell.row);
+                }
+                else if (!cell.wall_up && cell.row < grid_rows - 1) {
+                    set_local_plan_to_cell(cell.col, cell.row+1);
+                }
+                else if (!cell.wall_down && cell.row > 0) {
+                    set_local_plan_to_cell(cell.col, cell.row-1);
+                }
+                else if (!cell.wall_right && cell.col < grid_cols - 1) {
+                    set_local_plan_to_cell(cell.col+1, cell.row+1);
+                }
+                break;
+            case Orientation::RIGHT:
+                if (!cell.wall_right && cell.col < grid_cols - 1) {
+                    set_local_plan_to_cell(cell.col+1, cell.row+1);
+                }
+                else if (!cell.wall_up && cell.row < grid_rows - 1) {
+                    set_local_plan_to_cell(cell.col, cell.row+1);
+                }
+                else if (!cell.wall_down && cell.row > 0) {
+                    set_local_plan_to_cell(cell.col, cell.row-1);
+                }
+                else if (!cell.wall_left && cell.col > 0) {
+                    set_local_plan_to_cell(cell.col-1, cell.row);
+                }
+                break;
         }
 
+        send_next_target_to_mover();
         return;
     }
 
@@ -984,7 +1046,7 @@ void localize()
 
     if (current_target_reached())
     {   
-        local_plan.pop_front();
+        local_plan.clear();
     }
 
     if(!send_next_target_to_mover()) {

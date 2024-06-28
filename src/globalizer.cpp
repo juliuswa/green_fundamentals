@@ -160,10 +160,6 @@ bool has_converged_fast()
         float dist = std::sqrt(d_x*d_x + d_y*d_y);
 
         if (dist > 0.4 || d_theta > M_PI/2)  {
-            //ROS_INFO("mean_x: %f, mean_y: %f", mean_x, mean_y);
-            //ROS_INFO("d_x: %f, d_y: %f", d_x, d_y);
-            //ROS_INFO("particles[index].x: %f, particles[index].y: %f", particles[index].x, particles[index].y);
-            ROS_INFO("Not converged. dist: %f, d_theta: %f", dist, d_theta);
             return false;
         }
     }
@@ -396,11 +392,11 @@ std::vector<Particle> residual_resample()
         residuals[i] /= sum;
     }
 
-    std::vector<float> cum_sum(residuals.size()+1);
+    std::vector<float> cum_sum(residuals.size()+1, 1.);
     cum_sum[0] = 0;
     for (int i = 0; i < residuals.size(); ++i) {
         cum_sum[i+1] = cum_sum[i] + residuals[i];
-    } 
+    }
 
     while (new_particles.size() < num_particles)
     {
@@ -427,7 +423,7 @@ std::vector<Particle> residual_resample()
 
 std::vector<Particle> normal_resample()
 {
-    std::vector<float> cum_sum(particles.size()+1);
+    std::vector<float> cum_sum(particles.size()+1, 1.);
     cum_sum[0] = 0;
     for (int i = 0; i < particles.size(); ++i) {
         cum_sum[i+1] = cum_sum[i] + particles[i].weight;
