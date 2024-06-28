@@ -762,7 +762,34 @@ bool set_local_plan_to_current_goal()
     return true;
 }
 
-bool send_next_target_to_mover(bool deactivate=false) 
+bool send_direct_cell(int col, int row)
+{
+    Cell target_cell = cell_grid[row][col];
+    green_fundamentals::DriveTo drive_to_msg;    
+    drive_to_msg.request.x_current = my_position.x;
+    drive_to_msg.request.y_current = my_position.y;
+    drive_to_msg.request.theta_current = my_position.theta;
+    drive_to_msg.request.x_target = target_cell.x;
+    drive_to_msg.request.y_target = target_cell.y;
+    drive_to_msg.request.theta_target = 0.;
+    drive_to_msg.request.rotate = false;
+    drive_to_msg.request.slow = false;
+
+    if(!is_globalized) {
+        drive_to_msg.request.slow = true;
+    }
+
+    if (!mover_drive_to_client.call(drive_to_msg))
+    {
+        ROS_DEBUG("failed to call driver_service");
+        return false;
+    }
+
+    publish_current_target();
+    return true;
+}
+
+bool send_next_target_to_mover() 
 {
     if (local_plan.empty()) {
         ROS_DEBUG("Cannot set target, because local_plan is empty");
@@ -775,7 +802,7 @@ bool send_next_target_to_mover(bool deactivate=false)
     Cell current_cell = cell_grid[my_position.row][my_position.col];
     Cell target_cell = cell_grid[target_cell_coords.second][target_cell_coords.first];
 
-    if (!deactivate && !are_neighbors(current_cell, target_cell)) {
+    if (!are_neighbors(current_cell, target_cell)) {
         ROS_DEBUG("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
             current_cell.col, current_cell.row, target_cell.col, target_cell.row);
 
@@ -974,87 +1001,116 @@ void localize()
 
     // Not localized
 
-    if (local_plan.empty())
+    // if (local_plan.empty())
+    // {
+    const Cell& cell = cell_grid[my_position.row][my_position.col];
+    int col, row;
+    switch (my_position.orientation)
     {
-        
-        const Cell& cell = cell_grid[my_position.row][my_position.col];
-        switch (my_position.orientation)
-        {
-            case Orientation::UP:
-                if (!cell.wall_up && cell.row < grid_rows - 1) {
-                    set_local_plan_to_cell(cell.col, cell.row+1);
-                }
-                else if (!cell.wall_left && cell.col > 0) {
-                    set_local_plan_to_cell(cell.col-1, cell.row);
-                }
-                else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                    set_local_plan_to_cell(cell.col+1, cell.row+1);
-                }
-                else if (!cell.wall_down && cell.row > 0) {
-                    set_local_plan_to_cell(cell.col, cell.row-1);
-                }
-                break;
-            case Orientation::DOWN:
-                if (!cell.wall_down && cell.row > 0) {
-                    set_local_plan_to_cell(cell.col, cell.row-1);
-                }
-                else if (!cell.wall_left && cell.col > 0) {
-                    set_local_plan_to_cell(cell.col-1, cell.row);
-                }
-                else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                    set_local_plan_to_cell(cell.col+1, cell.row+1);
-                }
-                else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                    set_local_plan_to_cell(cell.col, cell.row+1);
-                }
-                break;
-            case Orientation::LEFT:
-                if (!cell.wall_left && cell.col > 0) {
-                    set_local_plan_to_cell(cell.col-1, cell.row);
-                }
-                else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                    set_local_plan_to_cell(cell.col, cell.row+1);
-                }
-                else if (!cell.wall_down && cell.row > 0) {
-                    set_local_plan_to_cell(cell.col, cell.row-1);
-                }
-                else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                    set_local_plan_to_cell(cell.col+1, cell.row+1);
-                }
-                break;
-            case Orientation::RIGHT:
-                if (!cell.wall_right && cell.col < grid_cols - 1) {
-                    set_local_plan_to_cell(cell.col+1, cell.row+1);
-                }
-                else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                    set_local_plan_to_cell(cell.col, cell.row+1);
-                }
-                else if (!cell.wall_down && cell.row > 0) {
-                    set_local_plan_to_cell(cell.col, cell.row-1);
-                }
-                else if (!cell.wall_left && cell.col > 0) {
-                    set_local_plan_to_cell(cell.col-1, cell.row);
-                }
-                break;
-            default:
-                ROS_INFO("ERROR IN BIG SWITCH");
-        }
+        case Orientation::UP:
+            if (!cell.wall_up && cell.row < grid_rows - 1) {
+                col = cell.col;
+                row = cell.row+1;
+            }
+            else if (!cell.wall_left && cell.col > 0) {
+                col = cell.col-1;
+                row = cell.row;
 
-        send_next_target_to_mover(true);
-        return;
+            }
+            else if (!cell.wall_right && cell.col < grid_cols - 1) {
+                col = cell.col+1;
+                row = cell.row+1;
+
+            }
+            else if (!cell.wall_down && cell.row > 0) {
+                col = cell.col;
+                row = cell.row-1;
+
+            }
+            break;
+        case Orientation::DOWN:
+            if (!cell.wall_down && cell.row > 0) {
+                col = cell.col;
+                row = cell.row-1;
+
+            }
+            else if (!cell.wall_left && cell.col > 0) {
+                col = cell.col-1;
+                row = cell.row;
+
+            }
+            else if (!cell.wall_right && cell.col < grid_cols - 1) {
+                col = cell.col+1;
+                row = cell.row+1;
+
+            }
+            else if (!cell.wall_up && cell.row < grid_rows - 1) {
+                col = cell.col;
+                row = cell.row+1;
+
+            }
+            break;
+        case Orientation::LEFT:
+            if (!cell.wall_left && cell.col > 0) {
+                col = cell.col-1;
+                row = cell.row;
+
+            }
+            else if (!cell.wall_up && cell.row < grid_rows - 1) {
+                col = cell.col;
+                row = cell.row+1;
+
+            }
+            else if (!cell.wall_down && cell.row > 0) {
+                col = cell.col;
+                row = cell.row-1;
+
+            }
+            else if (!cell.wall_right && cell.col < grid_cols - 1) {
+                col = cell.col+1;
+                row = cell.row+1;
+
+            }
+            break;
+        case Orientation::RIGHT:
+            if (!cell.wall_right && cell.col < grid_cols - 1) {
+                col = cell.col+1;
+                row = cell.row+1;
+
+            }
+            else if (!cell.wall_up && cell.row < grid_rows - 1) {
+                col = cell.col;
+                row = cell.row+1;
+
+            }
+            else if (!cell.wall_down && cell.row > 0) {
+                col = cell.col;
+                row = cell.row-1;
+
+            }
+            else if (!cell.wall_left && cell.col > 0) {
+                col = cell.col-1;
+                row = cell.row;
+            }
+            break;
+        default:
+            ROS_INFO("ERROR IN BIG SWITCH");
     }
+
+    send_direct_cell(col, row);
+    return;
 
     // not localized && local_plan not empty
 
-    if (current_target_reached())
-    {   
-        local_plan.clear();
-    }
+    // if (current_target_reached())
+    // {   
+    //     local_plan.clear();
+    // }
 
-    if(!send_next_target_to_mover()) {
-        local_plan.clear();
-    }
-    ros::Duration(1).sleep();
+    // if(!send_next_target_to_mover()) {
+    //     local_plan.clear();
+    // }
+    // ros::Duration(1).sleep();
 }
 
 void align()
