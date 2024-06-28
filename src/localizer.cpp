@@ -12,7 +12,7 @@
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
 #include "geometry_msgs/Point32.h"
-#include "geometry_msgs/Pose.h"
+#include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseArray.h"
 #include "create_fundamentals/SensorPacket.h"
 
@@ -38,6 +38,8 @@
 
 #define STD_POS_SPREAD 0.0
 #define STD_THETA_SPREAD 0.0
+
+bool active = false;
 
 std::string message;
 
@@ -359,6 +361,19 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
 bool start_localization_callback(green_fundamentals::StartLocalization::Request  &req, green_fundamentals::StartLocalization::Response &res)
 {
+    if (req.activate) {
+        ROS_INFO("Starting localization at (%f, %f) th: %f");
+
+        init_particles(req.x, req.y, req.theta);
+
+        active = true;
+    }
+    else {
+        ROS_INFO("Stopping localization");        
+
+        active = false;
+    }
+
     return true;
 }
 
@@ -393,7 +408,12 @@ void publish_particles()
 
     position_pub.publish(position);
 
-    pose_pub.publish(particle_to_pose(best_idx));
+
+    geometry_msgs::PoseStamped best_pose;
+    best_pose.header.frame_id = "map";
+    best_pose.pose = particle_to_pose(best_idx);
+
+    pose_pub.publish(best_pose);
 
     geometry_msgs::PoseArray pose_array;
     pose_array.header.frame_id = "map";
@@ -410,7 +430,7 @@ void publish_particles()
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "mc_localization");
+    ros::init(argc, argv, "localizer");
     ros::NodeHandle n;
 
     ROS_INFO("Starting node.");
@@ -436,21 +456,27 @@ int main(int argc, char **argv)
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
-    pose_pub = n.advertise<geometry_msgs::Pose>("best_pose", 1);
-    posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
+    pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_pose", 1);
+    posearray_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
 
     ros::ServiceServer start_localization_service = n.advertiseService("start_localization", start_localization_callback);
 
+    ROS_INFO("Waiting for StartLocalization request ..."); 
+
     ros::Rate loop_rate(30);
-    int it = 0;
+
     while(ros::ok()) {
 
+        loop_rate.sleep();
+
         auto t0 = std::chrono::high_resolution_clock::now();
-        
         ros::spinOnce();
 
+        if (!active) {
+            continue;
+        }
+    
         if (!laser_received) {
-            loop_rate.sleep();
             continue;
         }
         
@@ -479,9 +505,6 @@ int main(int argc, char **argv)
         ROS_INFO("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
         ROS_INFO("%s", message.c_str());
         message = "";
-
-        loop_rate.sleep();
-        it++;
     }
 
     return 0;

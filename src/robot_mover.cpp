@@ -54,6 +54,7 @@ float current_right = 0.0;
 bool is_first_encoder_measurement = true;
 
 const float max_speed = 15.0;
+float cur_max_speed = 15.0;
 const float min_speed = 3.0;
 const float slow_distance = 0.2;
 const float slow_angle = 2.;
@@ -68,7 +69,7 @@ bool is_arrived()
 
 void wander() 
 {
-    float speed = max_speed/2;
+    float speed = cur_max_speed/2;
     
     if (is_obstacle_right)
     {
@@ -123,9 +124,9 @@ void drive_to()
         {
             float total_angle = fmod(target.theta - my_position.theta, 2 * M_PI);
 
-            float speed = max_speed * (abs(total_angle) / slow_angle); // slows down when closer than "slow_angle"
-            speed = std::min(max_speed, speed);
-            speed = std::max(min_speed, speed);   
+            float speed = cur_max_speed * (abs(total_angle) / slow_angle); // slows down when closer than "slow_angle"
+            speed = std::min(cur_max_speed, speed);
+            speed = std::max(cur_max_speed, speed);   
 
             if (total_angle > THETA_EPSILON) {
                 wheel_commands.request.left = -speed;
@@ -175,8 +176,8 @@ void drive_to()
         factor = -1;
     }
     
-    float speed = max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
-    speed = std::min(max_speed, speed);
+    float speed = cur_max_speed * (pos_delta.norm() / slow_distance); // slows down when closer than "slow_distance"
+    speed = std::min(cur_max_speed, speed);
     speed = std::max(min_speed, speed);     
 
     if(is_obstacle_far_front) 
@@ -243,6 +244,11 @@ bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fun
     
     ROS_INFO("new target: (%f, %f)", req.x_target, req.y_target);
     should_rotate = req.rotate;
+    if(req.slow) {
+        cur_max_speed = 5;
+    } else {
+        cur_max_speed = max_speed;
+    }
     
     state = State::DRIVE_TO;
     ros::param::set("mover_drive_to_error", false);

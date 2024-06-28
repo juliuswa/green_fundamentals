@@ -7,4 +7,6 @@ float32 y_target
 float32 theta_target
 
 bool rotate
+
+bool slow
 ---

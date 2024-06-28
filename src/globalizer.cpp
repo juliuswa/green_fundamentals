@@ -456,7 +456,7 @@ bool activate(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res)
 // ############### MAIN ###############
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "mc_localization");
+    ros::init(argc, argv, "globalizer");
     ros::NodeHandle n;
     ROS_INFO("Starting node.");
     ROS_INFO("Waiting for Occupancy Map...");

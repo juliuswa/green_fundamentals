@@ -17,6 +17,8 @@
 #include "green_fundamentals/MoveToPosition.h"
 #include "green_fundamentals/GoldRun.h"
 #include "green_fundamentals/SetVideo.h"
+#include "green_fundamentals/StartLocalization.h"
+#include "std_srvs/SetBool.h"
 #include "robot_constants.h"
 
 #define REASONABLE_DISTANCE 1.
@@ -42,7 +44,7 @@ struct key_hash {
 GLOBAL STUFF
 ############################################################################
 */
-ros::ServiceClient mover_drive_to_client, video_player;
+ros::ServiceClient globalization_activate, localization_activate, mover_drive_to_client, video_player;
 
 ros::Publisher target_pub, goal_pub;
 
@@ -60,7 +62,7 @@ enum Mission {
 
 enum State {
     INIT,
-    LOCALIZE,
+    GLOBALIZE,
     ALIGN,
     IDLE,
     EXECUTE_PLAN,
@@ -125,7 +127,7 @@ void shutdown(int signum)
     exit(0);
 }
 
-void print_state()
+void print_state()  // robot mover max speed, nimm den einen wenn localisation points < THRESHOLD
 {
     switch (state)
     {
@@ -134,9 +136,9 @@ void print_state()
             ROS_INFO("State = IDLE");
             break;
         
-        case State::LOCALIZE:
+        case State::GLOBALIZE:
             set_video(2);
-            ROS_INFO("State = LOCALIZE");
+            ROS_INFO("State = GLOBALIZE");
             break;
 
         case State::ALIGN:
@@ -344,7 +346,7 @@ struct Position {
 
 Position my_position{0., 0., 0., 0, 0};
 bool is_first_position = true;
-bool is_localized = false;
+bool is_globalized = false;
 int localization_points = 0;
 
 /*
@@ -656,24 +658,44 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         fabs(my_position.y - old_y) > REASONABLE_DISTANCE) 
     {
         ROS_INFO("Unreasonable movement");
-        reset_visited_cells();
-        localization_points = 0;
-        local_plan.clear();
-        ROS_INFO("Localization points %d", localization_points);
-    }    
-    else if (!visited_cells[my_position.col][my_position.row])
-    {
-        visited_cells[my_position.col][my_position.row] = true;
-        localization_points += 1;
-        ROS_INFO("Localization points %d", localization_points);
-    }
-    
-    bool was_localized_before = is_localized;
-    is_localized = localization_points > LOCALIZATION_POINTS_THRESHOLD;
 
-    if (!is_localized)
+        std_srvs::SetBool globalization_msg;
+        globalization_msg.request.data = true;
+        globalization_activate.call(globalization_msg);
+
+        // reset_visited_cells();
+        // localization_points = 0;
+        // local_plan.clear();
+        // ROS_INFO("Localization points %d", localization_points);
+    }    
+    // else if (!visited_cells[my_position.col][my_position.row])
+    // {
+    //     visited_cells[my_position.col][my_position.row] = true;
+    //     localization_points += 1;
+    //     ROS_INFO("Localization points %d", localization_points);
+    // }
+    
+    // // bool was_localized_before = is_localized;
+    // is_localized = localization_points > LOCALIZATION_POINTS_THRESHOLD;
+
+     // service ausschalten
+    if(msg->converged) {
+        is_globalized = true;
+        std_srvs::SetBool globalization_msg;
+        globalization_msg.request.data = false;
+        globalization_activate.call(globalization_msg);
+
+        green_fundamentals::StartLocalization localization_msg;
+        localization_msg.request.activate = true;
+        localization_msg.request.x = my_position.x;
+        localization_msg.request.y = my_position.y;
+        localization_msg.request.theta = my_position.theta;
+        localization_activate.call(localization_msg);
+    }
+
+    if (!is_globalized)
     {   
-        state = State::LOCALIZE;
+        state = State::GLOBALIZE;
     }
 }
 
@@ -740,6 +762,11 @@ bool send_next_target_to_mover()
     drive_to_msg.request.y_target = current_target.y;
     drive_to_msg.request.theta_target = current_target.theta;
     drive_to_msg.request.rotate = current_target.should_rotate;
+    drive_to_msg.request.slow = false;
+
+    if(!is_globalized) {
+        drive_to_msg.request.slow = true;
+    }
 
     // ROS_DEBUG("sending drive to request (%f, %f) th: %f | %d", 
     //    current_target.x, current_target.y, current_target.theta, current_target.should_rotate);
@@ -905,7 +932,7 @@ void get_next_goal()
 
 void localize()
 {   
-    if (is_localized)
+    if (is_globalized)
     {
         if(mission == Mission::M_GOLD_RUN) {
             start_gold_run();
@@ -1006,6 +1033,8 @@ int main(int argc, char **argv)
     ROS_INFO("Map received and processed.");
 
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
+    globalization_activate = n.serviceClient<std_srvs::SetBool>("activate_globalizer");
+    localization_activate = n.serviceClient<green_fundamentals::StartLocalization>("start_localization");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     video_player = n.serviceClient<green_fundamentals::SetVideo>("set_video");
 
@@ -1054,7 +1083,7 @@ int main(int argc, char **argv)
                 // do nothing
                 break;
             
-            case State::LOCALIZE:
+            case State::GLOBALIZE:
                 localize();
                 break;
 
