@@ -10,3 +10,8 @@
         - Weniger Partikel
         - Sample bei unsicherheit nur lokal um die letzte Position (vllt mit steigender Varianz, wenn es garnicht klappt)
         - Es gibt kein Kidnapping
+
+# Globalizer
+- Besseres Sampling mit weniger Varianz
+- Merke, wenn es nicht funktioniert hat, bevor man has_converged ausgibt und starte neu
+    - Schaue auf die Entwicklung der weights und wenn es zu schlecht ist, dann starte einfach neu.
