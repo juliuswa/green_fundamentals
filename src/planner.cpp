@@ -691,8 +691,7 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         globalization_msg.request.data = false;
         globalization_activate.call(globalization_msg);
 
-        green_fundamentals::StartLocalization localization_msg;
-        localization_msg.request.activate = true;
+        green_fundamentals::StartLocalization;
         localization_msg.request.x = my_position.x;
         localization_msg.request.y = my_position.y;
         localization_msg.request.theta = my_position.theta;
