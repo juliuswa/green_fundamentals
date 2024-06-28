@@ -310,7 +310,7 @@ float get_particle_error(const Particle& particle, const std::vector<std::pair<f
 }
 
 bool force_update = true; // first localization without movement needed
-const int num_particles = 6000;
+const int num_particles = 5000;
 const int num_ignore_sides = 50; // Leave out because of metal near sensor
 const float weight_parameter = 0.9;
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
