@@ -1007,6 +1007,15 @@ int main(int argc, char **argv)
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     video_player = n.serviceClient<green_fundamentals::SetVideo>("set_video");
+
+    {
+        std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[3][3]);
+        ROS_INFO("Neighbors of 3, 3");
+        for (Grid_Coords neighbor : neighbors)
+        {
+            ROS_INFO("Neighbor Col: %f, Row: %f", neighbor.first, neighbor.second);
+        }
+    }
     
 
     target_pub = n.advertise<geometry_msgs::PointStamped>("target", 1);
