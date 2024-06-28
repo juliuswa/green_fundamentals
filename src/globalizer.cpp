@@ -15,6 +15,8 @@
 #include "green_fundamentals/Pose.h"
 #include "create_fundamentals/SensorPacket.h"
 
+#define CONVERGED_NUM 100
+
 struct Particle {
     float x, y, theta, weight = 0.;
 };
@@ -121,6 +123,43 @@ bool has_converged()
     return true;
 }
 
+bool has_converged_fast()
+{
+    float mean_x, mean_y, mean_theta = 0.;
+
+    std::default_random_engine generator;
+    std::uniform_real_distribution<float> uni_dist(0., 1.);
+
+    for (int i = 0; i < CONVERGED_NUM; i++)
+    {
+        int index = floor(uni_dist(generator) * particles.size());
+        mean_x += particles[index].x;
+        mean_y += particles[index].y;
+        mean_theta += norm_angle(particles[index].theta);
+    }
+
+    mean_x = mean_x / (float)CONVERGED_NUM;
+    mean_y = mean_y / (float)CONVERGED_NUM;
+    mean_theta = mean_theta / (float)CONVERGED_NUM;
+
+    for (int i = 0; i < CONVERGED_NUM; i++)
+    {
+        int index = floor(uni_dist(generator) * particles.size());
+        float d_x = mean_x - particles[index].x;
+        float d_y = mean_y - particles[index].y;
+        float d_theta = angle_diff(mean_theta, particles[index].theta);
+
+        float dist = std::sqrt(d_x*d_x + d_y*d_y);
+
+        if (dist > 0.4 || d_theta > M_PI/2)  {
+            ROS_INFO("Not converged. dist: %f, d_theta: %f", dist, d_theta);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 ros::Publisher particle_array_viz_pub, position_pub;
 void publish_particles()
 {   
@@ -136,10 +175,12 @@ void publish_particles()
     position.x = best_particle.x;
     position.y = best_particle.y;
     position.theta = best_particle.theta;
-    position.converged = has_converged();
+    position.converged = has_converged_fast();
     position_pub.publish(position);
 
-    if (position.converged) ROS_INFO("HAS CONVERGED");
+    if (position.converged) {
+        ROS_INFO("HAS CONVERGED");
+    } 
 
     // Visualizations
     geometry_msgs::PoseArray pose_array;
