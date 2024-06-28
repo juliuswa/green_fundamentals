@@ -660,7 +660,7 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         ROS_INFO("Unreasonable movement");
 
         std_srvs::SetBool globalization_msg;
-        globalization_msg.data = true;
+        globalization_msg.request.data = true;
         globalization_activate.call(globalization_msg);
 
         // reset_visited_cells();
@@ -682,14 +682,15 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     if(msg->converged) {
         is_globalized = true;
         std_srvs::SetBool globalization_msg;
-        globalization_msg.data = false;
+        globalization_msg.request.data = false;
         globalization_activate.call(globalization_msg);
 
         green_fundamentals::StartLocalization localization_msg;
-        localization_activate.activate = true;
-        localization_activate.x = my_position.x;
-        localization_activate.y = my_position.y;
-        localization_activate.theta = my_position.theta;
+        localization_msg.request.activate = true;
+        localization_msg.request.x = my_position.x;
+        localization_msg.request.y = my_position.y;
+        localization_msg.request.theta = my_position.theta;
+        localization_activate.call(localization_msg);
     }
 
     if (!is_globalized)
@@ -1032,8 +1033,8 @@ int main(int argc, char **argv)
     ROS_INFO("Map received and processed.");
 
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
-    globalization_activate = n.serviceClient<std_srvs::SetBool>("globalization_activate");
-    localization_activate = n.serviceClient<green_fundamentals::StartLocalization>("localization_activate");
+    globalization_activate = n.serviceClient<std_srvs::SetBool>("activate_globalizer");
+    localization_activate = n.serviceClient<green_fundamentals::StartLocalization>("start_localization");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     video_player = n.serviceClient<green_fundamentals::SetVideo>("set_video");
 
