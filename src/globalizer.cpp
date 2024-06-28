@@ -17,6 +17,11 @@
 
 #define CONVERGED_NUM 100
 
+bool force_update = true; // first localization without movement needed
+const int num_particles = 3000;
+const int num_ignore_sides = 50; // Leave out because of metal near sensor
+const float weight_parameter = 0.9;
+
 struct Particle {
     float x, y, theta, weight = 0.;
 };
@@ -132,7 +137,7 @@ bool has_converged_fast()
 
     for (int i = 0; i < CONVERGED_NUM; i++)
     {
-        int index = floor(uni_dist(generator) * particles.size());
+        int index = floor(uni_dist(generator) * (float)particles.size());
         mean_x += particles[index].x;
         mean_y += particles[index].y;
         mean_theta += norm_angle(particles[index].theta);
@@ -144,7 +149,7 @@ bool has_converged_fast()
 
     for (int i = 0; i < CONVERGED_NUM; i++)
     {
-        int index = floor(uni_dist(generator) * particles.size());
+        int index = floor(uni_dist(generator) * (float)particles.size());
         float d_x = mean_x - particles[index].x;
         float d_y = mean_y - particles[index].y;
         float d_theta = angle_diff(mean_theta, particles[index].theta);
@@ -152,6 +157,7 @@ bool has_converged_fast()
         float dist = std::sqrt(d_x*d_x + d_y*d_y);
 
         if (dist > 0.4 || d_theta > M_PI/2)  {
+            ROS_INFO("particles[index].x: %f, particles[index].y: %f", particles[index].x, particles[index].y);
             ROS_INFO("Not converged. dist: %f, d_theta: %f", dist, d_theta);
             return false;
         }
@@ -439,10 +445,6 @@ std::vector<Particle> normal_resample()
     return new_particles;
 }
 
-bool force_update = true; // first localization without movement needed
-const int num_particles = 5000;
-const int num_ignore_sides = 50; // Leave out because of metal near sensor
-const float weight_parameter = 0.9;
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {   
     if (!active) return;
