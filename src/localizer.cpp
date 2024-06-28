@@ -430,7 +430,7 @@ void publish_particles()
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "mc_localization");
+    ros::init(argc, argv, "localizer");
     ros::NodeHandle n;
 
     ROS_INFO("Starting node.");
@@ -460,6 +460,8 @@ int main(int argc, char **argv)
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
 
     ros::ServiceServer start_localization_service = n.advertiseService("start_localization", start_localization_callback);
+
+    ROS_INFO("Waiting for StartLocalization request ..."); 
 
     ros::Rate loop_rate(30);
 
