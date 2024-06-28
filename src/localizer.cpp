@@ -39,6 +39,8 @@
 #define STD_POS_SPREAD 0.0
 #define STD_THETA_SPREAD 0.0
 
+bool active = false;
+
 std::string message;
 
 struct Particle {
@@ -359,6 +361,19 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
 bool start_localization_callback(green_fundamentals::StartLocalization::Request  &req, green_fundamentals::StartLocalization::Response &res)
 {
+    if (req.activate) {
+        ROS_INFO("Starting localization at (%f, %f) th: %f");
+
+        init_particles(req.x, req.y, req.theta);
+
+        active = true;
+    }
+    else {
+        ROS_INFO("Stopping localization");        
+
+        active = false;
+    }
+
     return true;
 }
 
@@ -442,15 +457,19 @@ int main(int argc, char **argv)
     ros::ServiceServer start_localization_service = n.advertiseService("start_localization", start_localization_callback);
 
     ros::Rate loop_rate(30);
-    int it = 0;
+
     while(ros::ok()) {
 
+        loop_rate.sleep();
+
         auto t0 = std::chrono::high_resolution_clock::now();
-        
         ros::spinOnce();
 
+        if (!active) {
+            continue;
+        }
+    
         if (!laser_received) {
-            loop_rate.sleep();
             continue;
         }
         
@@ -479,9 +498,6 @@ int main(int argc, char **argv)
         ROS_INFO("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
         ROS_INFO("%s", message.c_str());
         message = "";
-
-        loop_rate.sleep();
-        it++;
     }
 
     return 0;
