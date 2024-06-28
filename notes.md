@@ -1,10 +1,12 @@
 # Things to change
-
-- Localization 
-    - Wenn er lost ist, dann vielleicht in jeder Zelle neue Partikel spawnen und schauen ob es dort möglich ist und zu den scans passt.
-    - Grid Localization als alternative
-    - AMCL lokalisiert nur, wenn genug movement kam?
-    - AMCL Code orientieren
-
-- Path planning
-    - Verändere die Breitensuche, sodass er auch checkt ob man diagonal fahren kann. Wahrscheinlich in get_neighbors wo er checken muss, ob es möglich ist direkt in die diagonalen zellen zu fahren
+- Zwei Phasen
+    1. Globale Lokalisierung
+        - viele Partikel ~5000
+        - solange bis auf einen Punkt converged
+        - fahre langsamer und in möglichst ruckelfreien routen
+        - Wenn converged -> umschalten auf lokale lokalisierung
+        - ??? Wie merken, dass converged: Merkt das der Lokaliser oder der Planner
+    2. Lokale Lokalisierung: wenn ich ein bisschen lost bin, dann sample neue samples in der umgebung, um dich wieder zu finden.
+        - Weniger Partikel
+        - Sample bei unsicherheit nur lokal um die letzte Position (vllt mit steigender Varianz, wenn es garnicht klappt)
+        - Es gibt kein Kidnapping

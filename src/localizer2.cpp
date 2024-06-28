@@ -10,6 +10,7 @@
 #include "sensor_msgs/LaserScan.h"
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/PoseArray.h"
+#include "std_srvs/SetBool.h"
 #include "green_fundamentals/Position.h"
 #include "green_fundamentals/Pose.h"
 #include "create_fundamentals/SensorPacket.h"
@@ -25,6 +26,9 @@ float x_max, y_max;
 
 std::default_random_engine generator;
 std::uniform_real_distribution<float> uniform_dist(0., 1.);
+
+
+bool active = true;
 
 // ############### HELPERS ###############
 std::pair<int, int> metric_to_grid_index(float x, float y) 
@@ -53,15 +57,6 @@ Particle get_random_particle()
     return particle;
 }
 
-float normalize_angle(float angle)
-{
-    angle = fmod(angle, (2 * M_PI));
-    if (angle > M_PI)
-        angle -= 2 * M_PI;
-
-    return angle;
-}
-
 geometry_msgs::Pose particle_to_viz_pose(const Particle& particle)
 {
     geometry_msgs::Pose pose;
@@ -80,6 +75,53 @@ geometry_msgs::Pose particle_to_viz_pose(const Particle& particle)
     return pose;
 }
 
+float norm_angle(const float angle)
+{
+    return fmod(angle + 5*M_PI, 2*M_PI) - M_PI;
+}
+
+float angle_diff(float a, float b)
+{
+  double d1, d2;
+  a = norm_angle(a);
+  b = norm_angle(b);
+  d1 = a-b;
+  d2 = 2*M_PI - fabs(d1);
+  if(d1 > 0)
+    d2 *= -1.0;
+  if(fabs(d1) < fabs(d2))
+    return(d1);
+  else
+    return(d2);
+}
+
+bool has_converged()
+{
+    float mean_x, mean_y, mean_theta = 0.;
+
+    for (const Particle& particle: particles)
+    {
+        mean_x += particle.x;
+        mean_y += particle.y;
+        mean_theta += norm_angle(particle.theta);
+    }
+
+    mean_x /= particles.size();
+    mean_y /= particles.size();
+    mean_theta /= particles.size();
+
+    for (const Particle& particle: particles)
+    {
+        float d_x = mean_x - particle.x;
+        float d_y = mean_y - particle.y;
+        float d_theta = angle_diff(mean_theta, particle.theta);
+        float dist = std::sqrt(d_x*d_x + d_y*d_y);
+        if (dist > 0.4 || d_theta > M_PI/2) return false;
+    }
+
+    return true;
+}
+
 ros::Publisher particle_array_viz_pub, position_pub;
 void publish_particles()
 {   
@@ -95,7 +137,10 @@ void publish_particles()
     position.x = best_particle.x;
     position.y = best_particle.y;
     position.theta = best_particle.theta;
+    position.converged = has_converged();
     position_pub.publish(position);
+
+    if (position.converged) ROS_INFO("HAS CONVERGED");
 
     // Visualizations
     geometry_msgs::PoseArray pose_array;
@@ -144,7 +189,7 @@ const float RESAMPLE_STD_POS = 0.01;
 const float RESAMPLE_STD_THETA = M_PI/180.0;
 std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS);
 std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA);
-void motion_update(const float distance, const float angle_change)
+void motion_update(const float distance, const float angle_change, const bool add_random)
 {
     for (Particle& particle : particles)
     {
@@ -152,9 +197,16 @@ void motion_update(const float distance, const float angle_change)
         const float x_delta = distance * cos(particle.theta + angle_change/2);
         const float y_delta = distance * sin(particle.theta + angle_change/2);
 
-        particle.x += x_delta + normal_dist_pos(generator);
-        particle.y += y_delta + normal_dist_pos(generator);
-        particle.theta = normalize_angle(particle.theta + angle_change + normal_dist_theta(generator));
+        particle.x += x_delta;
+        particle.y += y_delta;
+        particle.theta += angle_change;
+
+        if (add_random)
+        {
+            particle.x += normal_dist_pos(generator);
+            particle.y += normal_dist_pos(generator);
+            particle.theta += normal_dist_theta(generator);
+        }
     }
 }
 
@@ -162,6 +214,7 @@ float moved_distance, moved_angle, last_left, last_right, current_left, current_
 bool is_first_encoder_measurement = true;
 void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
 {   
+    if (!active) return;
     current_left = msg->encoderLeft;
     current_right = msg->encoderRight;
     if (is_first_encoder_measurement) {
@@ -177,7 +230,7 @@ void sensor_callback(const create_fundamentals::SensorPacket::ConstPtr& msg)
     float distance = (distance_left + distance_right) / 2;
     float angle_change = (distance_right - distance_left) / WHEEL_BASE;
 
-    motion_update(distance, angle_change);
+    motion_update(distance, angle_change, angle_diff(current_left, last_left) > 0.01 || angle_diff(current_right, last_right) > 0.01);
 
     last_left = current_left;
     last_right = current_right;
@@ -211,8 +264,6 @@ float get_particle_error(const Particle& particle, const std::vector<std::pair<f
     for (const auto& laser : laser_data) 
     {
         auto [real_distance, angle_offset] = laser;
-
-        assert(real_distance <= 1. && real_distance >= RAY_STEP_SIZE);
 
         float ray_x = laser_x;
         float ray_y = laser_y;
@@ -248,27 +299,25 @@ float get_particle_error(const Particle& particle, const std::vector<std::pair<f
         {
             error = fabs(real_distance - r);
         }
-        assert(error >= 0);
 
         // TODO publish real and expected points
 
         total_error += error;
         iterations++;
     }
-    assert(iterations == SUBSAMPLE_LASERS);
-    assert(total_error > 0);
+
     return total_error;
 }
 
 bool force_update = true; // first localization without movement needed
-const int num_particles = 1;
+const int num_particles = 6000;
 const int num_ignore_sides = 50; // Leave out because of metal near sensor
 const float weight_parameter = 0.9;
 void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {   
+    if (!active) return;
     // Subsample lasers
     std::vector<std::pair<float, float>> laser_data;
-    assert(laser_data.size() == 0);
 
     int start_index = num_ignore_sides;
     int end_index = msg->ranges.size() - num_ignore_sides;
@@ -279,7 +328,6 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
         int index = start_index + floor(i * valid_count / SUBSAMPLE_LASERS);
 
         float real_distance = msg->ranges[index];
-        assert(real_distance > 0.03);
         if (real_distance != real_distance || real_distance > 1.) {
             real_distance = 1.0;
         }            
@@ -287,16 +335,10 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
             real_distance = RAY_STEP_SIZE;
         }
 
-        assert(real_distance >= RAY_STEP_SIZE && real_distance <= 1.);
-
-        float ray_angle = normalize_angle(msg->angle_min + msg->angle_increment * index);
-        
-        assert((ray_angle >= 0. && ray_angle <= M_PI/2.) || (ray_angle < 0. && ray_angle <= -M_PI/2.));
+        float ray_angle = msg->angle_min + msg->angle_increment * index;
 
         laser_data.push_back({real_distance, ray_angle});
     }
-
-    assert(laser_data.size() == SUBSAMPLE_LASERS);
 
     // Check if enough movement
     bool update = fabs(moved_distance) > 0.05 || fabs(moved_angle) > 0.2 || force_update;
@@ -320,15 +362,9 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     for (Particle& particle : particles)
     {
         const float particle_error = get_particle_error(particle, laser_data);
-        assert(particle_error > 0.);
-        assert(weight_parameter <= 1. && weight_parameter > 0.);
         particle.weight = std::exp(-particle_error * weight_parameter);
         total_weight += particle.weight;
-
-        ROS_INFO("PARTICLE ERROR %f, PARTICLE WEIGHT %f", particle_error, particle.weight);
     }
-
-    assert(total_weight > 0.);
 
     float sum = 0.;
     for (Particle& particle : particles)
@@ -337,36 +373,29 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
         sum += particle.weight;
     }
 
-    assert(sum == 1.); // Particles are normalized
-
     // Resample
     std::vector<float> cum_sum(particles.size()+1);
-    assert(cum_sum.size() == particles.size()+1);
     cum_sum[0] = 0;
     for (int i = 0; i < particles.size(); ++i) {
         cum_sum[i+1] = cum_sum[i] + particles[i].weight;
     } 
 
     std::vector<Particle> new_particles;
-    assert(new_particles.size() == 0);
     while (new_particles.size() < num_particles)
     {
         float rand = uniform_dist(generator);
-        assert(rand >= 0 && rand <= 1);
         int i;
         for (i = 0; i < particles.size(); i++)
         {
             if (rand <= cum_sum[i+1]) break;
         }
-
-        assert(i >= 0 && i < particles.size());
         
         Particle particle = particles.at(i);
 
         // ADD NOISE TO RESAMPLING
         particle.x += normal_dist_pos(generator);
         particle.y += normal_dist_pos(generator);
-        particle.theta = normalize_angle(particle.theta + normal_dist_theta(generator));
+        particle.theta += normal_dist_theta(generator);
 
         new_particles.push_back(particle);
     }
@@ -375,6 +404,32 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
     publish_particles();
     return;
+}
+
+void init_particles()
+{
+    particles.clear();
+    for (int i = 0; i < num_particles; i++)
+    {
+        Particle particle = get_random_particle();
+        particles.push_back(particle);
+    }
+}
+
+bool activate(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res)
+{
+    res.success = true;
+    if (req.data)
+    {
+        init_particles();
+        active = true;
+        return true;
+    }
+    else 
+    {
+        active = false;
+        return true;
+    }
 }
 
 // ############### MAIN ###############
@@ -397,15 +452,10 @@ int main(int argc, char **argv)
 
     particle_array_viz_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
+    ros::ServiceServer activate_service = n.advertiseService("activate_globalizer", activate);
     
     // Init particles
-    particles.clear();
-    for (int i = 0; i < num_particles; i++)
-    {
-        Particle particle = get_random_particle();
-        particles.push_back(particle);
-    }
-    assert(particles.size() == num_particles);
+    init_particles();
 
     ROS_INFO("Start Localization...");
 
