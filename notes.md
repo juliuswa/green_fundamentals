@@ -10,6 +10,7 @@
         - Weniger Partikel
         - Sample bei unsicherheit nur lokal um die letzte Position (vllt mit steigender Varianz, wenn es garnicht klappt)
         - Es gibt kein Kidnapping
+        - **TODO** wenn er irgendwo hinfahren will und er würde gegen eine Wand fahren, dann kann er globalisieren
 
 # Globalizer
 - Besseres Sampling mit weniger Varianz
