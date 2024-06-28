@@ -27,7 +27,6 @@ float x_max, y_max;
 std::default_random_engine generator;
 std::uniform_real_distribution<float> uniform_dist(0., 1.);
 
-
 bool active = true;
 
 // ############### HELPERS ###############
@@ -307,6 +306,28 @@ float get_particle_error(const Particle& particle, const std::vector<std::pair<f
     }
 
     return total_error;
+}
+
+std::vector<Particle> residual_resample()
+{
+    int N = particles.size();
+
+    std::vector<Particle> new_particles;
+    new_particles.reserve(N);
+
+    for (const Particle& p : particles) 
+    {
+        int num_copies = (int)(p.weight * N);
+        for (int i = 0; i < num_copies; i++)
+        {
+            Particle particle;
+            particle.x = p.x + normal_dist_pos(generator);
+            particle.y = p.y + normal_dist_pos(generator);
+            particle.theta = p.theta + normal_dist_theta(generator);
+            new_particles.push_back(particle);
+        }
+    }
+
 }
 
 bool force_update = true; // first localization without movement needed
