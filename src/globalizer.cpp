@@ -396,11 +396,11 @@ std::vector<Particle> residual_resample()
         residuals[i] /= sum;
     }
 
-    std::vector<float> cum_sum(residuals.size()+1);
+    std::vector<float> cum_sum(residuals.size()+1, 1.);
     cum_sum[0] = 0;
     for (int i = 0; i < residuals.size(); ++i) {
         cum_sum[i+1] = cum_sum[i] + residuals[i];
-    } 
+    }
 
     while (new_particles.size() < num_particles)
     {
@@ -427,7 +427,7 @@ std::vector<Particle> residual_resample()
 
 std::vector<Particle> normal_resample()
 {
-    std::vector<float> cum_sum(particles.size()+1);
+    std::vector<float> cum_sum(particles.size()+1, 1.);
     cum_sum[0] = 0;
     for (int i = 0; i < particles.size(); ++i) {
         cum_sum[i+1] = cum_sum[i] + particles[i].weight;
