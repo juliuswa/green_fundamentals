@@ -1004,7 +1004,8 @@ void localize()
     // if (local_plan.empty())
     // {
     const Cell& cell = cell_grid[my_position.row][my_position.col];
-    int col, row;
+    int col = -1;
+    int row = -1;
     switch (my_position.orientation)
     {
         case Orientation::UP:
@@ -1096,7 +1097,7 @@ void localize()
         default:
             ROS_INFO("ERROR IN BIG SWITCH");
     }
-
+    if (col == -1 || row == -1) return;
     send_direct_cell(col, row);
     return;
 
