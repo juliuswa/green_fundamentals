@@ -243,6 +243,11 @@ bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fun
     
     ROS_INFO("new target: (%f, %f)", req.x_target, req.y_target);
     should_rotate = req.rotate;
+    if(req.slow) {
+        max_speed = 5;
+    } else {
+        max_speed = 15;
+    }
     
     state = State::DRIVE_TO;
     ros::param::set("mover_drive_to_error", false);
