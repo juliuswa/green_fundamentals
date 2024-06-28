@@ -143,8 +143,8 @@ bool has_converged_fast()
         mean_theta += norm_angle(particles[index].theta);
     }
 
-    mean_x = mean_x / CONVERGED_NUM;
-    mean_y = mean_y / CONVERGED_NUM;
+    mean_x = mean_x / (float)CONVERGED_NUM;
+    mean_y = mean_y / (float)CONVERGED_NUM;
     mean_theta = mean_theta / (float)CONVERGED_NUM;
 
     for (int i = 0; i < CONVERGED_NUM; i++)
