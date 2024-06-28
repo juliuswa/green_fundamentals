@@ -167,10 +167,10 @@ void drive_to()
 
     int direction = cross_product_z < 0 ? 1 : -1;
 
-    // float exponential_factor = 2 * std::exp(-angle) - 1;
+    float exponential_factor = 2 * std::exp(-angle) - 1;
     float linear_factor = - 2 * angle / (M_PI / 2) + 1;
 
-    float factor = (linear_factor + linear_factor) / 2;
+    float factor = (linear_factor + exponential_factor) / 2;
 
     if (is_obstacle_front) { 
         factor = -1;
