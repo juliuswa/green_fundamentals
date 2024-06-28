@@ -665,6 +665,10 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         globalization_msg.request.data = true;
         globalization_activate.call(globalization_msg);
 
+        green_fundamentals::StartLocalization localization_msg;
+        localization_msg.request.activate = false;
+        localization_activate.call(localization_msg);
+
         // reset_visited_cells();
         // localization_points = 0;
         // local_plan.clear();
