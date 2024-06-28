@@ -313,11 +313,16 @@ std::vector<Particle> residual_resample()
     int N = particles.size();
 
     std::vector<Particle> new_particles;
-    new_particles.reserve(N);
+    new_particles.reserve(num_particles);
 
+    std::vector<float> residuals;
+    float sum = 0.;
     for (const Particle& p : particles) 
     {
         int num_copies = (int)(p.weight * N);
+        float residual = (p.weight * N) - num_copies;
+        residuals.push_back(residual);
+        sum += residual;
         for (int i = 0; i < num_copies; i++)
         {
             Particle particle;
@@ -328,6 +333,69 @@ std::vector<Particle> residual_resample()
         }
     }
 
+    for (int i = 0; i < residuals.size(); i++)
+    {
+        residuals[i] /= sum;
+    }
+
+    std::vector<float> cum_sum(residuals.size()+1);
+    cum_sum[0] = 0;
+    for (int i = 0; i < residuals.size(); ++i) {
+        cum_sum[i+1] = cum_sum[i] + residuals[i];
+    } 
+
+    while (new_particles.size() < num_particles)
+    {
+        float rand = uniform_dist(generator);
+        int i;
+        for (i = 0; i < particles.size(); i++)
+        {
+            if (rand <= cum_sum[i+1]) break;
+        }
+        
+        Particle particle = particles.at(i);
+
+        // ADD NOISE TO RESAMPLING
+        particle.x += normal_dist_pos(generator);
+        particle.y += normal_dist_pos(generator);
+        particle.theta += normal_dist_theta(generator);
+
+        new_particles.push_back(particle);
+    }
+
+    return new_particles;
+
+}
+
+std::vector<Particle> normal_resample()
+{
+    std::vector<float> cum_sum(particles.size()+1);
+    cum_sum[0] = 0;
+    for (int i = 0; i < particles.size(); ++i) {
+        cum_sum[i+1] = cum_sum[i] + particles[i].weight;
+    } 
+
+    std::vector<Particle> new_particles;
+    while (new_particles.size() < num_particles)
+    {
+        float rand = uniform_dist(generator);
+        int i;
+        for (i = 0; i < particles.size(); i++)
+        {
+            if (rand <= cum_sum[i+1]) break;
+        }
+        
+        Particle particle = particles.at(i);
+
+        // ADD NOISE TO RESAMPLING
+        particle.x += normal_dist_pos(generator);
+        particle.y += normal_dist_pos(generator);
+        particle.theta += normal_dist_theta(generator);
+
+        new_particles.push_back(particle);
+    }
+
+    return new_particles;
 }
 
 bool force_update = true; // first localization without movement needed
@@ -395,33 +463,7 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     }
 
     // Resample
-    std::vector<float> cum_sum(particles.size()+1);
-    cum_sum[0] = 0;
-    for (int i = 0; i < particles.size(); ++i) {
-        cum_sum[i+1] = cum_sum[i] + particles[i].weight;
-    } 
-
-    std::vector<Particle> new_particles;
-    while (new_particles.size() < num_particles)
-    {
-        float rand = uniform_dist(generator);
-        int i;
-        for (i = 0; i < particles.size(); i++)
-        {
-            if (rand <= cum_sum[i+1]) break;
-        }
-        
-        Particle particle = particles.at(i);
-
-        // ADD NOISE TO RESAMPLING
-        particle.x += normal_dist_pos(generator);
-        particle.y += normal_dist_pos(generator);
-        particle.theta += normal_dist_theta(generator);
-
-        new_particles.push_back(particle);
-    }
-
-    particles = new_particles;
+    particles = normal_resample();
 
     publish_particles();
     return;
