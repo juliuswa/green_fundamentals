@@ -654,10 +654,12 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
     }
 
     // Is localized?
-    if (fabs(my_position.x - old_x) > REASONABLE_DISTANCE ||
-        fabs(my_position.y - old_y) > REASONABLE_DISTANCE) 
+    if (is_globalized && 
+        (fabs(my_position.x - old_x) > REASONABLE_DISTANCE ||
+        fabs(my_position.y - old_y) > REASONABLE_DISTANCE)) 
     {
         ROS_INFO("Unreasonable movement");
+        is_globalized = false;
 
         std_srvs::SetBool globalization_msg;
         globalization_msg.request.data = true;
@@ -1037,6 +1039,10 @@ int main(int argc, char **argv)
     localization_activate = n.serviceClient<green_fundamentals::StartLocalization>("start_localization");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     video_player = n.serviceClient<green_fundamentals::SetVideo>("set_video");
+
+    std_srvs::SetBool globalization_msg;
+    globalization_msg.request.data = true;
+    globalization_activate.call(globalization_msg);
 
     target_pub = n.advertise<geometry_msgs::PointStamped>("target", 1);
     goal_pub = n.advertise< geometry_msgs::PointStamped>("goal", 1);
