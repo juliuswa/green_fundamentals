@@ -32,9 +32,10 @@ add_message_files(
 add_service_files(
   FILES
   DriveTo.srv
+  GoldRun.srv
   MoveToPosition.srv
   SetVideo.srv
-  GoldRun.srv
+  StartLocalization.srv
 )
 
 generate_messages(

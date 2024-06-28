@@ -6,34 +6,38 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <chrono>
 #include <string>
-
 #include "robot_constants.h"
 
 #include "nav_msgs/OccupancyGrid.h"
 #include "sensor_msgs/LaserScan.h"
-#include "geometry_msgs/Point32.h"
 #include "sensor_msgs/PointCloud.h"
+#include "geometry_msgs/Point32.h"
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/PoseArray.h"
-#include "green_fundamentals/Position.h"
 #include "create_fundamentals/SensorPacket.h"
+
+#include "green_fundamentals/Position.h"
+#include "green_fundamentals/StartLocalization.h"
+
+#define NUM_PARTICLES 512
 
 #define SUBSAMPLE_LASERS 24
 #define RAY_STEP_SIZE 0.01
 
-#define MAX_PARTICLES 4096
-
-#define PARTICLES_PER_BIN 64
-#define NUM_BINS 1296 // 36x36
-#define FILLED_BIN_THRESHOLD 4
-
 #define SPREAD_PARTICLE_PART 0.1
-#define RANDOM_PARTICLE_PART 0.5
-
 #define SPREAD_WEIGHT 0.10
-#define RANDOM_WEIGHT 0.02
-#define RESAMPLE_STD_POS 0.04
-#define RESAMPLE_STD_THETA 0.08
+
+#define STD_POS_INITIAL 0.1
+#define STD_THETA_INITIAL 0.1
+
+#define STD_POS_UPDATE 0.04
+#define STD_THETA_UPDATE 0.08
+
+#define STD_POS_RESAMPLE 0.01
+#define STD_THETA_RESAMPLE 0.02
+
+#define STD_POS_SPREAD 0.0
+#define STD_THETA_SPREAD 0.0
 
 std::string message;
 
@@ -98,48 +102,33 @@ std::default_random_engine generator;
 
 // Particles
 
-Particle particles[MAX_PARTICLES];
-
-int sample_size = MAX_PARTICLES;
-
-int bins[NUM_BINS];
-int bin_division = floor(std::sqrt(NUM_BINS));
-float bin_x = (x_max - x_min) / bin_division;
-float bin_y = (y_max - y_min) / bin_division;
+Particle particles[NUM_PARTICLES];
 
 // Publishers
 
 ros::Publisher pose_pub, posearray_pub, position_pub;
 
-int get_bin_for_position(int i) {
-    return std::min((int)(floor(particles[i].position[0] / bin_x) + bin_division * floor(particles[i].position[1] / bin_y)), NUM_BINS - 1);
-}
-
-void set_particle(Particle particle, int index) {
-    particles[index] = particle;
-    int bin = get_bin_for_position(index);
-    //ROS_DEBUG("bin index: %d, max num bins: %d", bin, NUM_BINS);
-    bins[bin] += 1;
-}
-
-Particle get_random_particle() 
+Particle get_random_particle(float x, float y, float theta) 
 {
-    std::uniform_real_distribution<float> uni_dist(0., 1.);
+    std::normal_distribution<float> distribution_pos(0., STD_POS_INITIAL);
+    std::normal_distribution<float> distribution_theta(0., STD_THETA_INITIAL * M_PI);
 
-    float x = uni_dist(generator) * (x_max - x_min);
-    float y = uni_dist(generator) * (y_max - y_min);
+    float particle_x = x + distribution_pos(generator);
+    float particle_y = y + distribution_pos(generator);
 
-    float theta = uni_dist(generator) * (2 * M_PI);
-    Eigen::Vector2f pos{x, y};
-    Particle particle{pos, theta, 0.};
+    float particle_theta = theta + distribution_theta(generator);
+
+    Eigen::Vector2f pos{particle_x, particle_y};
+    Particle particle{pos, particle_theta, 1.};
+
     return particle;
 }
 
-void init_particles()
+void init_particles(float x, float y, float theta)
 {
-    for (int i = 0; i < sample_size; i++)
+    for (int i = 0; i < NUM_PARTICLES; i++)
     {
-        set_particle(get_random_particle(), i);        
+        particles[i] = get_random_particle(x, y, theta);      
     }
 }
 
@@ -152,17 +141,17 @@ void update_particles()
     float delta_theta = (distance_right - distance_left) / WHEEL_BASE;
 
     std::default_random_engine generator;
-    std::normal_distribution<float> normal_dist_pos(1., RESAMPLE_STD_POS);
-    std::normal_distribution<float> normal_dist_theta(1., RESAMPLE_STD_THETA);
+    std::normal_distribution<float> distribution_pos(1., STD_POS_UPDATE);
+    std::normal_distribution<float> distribution_theta(1., STD_THETA_UPDATE);
 
-    for (int i = 0; i < sample_size; i++)
+    for (int i = 0; i < NUM_PARTICLES; i++)
     {   
         float x_delta = distance * cos(particles[i].theta + delta_theta/2);
         float y_delta = distance * sin(particles[i].theta + delta_theta/2);
 
-        particles[i].position[0] += x_delta * normal_dist_pos(generator);
-        particles[i].position[1] += y_delta * normal_dist_pos(generator);
-        particles[i].theta += delta_theta * normal_dist_theta(generator);
+        particles[i].position[0] += x_delta * distribution_pos(generator);
+        particles[i].position[1] += y_delta * distribution_pos(generator);
+        particles[i].theta += delta_theta * distribution_theta(generator);
     }
 }
 
@@ -223,7 +212,7 @@ void evaluate_particle(int p)
 
 void evaluate_particles() 
 {
-    for (int p = 0; p < sample_size; p++)
+    for (int p = 0; p < NUM_PARTICLES; p++)
     {
         evaluate_particle(p);
     }
@@ -233,7 +222,7 @@ int get_max_particle_idx() {
     float max_weight = 0.;
     int index = -1;
 
-    for (int i = 0; i < sample_size; i++)
+    for (int i = 0; i < NUM_PARTICLES; i++)
     {
         if (particles[i].weight > max_weight)
         {
@@ -245,101 +234,65 @@ int get_max_particle_idx() {
     return index;
 }
 
-int calculate_sample_size() {
-    int filled_bin_count = 0;
-
-    for (int i = 0; i < NUM_BINS; i++) {
-        if (bins[i] > FILLED_BIN_THRESHOLD) {
-            filled_bin_count += 1;
-        }            
-    }
-
-    return std::min(MAX_PARTICLES, std::max(1, filled_bin_count) * PARTICLES_PER_BIN);
-}
-
-void reset_bins() {
-    for (int i = 0; i < NUM_BINS; i++) {
-        bins[i] = 0;
-    }
-}
-
 void resample_particles()
 {
     float max_weight = particles[get_max_particle_idx()].weight;
-
-    std::uniform_real_distribution<float> uni_dist(0., 1.);
-    std::normal_distribution<float> normal_dist_pos(0., RESAMPLE_STD_POS / 8);
-    std::normal_distribution<float> normal_dist_theta(0., RESAMPLE_STD_THETA / 8);
-
-    int new_sample_size = calculate_sample_size();
-
-    int max_spreading_particles = new_sample_size * SPREAD_PARTICLE_PART;
+    int max_spreading_particles = NUM_PARTICLES * SPREAD_PARTICLE_PART;
     int num_spreading_particles = std::max(0, (int)floor(max_spreading_particles * (1 - (max_weight / SPREAD_WEIGHT))));
 
-    int max_random_particles = new_sample_size * RANDOM_PARTICLE_PART;
-    int num_random_particles = std::max(0, (int)floor(max_random_particles * (1 - (max_weight / RANDOM_WEIGHT))));
-
     message += "max weight: " +  std::to_string(max_weight) + "\n";
-    message += "sample size: " + std::to_string(new_sample_size) + " spreading: " + std::to_string(num_spreading_particles)
-        + " random: " + std::to_string(num_random_particles) + "\n";
+    message += "spreading particles: " + std::to_string(num_spreading_particles) + "\n";
 
     ROS_DEBUG("resampling... ");
-    Particle new_particles[new_sample_size];    
-    
-    int index = uni_dist(generator) * sample_size;    
+    Particle new_particles[NUM_PARTICLES];    
     double beta = 0.0;    
+
+    std::uniform_real_distribution<float> uni_dist(0., 1.);
+    int index = uni_dist(generator) * NUM_PARTICLES;  
+
+    std::normal_distribution<float> distribution_resample_pos(0., STD_POS_RESAMPLE);
+    std::normal_distribution<float> distribtuion_resample_theta(0., STD_THETA_RESAMPLE * M_PI);    
     
-    for (int i = 0; i < new_sample_size - (num_spreading_particles + num_random_particles); ++i)
+    for (int i = 0; i < NUM_PARTICLES - num_spreading_particles; ++i)
     {
         beta += uni_dist(generator) * 2 * max_weight;
 
         while (beta > particles[index].weight)
         {
             beta -= particles[index].weight;
-            index = (index + 1) % sample_size;
+            index = (index + 1) % NUM_PARTICLES;
         }
 
         new_particles[i] = particles[index];
-        new_particles[i].position[0] += normal_dist_pos(generator);
-        new_particles[i].position[1] += normal_dist_pos(generator);
-        new_particles[i].theta += normal_dist_theta(generator);
+        new_particles[i].position[0] += distribution_resample_pos(generator);
+        new_particles[i].position[1] += distribution_resample_pos(generator);
+        new_particles[i].theta += distribtuion_resample_theta(generator);
     }
 
-    std::normal_distribution<float> spread_dist_pos(0., RESAMPLE_STD_POS);
-    std::normal_distribution<float> spread_dist_theta(0., RESAMPLE_STD_THETA * 2);
+    std::normal_distribution<float> distribution_spread_pos(0., STD_POS_SPREAD);
+    std::normal_distribution<float> distribtuion_spread_theta(0., STD_THETA_SPREAD * M_PI);
 
-    for (int i = new_sample_size - (num_spreading_particles + num_random_particles); 
-             i < new_sample_size - num_random_particles; ++i)
+    for (int i = NUM_PARTICLES - num_spreading_particles; i < NUM_PARTICLES; ++i)
     {
         beta += uni_dist(generator) * 2 * max_weight;
 
         while (beta > particles[index].weight)
         {
             beta -= particles[index].weight;
-            index = (index + 1) % sample_size;
+            index = (index + 1) % NUM_PARTICLES;
         }
 
         new_particles[i] = particles[index];
-        new_particles[i].position[0] += spread_dist_pos(generator);
-        new_particles[i].position[1] += spread_dist_pos(generator);
-        new_particles[i].theta += spread_dist_theta(generator);
-    }
-
-    for (int i = new_sample_size - num_random_particles; i < new_sample_size; ++i)
-    {
-        new_particles[i] = get_random_particle();
+        new_particles[i].position[0] += distribution_spread_pos(generator);
+        new_particles[i].position[1] += distribution_spread_pos(generator);
+        new_particles[i].theta += distribtuion_spread_theta(generator);
     }
 
     ROS_DEBUG("copying... ");
-  
-    reset_bins();
-    for (int i = 0; i < new_sample_size; i++) 
+    for (int i = 0; i <  NUM_PARTICLES; i++) 
     {
-        //ROS_DEBUG("new sample size: %d, max paricles: %d", new_sample_size, MAX_PARTICLES);
-        set_particle(new_particles[i], i);
+        particles[i] = new_particles[i];      
     }
-    
-    sample_size = new_sample_size;
 }
 
 void map_callback(const nav_msgs::OccupancyGrid::ConstPtr &msg)
@@ -404,6 +357,11 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     laser_received = true;
 }
 
+bool start_localization_callback(green_fundamentals::StartLocalization::Request  &req, green_fundamentals::StartLocalization::Response &res)
+{
+    return true;
+}
+
 geometry_msgs::Pose particle_to_pose(int particle_index)
 {
     geometry_msgs::Pose pose;
@@ -440,7 +398,7 @@ void publish_particles()
     geometry_msgs::PoseArray pose_array;
     pose_array.header.frame_id = "map";
 
-    for (int i = 0; i < sample_size; i++)
+    for (int i = 0; i < NUM_PARTICLES; i++)
     {
         pose_array.poses.push_back(particle_to_pose(i));
     }
@@ -448,18 +406,20 @@ void publish_particles()
     posearray_pub.publish(pose_array);
 }
 
+
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "mc_localization");
     ros::NodeHandle n;
+
+    ROS_INFO("Starting node.");
 
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
     }
     
     map_sub = n.subscribe("map", 1, map_callback);
-
-    ROS_INFO("Starting node.");
     
     ros::Rate map_loop_rate(10);
     while (!map_received)
@@ -469,11 +429,8 @@ int main(int argc, char **argv)
         map_loop_rate.sleep();
     }
 
-    ROS_INFO("Map received.");
-    
-    init_particles();
-
-    ROS_INFO("Particles initialized.");
+    ROS_INFO("Map received. Initializing Particles ...");
+    init_particles(map_height / 2, map_width / 2, 0.);
 
     ros::Subscriber odo_sub = n.subscribe("sensor_packet", 1, sensor_callback);
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
@@ -481,6 +438,8 @@ int main(int argc, char **argv)
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
     pose_pub = n.advertise<geometry_msgs::Pose>("best_pose", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
+
+    ros::ServiceServer start_localization_service = n.advertiseService("start_localization", start_localization_callback);
 
     ros::Rate loop_rate(30);
     int it = 0;
