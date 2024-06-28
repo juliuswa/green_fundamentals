@@ -985,6 +985,7 @@ void localize()
     if(!send_next_target_to_mover()) {
         local_plan.clear();
     }
+    ros::Duration(1).sleep();
 }
 
 void align()
