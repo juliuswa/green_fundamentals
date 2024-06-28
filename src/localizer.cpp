@@ -12,7 +12,7 @@
 #include "sensor_msgs/LaserScan.h"
 #include "sensor_msgs/PointCloud.h"
 #include "geometry_msgs/Point32.h"
-#include "geometry_msgs/Pose.h"
+#include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseArray.h"
 #include "create_fundamentals/SensorPacket.h"
 
@@ -408,7 +408,12 @@ void publish_particles()
 
     position_pub.publish(position);
 
-    pose_pub.publish(particle_to_pose(best_idx));
+
+    geometry_msgs::PoseStamped best_pose;
+    best_pose.header.frame_id = "map";
+    best_pose.pose = particle_to_pose(best_idx);
+
+    pose_pub.publish(best_pose);
 
     geometry_msgs::PoseArray pose_array;
     pose_array.header.frame_id = "map";
@@ -451,8 +456,8 @@ int main(int argc, char **argv)
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
-    pose_pub = n.advertise<geometry_msgs::Pose>("best_pose", 1);
-    posearray_pub = n.advertise<geometry_msgs::PoseArray>("pose_array", 1);
+    pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_pose", 1);
+    posearray_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
 
     ros::ServiceServer start_localization_service = n.advertiseService("start_localization", start_localization_callback);
 
