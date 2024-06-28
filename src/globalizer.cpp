@@ -138,7 +138,8 @@ bool has_converged_fast()
 
     for (int i = 0; i < CONVERGED_NUM; i++)
     {
-        int index = uniform_dist(generator) * particles.size();
+        int rand = (int)(uniform_dist(generator) * particles.size());
+        int index = std::min((int)particles.size()-1, std::max(0, rand));
 
         mean_x += particles[index].x;
         mean_y += particles[index].y;
@@ -151,7 +152,8 @@ bool has_converged_fast()
 
     for (int i = 0; i < CONVERGED_NUM; i++)
     {
-        int index = uniform_dist(generator) * particles.size();
+        int rand = (int)(uniform_dist(generator) * particles.size());
+        int index = std::min((int)particles.size()-1, std::max(0, rand));
 
         float d_x = mean_x - particles[index].x;
         float d_y = mean_y - particles[index].y;
