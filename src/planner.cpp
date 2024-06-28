@@ -687,6 +687,7 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
      // service ausschalten
     if(msg->converged) {
         is_globalized = true;
+        
         std_srvs::SetBool globalization_msg;
         globalization_msg.request.data = false;
         globalization_activate.call(globalization_msg);

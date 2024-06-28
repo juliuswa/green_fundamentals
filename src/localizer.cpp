@@ -19,7 +19,7 @@
 #include "green_fundamentals/Position.h"
 #include "green_fundamentals/StartLocalization.h"
 
-#define NUM_PARTICLES 512
+#define NUM_PARTICLES 256
 
 #define SUBSAMPLE_LASERS 24
 #define RAY_STEP_SIZE 0.01

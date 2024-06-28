@@ -138,7 +138,7 @@ bool has_converged_fast()
 
     for (int i = 0; i < CONVERGED_NUM; i++)
     {
-        int index = uniform_dist(generator) * particles.size());
+        int index = uniform_dist(generator) * particles.size();
 
         mean_x += particles[index].x;
         mean_y += particles[index].y;
@@ -151,7 +151,7 @@ bool has_converged_fast()
 
     for (int i = 0; i < CONVERGED_NUM; i++)
     {
-        int index = uniform_dist(generator) * particles.size());
+        int index = uniform_dist(generator) * particles.size();
 
         float d_x = mean_x - particles[index].x;
         float d_y = mean_y - particles[index].y;
@@ -160,9 +160,9 @@ bool has_converged_fast()
         float dist = std::sqrt(d_x*d_x + d_y*d_y);
 
         if (dist > 0.4 || d_theta > M_PI/2)  {
-            ROS_INFO("mean_x: %f, mean_y: %f", mean_x, mean_y);
-            ROS_INFO("d_x: %f, d_y: %f", d_x, d_y);
-            ROS_INFO("particles[index].x: %f, particles[index].y: %f", particles[index].x, particles[index].y);
+            //ROS_INFO("mean_x: %f, mean_y: %f", mean_x, mean_y);
+            //ROS_INFO("d_x: %f, d_y: %f", d_x, d_y);
+            //ROS_INFO("particles[index].x: %f, particles[index].y: %f", particles[index].x, particles[index].y);
             ROS_INFO("Not converged. dist: %f, d_theta: %f", dist, d_theta);
             return false;
         }
