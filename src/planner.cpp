@@ -1142,6 +1142,10 @@ int main(int argc, char **argv)
     globalization_msg.request.data = true;
     globalization_activate.call(globalization_msg);
 
+    green_fundamentals::StartLocalization localization_msg;
+    localization_msg.request.activate = false;
+    localization_activate.call(localization_msg);
+
     target_pub = n.advertise<geometry_msgs::PointStamped>("target", 1);
     goal_pub = n.advertise< geometry_msgs::PointStamped>("goal", 1);
 
