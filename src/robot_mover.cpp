@@ -180,10 +180,10 @@ void drive_to()
     speed = std::min(cur_max_speed, speed);
     speed = std::max(min_speed, speed);     
 
-    if(is_obstacle_far_front || factor < 1) 
+    if(is_obstacle_far_front || factor < 0) 
     {
         ROS_DEBUG("slowing down. obstacle: %d, curve: %d", is_obstacle_far_front, factor < 1);
-        speed /= 2;
+        speed *= 0.8;
     }
 
     if (direction < 0) 
