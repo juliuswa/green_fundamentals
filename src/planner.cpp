@@ -1001,6 +1001,7 @@ void localize()
 
     // Not localized
 
+    // TODO Make sure to always turn in the same direction to not stop during the turn
     const Cell& cell = cell_grid[my_position.row][my_position.col];
     ROS_INFO("INSIDE LOCALIZE() Cell (%d, %d)", cell.col, cell.row);
     int col = cell.col;
