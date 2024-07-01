@@ -2,7 +2,6 @@
 #include <boost/bind.hpp>
 #include <cmath>
 #include <random>
-#include "Eigen/Dense"
 #include <tf2/LinearMath/Quaternion.h>
 #include <chrono>
 #include <string>
@@ -18,6 +17,8 @@
 
 #include "green_fundamentals/Position.h"
 #include "green_fundamentals/StartLocalization.h"
+
+#include "./localizer_base.cpp"
 
 #define NUM_PARTICLES 256
 
@@ -40,32 +41,7 @@
 #define STD_THETA_SPREAD 0.16
 
 bool active = false;
-
 std::string message;
-
-struct Particle {
-    Eigen::Vector2f position;
-    float theta;
-    float weight = 0.;
-
-    Particle() = default;
-
-    Particle(const Eigen::Vector2f& pos, float t, float w) 
-        : position(pos), theta(t), weight(w) {}
-
-    Particle(const Particle& other)
-        : position(other.position), theta(other.theta), weight(other.weight) {}
-
-    Particle& operator=(const Particle& other) {
-        if (this != &other) {
-            position = other.position;
-            theta = other.theta;
-            weight = other.weight;
-        }
-
-        return *this;
-    }
-};
 
 // Receive Map
 ros::Subscriber map_sub;
@@ -84,10 +60,8 @@ float y_max = CELL_LENGTH * (float) MAP_HEIGHT;
 
 float last_left = 0.;
 float last_right = 0.;
-
 float current_left = 0.;
 float current_right = 0.;
-
 bool is_first_encoder_measurement = true;
 
 // Laser
@@ -365,7 +339,8 @@ bool start_localization_callback(green_fundamentals::StartLocalization::Request 
         ROS_INFO("Starting localization at (%f, %f) th: %f");
 
         init_particles(req.x, req.y, req.theta);
-
+        
+        is_first_encoder_measurement = true;
         active = true;
     }
     else {
