@@ -53,8 +53,8 @@ float current_left = 0.0;
 float current_right = 0.0;
 bool is_first_encoder_measurement = true;
 
-const float max_speed = 15.0;
-float cur_max_speed = 15.0;
+const float max_speed = 16.0;
+float cur_max_speed = 16.0;
 const float min_speed = 3.0;
 const float slow_distance = 0.2;
 const float slow_angle = 2.;
@@ -167,10 +167,9 @@ void drive_to()
 
     int direction = cross_product_z < 0 ? 1 : -1;
 
-    // float exponential_factor = 2 * std::exp(-angle) - 1;
-    float linear_factor = - 2 * angle / (M_PI / 2) + 1;
+    float linear_factor = - 1.5 * angle / (M_PI / 2) + 1;
 
-    float factor = (linear_factor + linear_factor) / 2;
+    float factor = linear_factor;
 
     if (is_obstacle_front) { 
         factor = -1;
@@ -180,10 +179,10 @@ void drive_to()
     speed = std::min(cur_max_speed, speed);
     speed = std::max(min_speed, speed);     
 
-    if(is_obstacle_far_front || factor < 0) 
+    if(is_obstacle_far_front) 
     {
-        ROS_DEBUG("slowing down. obstacle: %d, curve: %d", is_obstacle_far_front, factor < 1);
-        speed *= 0.8;
+        ROS_DEBUG("slowing down. obstacle: %d", is_obstacle_far_front);
+        speed *= 0.7;
     }
 
     if (direction < 0) 
@@ -245,7 +244,7 @@ bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fun
     ROS_INFO("new target: (%f, %f)", req.x_target, req.y_target);
     should_rotate = req.rotate;
     if(req.slow) {
-        cur_max_speed = 5;
+        cur_max_speed = 8;
     } else {
         cur_max_speed = max_speed;
     }

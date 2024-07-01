@@ -20,7 +20,7 @@
 
 #include "./localizer_base.cpp"
 
-#define NUM_PARTICLES 256
+#define NUM_PARTICLES 196
 
 #define SUBSAMPLE_LASERS 24
 #define RAY_STEP_SIZE 0.01
@@ -183,7 +183,7 @@ void evaluate_particle(int p)
         total_delta += fabs(r - real_distance);
     }
 
-    particles[p].weight = std::exp(-total_delta);
+    particles[p].weight = (particles[p].weight + std::exp(-total_delta)) / 2;
 }
 
 void evaluate_particles() 

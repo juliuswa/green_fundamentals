@@ -17,9 +17,9 @@
 #include "./localizer_base.cpp"
 
 #define NUM_PARTICLES 5000
-#define CONVERGED_NUM 100
+#define CONVERGED_NUM 200
 
-#define SUBSAMPLE_LASERS 24
+#define SUBSAMPLE_LASERS 20
 #define RAY_STEP_SIZE 0.01
 
 #define STD_POS_RESAMPLE 0.005
@@ -30,7 +30,7 @@
 
 bool force_update = true; // first localization without movement needed
 const int num_ignore_sides = 50; // Leave out because of metal near sensor
-const float weight_parameter = 0.5;
+const float weight_parameter = 0.6;
 
 bool active = true;
 std::string message;
@@ -365,7 +365,7 @@ void evaluate_particles()
 }
 
 bool should_resample() {
-    bool update = fabs(moved_distance) > 0.01 || fabs(moved_angle) > 0.01 || force_update;
+    bool update = fabs(moved_distance) > 0.05 || fabs(moved_angle) > 0.2 || force_update;
 
     if (!update) 
     {
@@ -558,21 +558,22 @@ int main(int argc, char **argv)
         if (!laser_received) {
             continue;
         }
+
         
         auto t1 = std::chrono::high_resolution_clock::now();
+
+        ROS_DEBUG("publish_particles");
+        publish_particles();
+        
+        auto t2= std::chrono::high_resolution_clock::now();
 
         ROS_DEBUG("evaluate_particles");
         evaluate_particles();
 
-        auto t2= std::chrono::high_resolution_clock::now();
-        
-        ROS_DEBUG("resample_particles");
-        residual_resample();
-
         auto t3= std::chrono::high_resolution_clock::now();
 
-        ROS_DEBUG("publish_particles");
-        publish_particles();
+        ROS_DEBUG("resample_particles");
+        residual_resample();
 
         auto t4= std::chrono::high_resolution_clock::now();
 
@@ -581,7 +582,7 @@ int main(int argc, char **argv)
         auto d3 = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
         auto d4 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
 
-        ROS_INFO("spin: %ld, eval: %ld, resa: %ld, publ: %ld", d1, d2, d3, d4);
+        ROS_INFO("spin: %ld, publ: %ld, eval: %ld, resa: %ld", d1, d2, d3, d4);
         ROS_INFO("%s", message.c_str());
         message = "";
     }

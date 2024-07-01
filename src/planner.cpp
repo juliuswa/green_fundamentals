@@ -719,16 +719,24 @@ bool set_local_plan_to_cell(int col, int row)
     if (path.size() == 0) return false;
 
     local_plan.clear();
+    
+    Cell prev_cell = cell_grid[path[0].first][path[0].second];
+    add_target_back(prev_cell.x, prev_cell.y, 0.0, false, path.size() == 1);
 
-    for (int i = 0; i < path.size(); i++) {
-        const Cell cell = cell_grid[path[i].first][path[i].second];
-        if (cell.row != path[i].first && cell.col != path[i].second)
-        {
-            ROS_INFO("ERROR in drive_to_cell with cell conversion from first to row and second to col.");
-            continue;
-        }
-        add_target_back(cell.x, cell.y, 0.0, false, i == path.size() - 1);
-    }
+    if (path.size() == 1) return true;
+
+    for (int i = 1; i < path.size() - 1; i++) {
+        const Cell next_cell = cell_grid[path[i].first][path[i].second];
+
+        float target_x = (5 * next_cell.x + 4 * prev_cell.x) / 9.;
+        float target_y = (5 * next_cell.y + 4 * prev_cell.y) / 9.;
+
+        add_target_back(target_x, target_y, 0.0, false, false);
+        prev_cell = next_cell; 
+    } 
+
+    const Cell last_cell = cell_grid[path[path.size()-1].first][path[path.size()-1].second];
+    add_target_back(last_cell.x, last_cell.y, 0.0, false, true);
 
     return true;
 }
@@ -740,26 +748,7 @@ bool set_local_plan_to_current_goal()
     ROS_INFO("Current position: (%d, %d).", my_position.col, my_position.row);
     ROS_INFO("Next goal: (%d, %d).", next_goal.col, next_goal.row);
 
-    std::vector<Grid_Coords> path = shortest_paths_precomputed[{{my_position.col, my_position.row}, {next_goal.col, next_goal.row}}];
-
-    ROS_INFO("Path length: %ld", path.size());
-
-    if (path.size() == 0) return false;
-
-    local_plan.clear();
-
-    for (int i = 0; i < path.size(); i++) {
-        const Cell cell = cell_grid[path[i].first][path[i].second];
-        if (cell.row != path[i].first && cell.col != path[i].second)
-        {
-            ROS_INFO("ERROR in drive_to_cell with cell conversion from first to row and second to col.");
-            continue;
-        }
-        add_target_back(cell.x, cell.y, 0.0, false, i == path.size() - 1);
-    }
-
-
-    return true;
+    return set_local_plan_to_cell(next_goal.col, next_goal.row);
 }
 
 bool send_direct_cell(int col, int row)
@@ -803,10 +792,8 @@ bool send_next_target_to_mover()
     Cell target_cell = cell_grid[target_cell_coords.second][target_cell_coords.first];
 
     if (!are_neighbors(current_cell, target_cell)) {
-        ROS_DEBUG("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
+        ROS_WARN("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
             current_cell.col, current_cell.row, target_cell.col, target_cell.row);
-
-        return false;
     }
 
     green_fundamentals::DriveTo drive_to_msg;    
@@ -1016,13 +1003,12 @@ void localize()
                 col--;
 
             }
-            else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                col++;
-
-            }
             else if (!cell.wall_down && cell.row > 0) {
                 row--;
 
+            }
+            else {
+                col++;
             }
             break;
         case Orientation::DOWN:
@@ -1030,10 +1016,6 @@ void localize()
                 row--;
 
             }
-            else if (!cell.wall_left && cell.col > 0) {
-                col--;
-
-            }
             else if (!cell.wall_right && cell.col < grid_cols - 1) {
                 col++;
 
@@ -1042,14 +1024,13 @@ void localize()
                 row++;
 
             }
+            else {
+                col--;
+            }
             break;
         case Orientation::LEFT:
             if (!cell.wall_left && cell.col > 0) {
                 col--;
-
-            }
-            else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                row++;
 
             }
             else if (!cell.wall_down && cell.row > 0) {
@@ -1058,6 +1039,10 @@ void localize()
             }
             else if (!cell.wall_right && cell.col < grid_cols - 1) {
                 col++;
+
+            }
+            else {
+                row++;
 
             }
             break;
@@ -1070,18 +1055,18 @@ void localize()
                 row++;
 
             }
-            else if (!cell.wall_down && cell.row > 0) {
-                row--;
-
-            }
             else if (!cell.wall_left && cell.col > 0) {
                 col--;
+
+            }
+            else {
+                row--;
             }
             break;
         default:
             ROS_INFO("ERROR IN BIG SWITCH");
     }
-    ROS_INFO("INSIDE LOCALIZE() col=%d row=%d", col, row);
+
     send_direct_cell(col, row);
     return;
 }
