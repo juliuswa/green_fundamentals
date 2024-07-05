@@ -82,7 +82,7 @@ Particle particles[NUM_PARTICLES];
 
 // Publishers
 
-ros::Publisher pose_pub, posearray_pub, position_pub;
+ros::Publisher pose_pub, posearray_pub, position_pub, actual_ray_pub;
 
 Particle get_random_particle(float x, float y, float theta) 
 {
@@ -370,6 +370,46 @@ geometry_msgs::Pose particle_to_pose(int particle_index)
     return pose;
 }
 
+void visualize_lasers(int particle_idx)
+{
+    sensor_msgs::PointCloud actual_ray_points;
+
+    float laser_x = particles[particle_idx].position[0] + LASER_OFFSET * std::cos(particles[particle_idx].theta);
+    float laser_y = particles[particle_idx].position[1] + LASER_OFFSET * std::cos(particles[particle_idx].theta);
+
+    for (int i = 0; i < SUBSAMPLE_LASERS; i++)
+    {
+        int index = i * laser_ranges.size() / SUBSAMPLE_LASERS;
+
+        float real_distance = laser_ranges[index];
+
+        if (real_distance != real_distance)
+        {
+            real_distance = 1.0;
+        }
+
+        // Get laser angle
+        float angle = laser_angle_min + laser_angle_increment * index;
+        float ray_angle = particles[particle_idx].theta + angle;
+
+        float actual_ray_x = particles[particle_idx].position[0]
+            + LASER_OFFSET * std::cos(particles[particle_idx].theta)
+            + real_distance * std::cos(ray_angle);
+        float actual_ray_y = particles[particle_idx].position[1] 
+            + LASER_OFFSET * std::sin(particles[particle_idx].theta)
+            + real_distance * std::sin(ray_angle);
+    
+        geometry_msgs::Point32 actual_p;
+        actual_p.x = actual_ray_x;
+        actual_p.y = actual_ray_y;
+        actual_p.z = 0.01;
+        actual_ray_points.points.push_back(actual_p);
+    }
+
+    actual_ray_points.header.frame_id = "map";
+    actual_ray_pub.publish(actual_ray_points);
+}
+
 void publish_particles()
 {
     int best_idx = get_max_particle_idx();
@@ -383,6 +423,7 @@ void publish_particles()
 
     position_pub.publish(position);
 
+    visualize_lasers(best_idx);
 
     geometry_msgs::PoseStamped best_pose;
     best_pose.header.frame_id = "map";
@@ -433,6 +474,7 @@ int main(int argc, char **argv)
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
     pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_pose", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
+    actual_ray_pub = n.advertise<sensor_msgs::PointCloud>("actual_ray", 1);
 
     ros::ServiceServer start_localization_service = n.advertiseService("start_localization", start_localization_callback);
 

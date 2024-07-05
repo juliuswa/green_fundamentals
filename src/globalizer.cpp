@@ -8,6 +8,7 @@
 #include "robot_constants.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "sensor_msgs/LaserScan.h"
+#include "sensor_msgs/PointCloud.h"
 #include "geometry_msgs/PoseArray.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "std_srvs/SetBool.h"
@@ -71,7 +72,7 @@ std::default_random_engine generator;
 std::uniform_real_distribution<float> uniform_dist(0., 1.);
 
 // ROS
-ros::Publisher pose_pub, posearray_pub, position_pub;
+ros::Publisher pose_pub, posearray_pub, position_pub, actual_ray_pub;
 
 
 // ############### HELPERS ###############
@@ -195,6 +196,46 @@ int get_max_particle_idx() {
     return index;
 }
 
+void visualize_lasers(int particle_idx)
+{
+    sensor_msgs::PointCloud actual_ray_points;
+
+    float laser_x = particles[particle_idx].position[0] + LASER_OFFSET * std::cos(particles[particle_idx].theta);
+    float laser_y = particles[particle_idx].position[1] + LASER_OFFSET * std::sin(particles[particle_idx].theta);
+
+    for (int i = 0; i < SUBSAMPLE_LASERS; i++)
+    {
+        int index = i * laser_ranges.size() / SUBSAMPLE_LASERS;
+
+        float real_distance = laser_ranges[index];
+
+        if (real_distance != real_distance)
+        {
+            real_distance = 1.0;
+        }
+
+        // Get laser angle
+        float angle = laser_angle_min + laser_angle_increment * index;
+        float ray_angle = particles[particle_idx].theta + angle;
+
+        float actual_ray_x = particles[particle_idx].position[0]
+            + LASER_OFFSET * std::cos(particles[particle_idx].theta)
+            + real_distance * std::cos(ray_angle);
+        float actual_ray_y = particles[particle_idx].position[1] 
+            + LASER_OFFSET * std::sin(particles[particle_idx].theta)
+            + real_distance * std::sin(ray_angle);
+    
+        geometry_msgs::Point32 actual_p;
+        actual_p.x = actual_ray_x;
+        actual_p.y = actual_ray_y;
+        actual_p.z = 0.01;
+        actual_ray_points.points.push_back(actual_p);
+    }
+
+    actual_ray_points.header.frame_id = "map";
+    actual_ray_pub.publish(actual_ray_points);
+}
+
 void publish_particles()
 {
     int best_idx = get_max_particle_idx();
@@ -205,6 +246,8 @@ void publish_particles()
     position.theta = particles[best_idx].theta;
     position.converged = has_converged_fast();
     position_pub.publish(position);
+
+    visualize_lasers(best_idx);
 
     if (position.converged) {
         ROS_INFO("HAS CONVERGED");
@@ -530,6 +573,7 @@ int main(int argc, char **argv)
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
     pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_pose", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
+    actual_ray_pub = n.advertise<sensor_msgs::PointCloud>("actual_ray", 1);
 
     ros::ServiceServer activate_service = n.advertiseService("activate_globalizer", activate);
     
