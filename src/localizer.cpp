@@ -23,7 +23,7 @@
 #define NUM_PARTICLES 196
 
 #define SUBSAMPLE_LASERS 24
-#define RAY_STEP_SIZE 0.01
+#define RAY_STEP_SIZE 0.02
 
 #define SPREAD_PARTICLE_PART 0.25
 #define SPREAD_WEIGHT 0.1
@@ -135,6 +135,7 @@ void evaluate_particle(int p)
 {
     int max_width_idx = map_width -1;
     int max_height_idx = map_height -1;
+    float steps_per_meter = 1 / RAY_STEP_SIZE;
 
     float total_delta = 0.;
 
@@ -164,7 +165,7 @@ void evaluate_particle(int p)
         // ROS_DEBUG("ray casting");
 
         float r = 0.0;
-        for (int  i= 0; i < 100; i++)
+        for (int  i= 0; i < steps_per_meter; i++)
         {
             r += RAY_STEP_SIZE;
             ray_x += ray_x_increment;
@@ -173,8 +174,8 @@ void evaluate_particle(int p)
             if (ray_x > x_max || ray_x < x_min || ray_y > y_max || ray_y < y_min)
                 break;
             
-            int x_i = std::min(std::max((int)(ray_x * 100.), 0), max_width_idx);
-            int y_i = std::min(std::max((int)(ray_y * 100.), 0), max_height_idx);
+            int x_i = std::min(std::max((int)(ray_x * steps_per_meter), 0), max_width_idx);
+            int y_i = std::min(std::max((int)(ray_y * steps_per_meter), 0), max_height_idx);
 
             if (map_data[y_i][x_i] != 0)
                 break;

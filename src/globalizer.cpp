@@ -21,7 +21,7 @@
 #define CONVERGED_NUM 200
 
 #define SUBSAMPLE_LASERS 20
-#define RAY_STEP_SIZE 0.01
+#define RAY_STEP_SIZE 0.02
 
 #define STD_POS_RESAMPLE 0.005
 #define STD_THETA_RESAMPLE 0.01
@@ -72,7 +72,7 @@ std::default_random_engine generator;
 std::uniform_real_distribution<float> uniform_dist(0., 1.);
 
 // ROS
-ros::Publisher pose_pub, posearray_pub, position_pub, actual_ray_pub;
+ros::Publisher pose_pub, posearray_pub, position_pub, actual_ray_pub, expected_ray_pub;
 
 
 // ############### HELPERS ###############
@@ -199,6 +199,11 @@ int get_max_particle_idx() {
 void visualize_lasers(int particle_idx)
 {
     sensor_msgs::PointCloud actual_ray_points;
+    sensor_msgs::PointCloud expected_ray_points;
+
+    int max_width_idx = map_width -1;
+    int max_height_idx = map_height -1;
+    float steps_per_meter = 1 / RAY_STEP_SIZE;
 
     float laser_x = particles[particle_idx].position[0] + LASER_OFFSET * std::cos(particles[particle_idx].theta);
     float laser_y = particles[particle_idx].position[1] + LASER_OFFSET * std::sin(particles[particle_idx].theta);
@@ -218,6 +223,30 @@ void visualize_lasers(int particle_idx)
         float angle = laser_angle_min + laser_angle_increment * index;
         float ray_angle = particles[particle_idx].theta + angle;
 
+        float ray_x_increment = RAY_STEP_SIZE * std::cos(ray_angle);
+        float ray_y_increment = RAY_STEP_SIZE * std::sin(ray_angle);
+
+        float ray_x = laser_x;
+        float ray_y = laser_y;
+        // ROS_DEBUG("ray casting");
+
+        float r = 0.0;
+        for (int  i= 0; i < steps_per_meter; i++)
+        {
+            r += RAY_STEP_SIZE;
+            ray_x += ray_x_increment;
+            ray_y += ray_y_increment;
+
+            if (ray_x > x_max || ray_x < 0 || ray_y > y_max || ray_y < 0)
+                break;
+            
+            int x_i = std::min(std::max((int)(ray_x * steps_per_meter), 0), max_width_idx);
+            int y_i = std::min(std::max((int)(ray_y * steps_per_meter), 0), max_height_idx);
+
+            if (map_data[y_i][x_i] != 0)
+                break;
+        }
+
         float actual_ray_x = particles[particle_idx].position[0]
             + LASER_OFFSET * std::cos(particles[particle_idx].theta)
             + real_distance * std::cos(ray_angle);
@@ -230,10 +259,19 @@ void visualize_lasers(int particle_idx)
         actual_p.y = actual_ray_y;
         actual_p.z = 0.01;
         actual_ray_points.points.push_back(actual_p);
+
+        geometry_msgs::Point32 expected_p;
+        expected_p.x = ray_x;
+        expected_p.y = ray_y;
+        expected_p.z = 0.01;
+        expected_ray_points.points.push_back(expected_p);
     }
 
     actual_ray_points.header.frame_id = "map";
     actual_ray_pub.publish(actual_ray_points);
+
+    expected_ray_points.header.frame_id = "map";
+    expected_ray_pub.publish(expected_ray_points);
 }
 
 void publish_particles()
@@ -338,6 +376,7 @@ void evaluate_particle(int p)
 {
     int max_width_idx = map_width -1;
     int max_height_idx = map_height -1;
+    float steps_per_meter = 1 / RAY_STEP_SIZE;
 
     float total_delta = 0.;
 
@@ -367,7 +406,7 @@ void evaluate_particle(int p)
         // ROS_DEBUG("ray casting");
 
         float r = 0.0;
-        for (int  i= 0; i < 100; i++)
+        for (int  i= 0; i < steps_per_meter; i++)
         {
             r += RAY_STEP_SIZE;
             ray_x += ray_x_increment;
@@ -376,8 +415,8 @@ void evaluate_particle(int p)
             if (ray_x > x_max || ray_x < 0 || ray_y > y_max || ray_y < 0)
                 break;
             
-            int x_i = std::min(std::max((int)(ray_x * 100.), 0), max_width_idx);
-            int y_i = std::min(std::max((int)(ray_y * 100.), 0), max_height_idx);
+            int x_i = std::min(std::max((int)(ray_x * steps_per_meter), 0), max_width_idx);
+            int y_i = std::min(std::max((int)(ray_y * steps_per_meter), 0), max_height_idx);
 
             if (map_data[y_i][x_i] != 0)
                 break;
@@ -574,6 +613,7 @@ int main(int argc, char **argv)
     pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_pose", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
     actual_ray_pub = n.advertise<sensor_msgs::PointCloud>("actual_ray", 1);
+    expected_ray_pub = n.advertise<sensor_msgs::PointCloud>("expected_ray", 1);
 
     ros::ServiceServer activate_service = n.advertiseService("activate_globalizer", activate);
     
