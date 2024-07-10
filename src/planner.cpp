@@ -804,6 +804,7 @@ bool send_next_target_to_mover()
     if (!are_neighbors(current_cell, target_cell)) {
         ROS_WARN("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
             current_cell.col, current_cell.row, target_cell.col, target_cell.row);
+        add_target_front(current_cell.x, current_cell.y, 0, false, true);
     }
 
     green_fundamentals::DriveTo drive_to_msg;    

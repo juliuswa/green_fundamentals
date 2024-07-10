@@ -151,6 +151,8 @@ void evaluate_particle(int p)
         if (real_distance != real_distance)
         {
             real_distance = 1.0;
+        } else if (real_distance < 0.1) {
+            continue;
         }
 
         // Get laser angle
@@ -387,6 +389,8 @@ void visualize_lasers(int particle_idx)
         if (real_distance != real_distance)
         {
             real_distance = 1.0;
+        } else if (real_distance < 0.1) {
+            continue;
         }
 
         // Get laser angle

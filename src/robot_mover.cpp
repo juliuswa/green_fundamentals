@@ -244,7 +244,7 @@ bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fun
     ROS_INFO("new target: (%f, %f)", req.x_target, req.y_target);
     should_rotate = req.rotate;
     if(req.slow) {
-        cur_max_speed = 8;
+        cur_max_speed = 10;
     } else {
         cur_max_speed = max_speed;
     }
