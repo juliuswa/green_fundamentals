@@ -63,7 +63,6 @@ enum Mission {
 enum State {
     INIT,
     GLOBALIZE,
-    ALIGN,
     IDLE,
     EXECUTE_PLAN,
     NEXT_GOAL,
@@ -129,6 +128,22 @@ void shutdown(int signum)
 
 void print_state()  // robot mover max speed, nimm den einen wenn localisation points < THRESHOLD
 {
+    switch (mission)
+    {
+        case Mission::M_DRIVE_TO:
+            ROS_INFO("Mission = M_DRIVE_TO");
+            break;
+        case Mission::M_GOLD_RUN:
+            ROS_INFO("Mission = M_GOLD_RUN");
+            break;
+        case Mission::M_IDLE:
+            ROS_INFO("Mission = M_IDLE");
+            break;
+        default:
+            ROS_INFO("Mission impossible.");
+    }
+
+
     switch (state)
     {
         case State::IDLE:
@@ -139,11 +154,6 @@ void print_state()  // robot mover max speed, nimm den einen wenn localisation p
         case State::GLOBALIZE:
             set_video(2);
             ROS_INFO("State = GLOBALIZE");
-            break;
-
-        case State::ALIGN:
-            set_video(0);
-            ROS_INFO("State = ALIGN");
             break;
 
         case State::EXECUTE_PLAN:
@@ -164,7 +174,7 @@ void print_state()  // robot mover max speed, nimm den einen wenn localisation p
             break;
         
         default:
-            ROS_INFO("State not knows.");
+            ROS_INFO("State not known.");
     }
 }
 
@@ -725,7 +735,7 @@ bool set_local_plan_to_cell(int col, int row)
 
     if (path.size() == 1) return true;
 
-    for (int i = 1; i < path.size() - 1; i++) {
+    for (int i = 1; i < path.size(); i++) {
         const Cell next_cell = cell_grid[path[i].first][path[i].second];
 
         float target_x = (5 * next_cell.x + 4 * prev_cell.x) / 9.;
@@ -926,6 +936,7 @@ void execute_local_plan()
         else if (global_plan.front().type == GoalType::HELIPORT)
         {
             set_video(4);
+
             ros::Duration(5.5).sleep();
         }
 
@@ -979,7 +990,7 @@ void localize()
         if(mission == Mission::M_GOLD_RUN) {
             start_gold_run();
         } else {
-            state = State::ALIGN;
+            state = State::EXECUTE_PLAN;
             global_plan.clear();
             local_plan.clear();
         }
@@ -1071,17 +1082,6 @@ void localize()
     return;
 }
 
-void align()
-{
-    const Cell cell = cell_grid[my_position.row][my_position.col];
-    add_target_front(cell.x, cell.y, M_PI/2, true, true);
-    
-    send_next_target_to_mover();
-    
-    state = State::IDLE;
-    local_plan.clear();
-}
-
 void set_heliport_to_goal() {
     ROS_INFO("Driving to heliport");
     auto heliport_pair = get_best_heliport({my_position.col, my_position.row});
@@ -1156,6 +1156,15 @@ int main(int argc, char **argv)
         }
     }
 
+    if(argc > 1) {
+        std::string argument = argv[1];
+        if(argument == "GOLD_RUN") {
+            mission = Mission::M_GOLD_RUN; 
+        }
+    }
+
+    ROS_INFO("arg: %s", argv[1]);
+
     
     state = State::IDLE;
     State last_state = state;
@@ -1179,10 +1188,6 @@ int main(int argc, char **argv)
             
             case State::GLOBALIZE:
                 localize();
-                break;
-
-            case State::ALIGN:
-                align();
                 break;
 
             case State::EXECUTE_PLAN:
