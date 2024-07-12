@@ -17,7 +17,7 @@
 
 #include "nav_msgs/OccupancyGrid.h"
 
-#define PIXEL_SIZE 0.02     // m
+#define PIXEL_SIZE 0.01     // m
 #define WALL_LENGTH 0.78    // m
 #define WALL_THICKNESS 0.02 // m
 
