@@ -21,8 +21,7 @@
 #include "std_srvs/SetBool.h"
 #include "robot_constants.h"
 
-#define REASONABLE_DISTANCE 0.25
-#define LOCALIZATION_POINTS_THRESHOLD 4
+#define REASONABLE_DISTANCE 0.5
 
 using Grid_Coords = std::pair<int, int>;
 using KeyType = std::pair<Grid_Coords, Grid_Coords>;
@@ -54,23 +53,17 @@ STATE
 ###################################
 */
 
-enum Mission {
-    M_IDLE,
-    M_GOLD_RUN,
-    M_DRIVE_TO
-};
+bool active = false;
+bool leaving = false;
 
 enum State {
-    INIT,
     GLOBALIZE,
     IDLE,
     EXECUTE_PLAN,
     NEXT_GOAL,
-    GOLD_RUN,
     LEAVE
 };
-State state = State::INIT;
-Mission mission = Mission::M_IDLE;
+State state = State::IDLE;
 /*
 ###################################
 MAP
@@ -88,16 +81,6 @@ std::vector<std::vector<Cell>> cell_grid;  // row, col
 std::vector<Grid_Coords> golds;
 std::vector<Grid_Coords> pickups;
 std::unordered_map<KeyType, std::vector<Grid_Coords>, key_hash> shortest_paths_precomputed;
-std::vector<std::vector<bool>> visited_cells;
-
-void reset_visited_cells() {
-    for (int col = 0; col < visited_cells.size(); col++) {
-        for (int row = 0; row < visited_cells[col].size(); row++)
-        {
-            visited_cells[col][row] = false;
-        }
-    }
-}
 
 /*
 ###################################
@@ -126,24 +109,8 @@ void shutdown(int signum)
     exit(0);
 }
 
-void print_state()  // robot mover max speed, nimm den einen wenn localisation points < THRESHOLD
+void print_state()
 {
-    switch (mission)
-    {
-        case Mission::M_DRIVE_TO:
-            ROS_INFO("Mission = M_DRIVE_TO");
-            break;
-        case Mission::M_GOLD_RUN:
-            ROS_INFO("Mission = M_GOLD_RUN");
-            break;
-        case Mission::M_IDLE:
-            ROS_INFO("Mission = M_IDLE");
-            break;
-        default:
-            ROS_INFO("Mission impossible.");
-    }
-
-
     switch (state)
     {
         case State::IDLE:
@@ -163,10 +130,6 @@ void print_state()  // robot mover max speed, nimm den einen wenn localisation p
 
         case State::NEXT_GOAL:
             ROS_INFO("State = NEXT_GOAL");
-            break;
-
-        case State::GOLD_RUN:
-            ROS_INFO("State = GOLD_RUN");
             break;
         
         case State::LEAVE:
@@ -486,7 +449,7 @@ std::pair<Grid_Coords, int> get_best_heliport(const Grid_Coords& from)
 
 std::deque<Goal> get_best_plan(const Cell& current_cell)
 {
-    int best_cost = 100000;
+    float best_cost = 100000.;
     std::vector<Grid_Coords> best_path;
 
     // Precompute gold permutations
@@ -495,16 +458,78 @@ std::deque<Goal> get_best_plan(const Cell& current_cell)
     for (std::vector<Grid_Coords> path : gold_permutations)
     {
         // Compute cost of path + current_to_first_gold + last_gold_to_shortest_pickup
-        int cost = shortest_paths_precomputed[{{current_cell.col, current_cell.row}, path.front()}].size();
+        float cost = 0;
+
+        // For every turn instead of straight driving give more cost.
+        std::vector<Grid_Coords> local_path = shortest_paths_precomputed[{{current_cell.col, current_cell.row}, path.front()}];
+        if (local_path.size() < 2)
+        {
+            cost += 2.;
+        }
+        else
+        {
+            for (int i = 2; i < local_path.size(); i++)
+            {
+                Grid_Coords start = local_path[i-2];
+                Grid_Coords middle = local_path[i-1];
+                Grid_Coords stop = local_path[i];
+
+                if ((start.first < middle.first && middle.first < stop.first) ||
+                    (start.first > middle.first && middle.first > stop.first) ||
+                    (start.second < middle.second && middle.second < stop.second) ||
+                    (start.second > middle.second && middle.second > stop.second))
+                {
+                    // Straight
+                    cost += 1;
+                }
+                else 
+                {
+                    cost += 1.2;
+                }
+            }
+            cost += 2.;
+        }
+
+        // cost += shortest_paths_precomputed[{{current_cell.col, current_cell.row}, path.front()}].size();
 
         for (int i = 0; i < path.size() - 1; i++)
         {
-            cost += shortest_paths_precomputed[{path[i], path[i+1]}].size();
+            
+            local_path = shortest_paths_precomputed[{path[i], path[i+1]}];
+            if (local_path.size() < 2)
+            {
+                cost += 2;
+            }
+            else
+            {
+                for (int i = 2; i < local_path.size(); i++)
+                {
+                    Grid_Coords start = local_path[i-2];
+                    Grid_Coords middle = local_path[i-1];
+                    Grid_Coords stop = local_path[i];
+
+                    if ((start.first < middle.first && middle.first < stop.first) ||
+                        (start.first > middle.first && middle.first > stop.first) ||
+                        (start.second < middle.second && middle.second < stop.second) ||
+                        (start.second > middle.second && middle.second > stop.second))
+                    {
+                        // Straight
+                        cost += 1.;
+                    }
+                    else 
+                    {
+                        cost += 1.2;
+                    }
+                }
+                cost += 2.;
+            }
+            
+            //cost += shortest_paths_precomputed[{path[i], path[i+1]}].size();
         }
         
         auto best_endpoint_pair = get_best_heliport(path.back());
 
-        cost += best_endpoint_pair.second;
+        cost += (float)best_endpoint_pair.second;
 
         if (cost < best_cost)
         {
@@ -608,10 +633,6 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
         }
     }
 
-    // VISITED CELLS
-    std::vector<std::vector<bool>> visited(grid_rows, std::vector<bool>(grid_cols, false));
-    visited_cells = visited;
-
     map_received = true;
     map_sub.shutdown();
 }
@@ -621,6 +642,40 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
 LOCALIZATION
 ############################################################################
 */
+
+void start_globalizer()
+{
+    std_srvs::SetBool globalization_msg;
+    globalization_msg.request.data = true;
+    globalization_activate.call(globalization_msg);
+}
+
+void stop_globalizer()
+{
+    std_srvs::SetBool globalization_msg;
+    globalization_msg.request.data = false;
+    globalization_activate.call(globalization_msg);
+}
+
+void start_localizer()
+{
+    green_fundamentals::StartLocalization localization_msg;
+    localization_msg.request.x = my_position.x;
+    localization_msg.request.y = my_position.y;
+    localization_msg.request.theta = my_position.theta;
+    localization_msg.request.activate = true;
+    localization_activate.call(localization_msg);
+}
+
+void stop_localizer()
+{
+    green_fundamentals::StartLocalization localization_msg;
+    localization_msg.request.activate = false;
+    localization_activate.call(localization_msg);
+}
+
+ros::Time last_gold_pickup_time;
+Grid_Coords last_gold;
 
 void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 {   
@@ -671,47 +726,25 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         ROS_INFO("Unreasonable movement");
         is_globalized = false;
 
-        std_srvs::SetBool globalization_msg;
-        globalization_msg.request.data = true;
-        globalization_activate.call(globalization_msg);
+        start_globalizer();
+        stop_localizer();
 
-        green_fundamentals::StartLocalization localization_msg;
-        localization_msg.request.activate = false;
-        localization_activate.call(localization_msg);
-
-        // reset_visited_cells();
-        // localization_points = 0;
-        // local_plan.clear();
-        // ROS_INFO("Localization points %d", localization_points);
+        // Restore last gold location if time of last pickup was very short
+        if ((ros::Time::now() - last_gold_pickup_time).toSec() < 10.0)
+        {
+            golds.push_back(last_gold);
+        }
     }    
-    // else if (!visited_cells[my_position.col][my_position.row])
-    // {
-    //     visited_cells[my_position.col][my_position.row] = true;
-    //     localization_points += 1;
-    //     ROS_INFO("Localization points %d", localization_points);
-    // }
-    
-    // // bool was_localized_before = is_localized;
-    // is_localized = localization_points > LOCALIZATION_POINTS_THRESHOLD;
-
-     // service ausschalten
-    if(msg->converged) {
+    else if(msg->converged && !is_globalized) 
+    {
         is_globalized = true;
         
-        std_srvs::SetBool globalization_msg;
-        globalization_msg.request.data = false;
-        globalization_activate.call(globalization_msg);
-
-        green_fundamentals::StartLocalization localization_msg;
-        localization_msg.request.x = my_position.x;
-        localization_msg.request.y = my_position.y;
-        localization_msg.request.theta = my_position.theta;
-        localization_msg.request.activate = true;
-        localization_activate.call(localization_msg);
+        stop_globalizer();
+        start_localizer();
     }
 
     if (!is_globalized)
-    {   
+    {
         state = State::GLOBALIZE;
     }
 }
@@ -772,11 +805,7 @@ bool send_direct_cell(int col, int row)
     drive_to_msg.request.y_target = target_cell.y;
     drive_to_msg.request.theta_target = 0.;
     drive_to_msg.request.rotate = false;
-    drive_to_msg.request.slow = false;
-
-    if(!is_globalized) {
-        drive_to_msg.request.slow = true;
-    }
+    drive_to_msg.request.slow = !is_globalized;
 
     if (!mover_drive_to_client.call(drive_to_msg))
     {
@@ -801,11 +830,11 @@ bool send_next_target_to_mover()
     Cell current_cell = cell_grid[my_position.row][my_position.col];
     Cell target_cell = cell_grid[target_cell_coords.second][target_cell_coords.first];
 
-    if (!are_neighbors(current_cell, target_cell)) {
-        ROS_WARN("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
-            current_cell.col, current_cell.row, target_cell.col, target_cell.row);
-        add_target_front(current_cell.x, current_cell.y, 0, false, true);
-    }
+    // if (!are_neighbors(current_cell, target_cell)) {
+    //     ROS_WARN("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
+    //         current_cell.col, current_cell.row, target_cell.col, target_cell.row);
+    //     add_target_front(current_cell.x, current_cell.y, 0, false, true);
+    // }
 
     green_fundamentals::DriveTo drive_to_msg;    
     drive_to_msg.request.x_current = my_position.x;
@@ -815,14 +844,7 @@ bool send_next_target_to_mover()
     drive_to_msg.request.y_target = current_target.y;
     drive_to_msg.request.theta_target = current_target.theta;
     drive_to_msg.request.rotate = current_target.should_rotate;
-    drive_to_msg.request.slow = false;
-
-    if(!is_globalized) {
-        drive_to_msg.request.slow = true;
-    }
-
-    // ROS_DEBUG("sending drive to request (%f, %f) th: %f | %d", 
-    //    current_target.x, current_target.y, current_target.theta, current_target.should_rotate);
+    drive_to_msg.request.slow = !is_globalized;
 
     if (!mover_drive_to_client.call(drive_to_msg))
     {
@@ -894,13 +916,13 @@ void start_gold_run()
     set_local_plan_to_current_goal();
     
     state = State::EXECUTE_PLAN;
-    mission = Mission::M_GOLD_RUN;
     ROS_INFO("Added targets to local_plan. Now we have %ld targets.", local_plan.size());
 }
 
 bool gold_run_callback(green_fundamentals::GoldRun::Request  &req, green_fundamentals::GoldRun::Response &res)
 {
-    start_gold_run();
+    active = true;
+    // start_gold_run();
     return true;
 }
 
@@ -921,6 +943,7 @@ void collect_gold() {
     ROS_INFO("Collecting gold at position: %d, %d (real position %d, %d)", golds[index].first, golds[index].second, my_position.row, my_position.col);
 
     std::swap(golds[index], golds.back());
+    last_gold = golds.back();
     golds.pop_back();
 
     set_video(3);
@@ -941,15 +964,23 @@ void execute_local_plan()
             ros::Duration(5.5).sleep();
         }
 
-        state = State::NEXT_GOAL;
+        if (leaving)
+        {
+            state = State::IDLE;
+        }
+        else 
+        {
+            state = State::NEXT_GOAL;
+        }
+        
         return;
     }
     
     if (current_target_reached())
     {   
         local_plan.pop_front();
-        std::pair<int, int> cell = position_to_grid_cell(local_plan.front().x, local_plan.front().y);
-        ROS_INFO("Next target: (%d, %d).", cell.first, cell.second);
+        // std::pair<int, int> cell = position_to_grid_cell(local_plan.front().x, local_plan.front().y);
+        // ROS_INFO("Next target: (%d, %d).", cell.first, cell.second);
     }
     
     if(!send_next_target_to_mover()) {
@@ -962,14 +993,7 @@ void get_next_goal()
     ROS_DEBUG("getting next goal. global plan size: %ld", global_plan.size());
 
     if (global_plan.size() == 0) {
-        if (mission == Mission::M_GOLD_RUN) {
-            state = State::LEAVE;
-            mission = Mission::M_DRIVE_TO;  
-        }
-        else {
-            state = State::IDLE;
-            mission = Mission::M_IDLE;  
-        }
+        state = State::LEAVE;
 
         return;
     }
@@ -984,95 +1008,149 @@ void get_next_goal()
     }
 }
 
+enum Direction {
+    D_STRAIGHT,
+    D_LEFT,
+    D_RIGHT,
+    D_BACK
+};
+
+Direction get_drive_direction(const Cell& cell)
+{
+    bool can_drive_straight, can_drive_left, can_drive_right, can_drive_back;
+    switch (my_position.orientation)
+    {
+        case Orientation::UP:
+            can_drive_straight = !cell.wall_up && cell.row < grid_rows - 1;
+            can_drive_left = !cell.wall_left && cell.col > 0;
+            can_drive_right = !cell.wall_right && cell.col < grid_cols - 1;
+            can_drive_back = !cell.wall_down && cell.row > 0;
+            break;
+        case Orientation::DOWN:
+            can_drive_straight = !cell.wall_down && cell.row > 0;
+            can_drive_left = !cell.wall_right && cell.col < grid_cols - 1;
+            can_drive_right = !cell.wall_left && cell.col > 0;
+            can_drive_back = !cell.wall_up && cell.row < grid_rows - 1;
+            break;
+        case Orientation::LEFT:
+            can_drive_straight = !cell.wall_left && cell.col > 0;
+            can_drive_left = !cell.wall_down && cell.row > 0;
+            can_drive_right = !cell.wall_up && cell.row < grid_rows - 1;
+            can_drive_back = !cell.wall_right && cell.col < grid_cols - 1;
+            break;
+        case Orientation::RIGHT:
+            can_drive_straight = !cell.wall_right && cell.col < grid_cols - 1;
+            can_drive_left = !cell.wall_up && cell.row < grid_rows - 1;
+            can_drive_right = !cell.wall_down && cell.row > 0;
+            can_drive_back = !cell.wall_left && cell.col > 0;
+            break;
+        default:
+            ROS_INFO("ERROR IN BIG SWITCH");
+    }
+
+    if (can_drive_straight) return Direction::D_STRAIGHT;
+
+    if (can_drive_left) return Direction::D_LEFT;
+
+    if (can_drive_right) return Direction::D_RIGHT;
+
+    return Direction::D_BACK;
+}
+
 void localize()
 {   
     if (is_globalized)
     {
-        if(mission == Mission::M_GOLD_RUN) {
-            start_gold_run();
-        } else {
-            state = State::EXECUTE_PLAN;
-            global_plan.clear();
-            local_plan.clear();
-        }
+        start_gold_run();
         return;
     }
 
-    // Not localized
-
-    // TODO Make sure to always turn in the same direction to not stop during the turn
     const Cell& cell = cell_grid[my_position.row][my_position.col];
-    ROS_INFO("INSIDE LOCALIZE() Cell (%d, %d)", cell.col, cell.row);
     int col = cell.col;
     int row = cell.row;
+
+    Direction drive_direction = get_drive_direction(cell);
+
     switch (my_position.orientation)
     {
         case Orientation::UP:
-            if (!cell.wall_up && cell.row < grid_rows - 1) {
-                row++;
-            }
-            else if (!cell.wall_left && cell.col > 0) {
-                col--;
+            switch (drive_direction)
+            {
+                case Direction::D_STRAIGHT:
+                    row++;
+                    break;
 
-            }
-            else if (!cell.wall_down && cell.row > 0) {
-                row--;
+                case Direction::D_LEFT:
+                    col--;
+                    break;
 
-            }
-            else {
-                col++;
+                case Direction::D_RIGHT:
+                    col++;
+                    break;
+
+                case Direction::D_BACK:
+                    row--;
+                    break;
             }
             break;
         case Orientation::DOWN:
-            if (!cell.wall_down && cell.row > 0) {
-                row--;
+            switch (drive_direction)
+            {
+                case Direction::D_STRAIGHT:
+                    row--;
+                    break;
 
-            }
-            else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                col++;
+                case Direction::D_LEFT:
+                    col++;
+                    break;
 
-            }
-            else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                row++;
+                case Direction::D_RIGHT:
+                    col--;
+                    break;
 
-            }
-            else {
-                col--;
+                case Direction::D_BACK:
+                    row++;
+                    break;
             }
             break;
         case Orientation::LEFT:
-            if (!cell.wall_left && cell.col > 0) {
-                col--;
+            switch (drive_direction)
+            {
+                case Direction::D_STRAIGHT:
+                    col--;
+                    break;
 
-            }
-            else if (!cell.wall_down && cell.row > 0) {
-                row--;
+                case Direction::D_LEFT:
+                    row--;
+                    break;
 
-            }
-            else if (!cell.wall_right && cell.col < grid_cols - 1) {
-                col++;
+                case Direction::D_RIGHT:
+                    row++;
+                    break;
 
-            }
-            else {
-                row++;
-
+                case Direction::D_BACK:
+                    col++;
+                    break;
             }
             break;
         case Orientation::RIGHT:
-            if (!cell.wall_right && cell.col < grid_cols - 1) {
-                col++;
+            switch (drive_direction)
+            {
+                case Direction::D_STRAIGHT:
+                    col++;
+                    break;
 
-            }
-            else if (!cell.wall_up && cell.row < grid_rows - 1) {
-                row++;
+                case Direction::D_LEFT:
+                    row++;
+                    break;
 
-            }
-            else if (!cell.wall_left && cell.col > 0) {
-                col--;
+                case Direction::D_RIGHT:
+                    row--;
+                    break;
 
-            }
-            else {
-                row--;
+                case Direction::D_BACK:
+                    col--;
+                    break;
             }
             break;
         default:
@@ -1089,7 +1167,7 @@ void set_heliport_to_goal() {
     add_goal_front(heliport_pair.first.first, heliport_pair.first.second, GoalType::HELIPORT);
     set_local_plan_to_current_goal();
     state = State::EXECUTE_PLAN;
-    mission = Mission::M_DRIVE_TO;
+    leaving = true;
 }
 
 /*
@@ -1101,7 +1179,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "planner");
     ros::NodeHandle n;
-    ros::Rate loop_rate(30);
+    ros::Rate loop_rate(15);
 
     signal(SIGINT, shutdown);
 
@@ -1121,53 +1199,27 @@ int main(int argc, char **argv)
 
     ros::Subscriber sensor_sub = n.subscribe("position", 1, localization_callback);
     globalization_activate = n.serviceClient<std_srvs::SetBool>("activate_globalizer");
-    localization_activate = n.serviceClient<green_fundamentals::StartLocalization>("start_localization");
+    localization_activate = n.serviceClient<green_fundamentals::StartLocalization>("activate_localizer");
     mover_drive_to_client = n.serviceClient<green_fundamentals::DriveTo>("mover_set_drive_to");
     video_player = n.serviceClient<green_fundamentals::SetVideo>("set_video");
-
-    std_srvs::SetBool globalization_msg;
-    globalization_msg.request.data = true;
-    globalization_activate.call(globalization_msg);
-
-    green_fundamentals::StartLocalization localization_msg;
-    localization_msg.request.activate = false;
-    localization_activate.call(localization_msg);
 
     target_pub = n.advertise<geometry_msgs::PointStamped>("target", 1);
     goal_pub = n.advertise< geometry_msgs::PointStamped>("goal", 1);
 
-    ros::ServiceServer move_to_position_srv = n.advertiseService("move_to_position", move_to_position_callback);
     ros::ServiceServer gold_run_srv = n.advertiseService("gold_run", gold_run_callback);
 
+    while (!active)
     {
-        ROS_INFO("NEIGHBORS");
-        std::vector<Grid_Coords> neighbors = get_neighbors(cell_grid[2][3]);
-        for (Grid_Coords neighbor : neighbors)
-        {
-            ROS_INFO("Neighbor Col: %d, Row: %d", neighbor.first, neighbor.second);
-        }
+        ros::spinOnce();
+        loop_rate.sleep();
     }
 
-    {
-        ROS_INFO("SHORTEST PATH");
-        std::vector<Grid_Coords> path = get_shortest_path({2, 3}, {4, 2}, true);
-        for (Grid_Coords cell : path)
-        {
-            ROS_INFO("Path: Col %d, Row: %d", cell.second, cell.first);
-        }
-    }
+    ROS_INFO("Starting...");
 
-    if(argc > 1) {
-        std::string argument = argv[1];
-        if(argument == "GOLD_RUN") {
-            mission = Mission::M_GOLD_RUN; 
-        }
-    }
+    start_globalizer();
+    stop_localizer();
 
-    ROS_INFO("arg: %s", argv[1]);
-
-    
-    state = State::IDLE;
+    state = State::GLOBALIZE;
     State last_state = state;
     while(ros::ok()) {
         ros::spinOnce();
@@ -1199,9 +1251,6 @@ int main(int argc, char **argv)
                 get_next_goal();
                 break;
 
-            case State::GOLD_RUN:
-                get_next_goal();
-                break;
             case State::LEAVE:
                 set_heliport_to_goal();
                 break;

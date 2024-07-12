@@ -477,11 +477,11 @@ int main(int argc, char **argv)
     ros::Subscriber laser_sub = n.subscribe("scan_filtered", 1, laser_callback);
 
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
-    pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_pose", 1);
+    pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_particle", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
     actual_ray_pub = n.advertise<sensor_msgs::PointCloud>("actual_ray", 1);
 
-    ros::ServiceServer start_localization_service = n.advertiseService("start_localization", start_localization_callback);
+    ros::ServiceServer start_localization_service = n.advertiseService("activate_localizer", start_localization_callback);
 
     ROS_INFO("Waiting for StartLocalization request ..."); 
 

@@ -18,7 +18,7 @@
 #include "./localizer_base.cpp"
 
 #define NUM_PARTICLES 5000
-#define CONVERGED_NUM 200
+#define CONVERGED_NUM 500
 
 #define SUBSAMPLE_LASERS 20
 #define RAY_STEP_SIZE 0.02
@@ -287,7 +287,7 @@ void publish_particles()
     position.converged = has_converged_fast();
     position_pub.publish(position);
 
-    visualize_lasers(best_idx);
+    // visualize_lasers(best_idx);
 
     if (position.converged) {
         ROS_INFO("HAS CONVERGED");
@@ -595,7 +595,7 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "globalizer");
     ros::NodeHandle n;
 
-    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
+    if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();
     }
 
@@ -614,7 +614,7 @@ int main(int argc, char **argv)
     ROS_INFO("Map received.");
 
     position_pub = n.advertise<green_fundamentals::Position>("position", 1);
-    pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_pose", 1);
+    pose_pub = n.advertise<geometry_msgs::PoseStamped>("best_particle", 1);
     posearray_pub = n.advertise<geometry_msgs::PoseArray>("particle_array", 1);
     actual_ray_pub = n.advertise<sensor_msgs::PointCloud>("actual_ray", 1);
     expected_ray_pub = n.advertise<sensor_msgs::PointCloud>("expected_ray", 1);
@@ -670,8 +670,11 @@ int main(int argc, char **argv)
         auto d3 = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
         auto d4 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count();
 
-        ROS_INFO("spin: %ld, publ: %ld, eval: %ld, resa: %ld", d1, d2, d3, d4);
-        ROS_INFO("%s", message.c_str());
+        auto d0 = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t0).count();
+
+        ROS_INFO("laser_callback complete: %ld", d0);
+        // ROS_INFO("spin: %ld, publ: %ld, eval: %ld, resa: %ld", d1, d2, d3, d4);
+        // ROS_INFO("%s", message.c_str());
         message = "";
     }
 }

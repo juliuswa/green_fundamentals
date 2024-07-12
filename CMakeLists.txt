@@ -81,3 +81,7 @@ add_dependencies(globalizer create_fundamentals_generate_messages_cpp ${catkin_E
 add_executable(globalizer2 src/globalizer2.cpp)
 target_link_libraries(globalizer2 ${catkin_LIBRARIES})
 add_dependencies(globalizer2 create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
+
+add_executable(localizer2 src/localizer2.cpp)
+target_link_libraries(localizer2 ${catkin_LIBRARIES})
+add_dependencies(localizer2 create_fundamentals_generate_messages_cpp ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_generate_messages_cpp)
