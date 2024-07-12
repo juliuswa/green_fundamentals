@@ -98,6 +98,8 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
     int rows = msg->rows.size();
     int cols = msg->rows[0].cells.size();
 
+    ROS_INFO("CELL ROWS = %d, CELL COLS = %d", rows, cols);
+
     // Create row-major array of cells
     std::vector<green_fundamentals::Cell> flat_map;
     for (const auto& row : msg->rows)
@@ -195,14 +197,6 @@ void map_callback(const green_fundamentals::Grid::ConstPtr& msg)
     ROS_INFO("Grid Map received, starting to publish OccupancyMap");
 
     grid_map_sub.shutdown();
-
-    ros::param::set("grid_num_rows", rows);
-    ros::param::set("grid_num_cols", cols);
-    ros::param::set("wall_length_pixels", wall_length_pixels);
-    ros::param::set("corner_pixels", corner_pixels);
-    ros::param::set("x_max", width_pixels * PIXEL_SIZE);
-    ros::param::set("y_max", height_pixels * PIXEL_SIZE);
-    ros::param::set("pixel_size", PIXEL_SIZE);
 }
 
 int main(int argc, char **argv)

@@ -250,7 +250,6 @@ bool set_drive_to_callback(green_fundamentals::DriveTo::Request  &req, green_fun
     }
     
     state = State::DRIVE_TO;
-    ros::param::set("mover_drive_to_error", false);
     return true;
 }
 
@@ -280,8 +279,6 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "robot_mover");
     ros::NodeHandle n;
     signal(SIGINT, shutdown);
-
-    ros::param::set("mover_drive_to_error", false);
 
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
         ros::console::notifyLoggerLevelsChanged();

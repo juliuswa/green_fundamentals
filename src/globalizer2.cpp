@@ -138,6 +138,7 @@ void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& msg)
     y_max = map_height * resolution;
 
     ROS_INFO("X_MAX=%f, Y_MAX=%f", x_max, y_max);
+    ROS_INFO("MAP_HEIGHT=%d, MAP_WIDTH=%d", map_height, map_width);
 
     map_data = msg->data;
 
