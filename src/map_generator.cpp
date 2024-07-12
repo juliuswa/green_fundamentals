@@ -24,8 +24,6 @@
 #define WALL 100
 #define FREE 0
 
-
-
 ros::Subscriber grid_map_sub;
 int** pixel_map = nullptr;
 nav_msgs::OccupancyGrid occupancy_grid;
