@@ -307,7 +307,7 @@ const int min_particles = 100;
 const int max_particles = 5000;
 const int num_particles = 1;
 
-const int num_ignore_sides = 50; // Leave out because of metal near sensor
+const int NUM_IGNORE_SIDES = 50; // Leave out because of metal near sensor
 const float weight_parameter = 0.9;
 
 struct Bins {
@@ -355,8 +355,8 @@ void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     // Subsample lasers
     laser_data.clear();
 
-    int start_index = num_ignore_sides;
-    int end_index = msg->ranges.size() - num_ignore_sides;
+    int start_index = NUM_IGNORE_SIDES;
+    int end_index = msg->ranges.size() - NUM_IGNORE_SIDES;
     int valid_count = end_index - start_index;
 
     for (int i = 0; i < SUBSAMPLE_LASERS; i++) 
