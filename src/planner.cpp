@@ -27,6 +27,9 @@
 using Grid_Coords = std::pair<int, int>;
 using KeyType = std::pair<Grid_Coords, Grid_Coords>;
 
+ros::Time last_gold_pickup_time;
+Grid_Coords last_gold;
+
 struct pair_hash_int {
     std::size_t operator()(const Grid_Coords& p) const {
         return p.first * 32 + p.second;
@@ -679,6 +682,12 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         localization_msg.request.activate = false;
         localization_activate.call(localization_msg);
 
+        if (last_gold == last_gold && (ros::Time::now() - last_gold_pickup_time).toSec() < 7.0)
+        {
+            golds.push_back(last_gold);
+            last_gold = &nullptr;
+        }
+
         // reset_visited_cells();
         // localization_points = 0;
         // local_plan.clear();
@@ -804,7 +813,8 @@ bool send_next_target_to_mover()
     if (!are_neighbors(current_cell, target_cell)) {
         ROS_WARN("current target is not in a neighbor cell. current: (%d, %d), target: (%d, %d)", 
             current_cell.col, current_cell.row, target_cell.col, target_cell.row);
-        add_target_front(current_cell.x, current_cell.y, 0, false, true);
+        
+        // add_target_front(current_cell.x, current_cell.y, 0, false, true);
     }
 
     green_fundamentals::DriveTo drive_to_msg;    
@@ -921,10 +931,14 @@ void collect_gold() {
     ROS_INFO("Collecting gold at position: %d, %d (real position %d, %d)", golds[index].first, golds[index].second, my_position.row, my_position.col);
 
     std::swap(golds[index], golds.back());
+    last_gold = golds.back();
+
     golds.pop_back();
 
     set_video(3);
     ros::Duration(5.5).sleep();
+
+    last_gold_pickup_time = ros::Time::now();
 }
 
 void execute_local_plan()
