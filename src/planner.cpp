@@ -676,6 +676,7 @@ void stop_localizer()
 
 ros::Time last_gold_pickup_time;
 Grid_Coords last_gold;
+bool last_gold_valid = false;
 
 void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
 {   
@@ -733,6 +734,7 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         if ((ros::Time::now() - last_gold_pickup_time).toSec() < 10.0)
         {
             golds.push_back(last_gold);
+            last_gold_valid = false;
         }
     }    
     else if(msg->converged && !is_globalized) 
@@ -948,6 +950,8 @@ void collect_gold() {
 
     set_video(3);
     ros::Duration(5.5).sleep();
+    last_gold_pickup_time = ros::Time::now();
+    last_gold_valid = true;
 }
 
 void execute_local_plan()
