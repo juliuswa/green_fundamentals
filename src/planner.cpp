@@ -29,6 +29,7 @@ using KeyType = std::pair<Grid_Coords, Grid_Coords>;
 
 ros::Time last_gold_pickup_time;
 Grid_Coords last_gold;
+bool last_gold_valid = false;
 
 struct pair_hash_int {
     std::size_t operator()(const Grid_Coords& p) const {
@@ -682,10 +683,10 @@ void localization_callback(const green_fundamentals::Position::ConstPtr& msg)
         localization_msg.request.activate = false;
         localization_activate.call(localization_msg);
 
-        if (last_gold == last_gold && (ros::Time::now() - last_gold_pickup_time).toSec() < 7.0)
+        if (last_gold_valid && (ros::Time::now() - last_gold_pickup_time).toSec() < 7.0)
         {
             golds.push_back(last_gold);
-            last_gold = &nullptr;
+            last_gold_valid = false;
         }
 
         // reset_visited_cells();
@@ -932,7 +933,8 @@ void collect_gold() {
 
     std::swap(golds[index], golds.back());
     last_gold = golds.back();
-
+    last_gold_valid = true;
+    
     golds.pop_back();
 
     set_video(3);
