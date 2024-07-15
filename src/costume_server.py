@@ -108,6 +108,11 @@ def handle_set_video(req):
     else:
         return SetVideoResponse(success=False)
     
+    if req.state == 0:
+        short_video = pick_random_video("okletsgo")
+        socketio.emit('update_video', {'video_filename': short_video})
+        rospy.sleep(3)
+    
     # Emit a socket event to update the video on the client side
     socketio.emit('update_video', {'video_filename': current_video})
     return SetVideoResponse(success=True)
